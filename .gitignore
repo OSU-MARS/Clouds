@@ -1,0 +1,12 @@
+# user specific configuration files
+# *.csproj.user
+# *.pubxml.user
+
+# build, packaging, and test results
+bin/
+obj/
+packages/
+TestResults/
+
+# Visual Studio cache/options directory
+.vs/

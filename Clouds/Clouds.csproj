@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>x64</Platforms>
+    <RootNamespace>Mars.$(MSBuildProjectName)</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <WarningLevel>7</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <WarningLevel>7</WarningLevel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaxRev.Gdal.Core" Version="3.7.0.217" />
+    <PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="3.7.0.100" />
+    <PackageReference Include="System.Management.Automation" Version="7.3.6" />
+  </ItemGroup>
+
+</Project>
