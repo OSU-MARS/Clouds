@@ -1,4 +1,5 @@
 ﻿using OSGeo.GDAL;
+using System;
 
 namespace Mars.Clouds.GdalExtensions
 {

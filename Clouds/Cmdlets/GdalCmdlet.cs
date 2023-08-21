@@ -1,6 +1,7 @@
 ﻿using Mars.Clouds.GdalExtensions;
 using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
+using System;
 using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets

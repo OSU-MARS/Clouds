@@ -1,4 +1,6 @@
-﻿namespace Mars.Clouds.Cmdlets
+﻿using System;
+
+namespace Mars.Clouds.Cmdlets
 {
     internal class ParameterOutOfRangeException : ArgumentOutOfRangeException
     {
