@@ -17,6 +17,9 @@ namespace Mars.Clouds.Cmdlets
     {
         private const float DefaultMinimumHeight = 1.5F; // m
 
+        [Parameter(HelpMessage = "Detect treetops as local maxima in the canopy height model rather than the digital surface model.")]
+        public SwitchParameter ChmMaxima { get; set; }
+
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate treetops within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each DSM must be a single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
         [ValidateNotNullOrEmpty]
         public string? Dsm { get; set; }
@@ -38,6 +41,7 @@ namespace Mars.Clouds.Cmdlets
 
         public GetTreetops()
         {
+            this.ChmMaxima = false;
             // this.Dsm is mandatory
             // this.Dtm is mandatory
             this.MaxThreads = Environment.ProcessorCount / 2;
@@ -241,6 +245,7 @@ namespace Mars.Clouds.Cmdlets
                     int maximumRowOffset = Math.Min(rowSearchRadiusInCells, dsm.YSize - dsmRowIndex - 1);
 
                     // check if point is local maxima
+                    float candidateZ = this.ChmMaxima ? heightInCrsUnits : dsmZ;
                     SameHeightPatch<float>? equalHeightPatch = null;
                     bool higherPointFound = false;
                     bool inEqualHeightPatch = false;
@@ -269,16 +274,18 @@ namespace Mars.Clouds.Cmdlets
                         {
                             int searchColumnIndex = dsmColumnIndex + searchColumnOffset;
                             float dsmSearchZ = dsm[searchRowIndex, searchColumnIndex];
-                            if (dsmSearchZ > dsmZ) // check of cell against itself when searchRowOffset = searchColumnOffset = 0 deemed not worth testing for but would need to be addressed if > is changed to >=
+                            float searchZ = this.ChmMaxima ? dsmSearchZ - dtm[searchRowIndex, searchColumnIndex] : dsmSearchZ;
+
+                            if (searchZ > candidateZ) // check of cell against itself when searchRowOffset = searchColumnOffset = 0 deemed not worth testing for but would need to be addressed if > is changed to >=
                             {
                                 // some other cell within search radius is higher, so exclude this cell as a local maxima
                                 // Abort local search, move to next cell.
                                 higherPointFound = true;
                                 break;
                             }
-                            else if ((dsmSearchZ == dsmZ) && GetTreetops.IsNeighbor8(searchRowOffset, searchColumnOffset))
+                            else if ((searchZ == candidateZ) && GetTreetops.IsNeighbor8(searchRowOffset, searchColumnOffset))
                             {
-                                if ((equalHeightPatch != null) && (equalHeightPatch.Height != dsmZ))
+                                if ((equalHeightPatch != null) && (equalHeightPatch.Height != candidateZ))
                                 {
                                     equalHeightPatch = null;
                                 }
@@ -300,7 +307,7 @@ namespace Mars.Clouds.Cmdlets
                                             inEqualHeightPatch = true;
                                             break;
                                         }
-                                        else if (candidatePatch.Contains(dsmRowIndex, dsmColumnIndex)) 
+                                        else if (candidatePatch.Contains(dsmRowIndex, dsmColumnIndex))
                                         {
                                             equalHeightPatch = candidatePatch;
                                             equalHeightPatch.Add(searchRowIndex, searchColumnIndex, dtm[searchRowIndex, searchColumnIndex]);
