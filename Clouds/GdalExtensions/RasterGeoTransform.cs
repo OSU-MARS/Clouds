@@ -54,9 +54,9 @@ namespace Mars.Clouds.GdalExtensions
         public (double x, double y) ToProjectedCoordinate(double xIndex, double yIndex)
         {
             // Xprojected = padfTransform[0] + pixelIndexX * padfTransform[1] + pixelIndexY * padfTransform[2];
-            double x = this.OriginX + yIndex * this.CellWidth + xIndex * this.RowRotation;
+            double x = this.OriginX + xIndex * this.CellWidth + yIndex * this.RowRotation;
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
-            double y = this.OriginY + yIndex * this.ColumnRotation + xIndex * this.CellHeight;
+            double y = this.OriginY + xIndex * this.ColumnRotation + yIndex * this.CellHeight;
             return (x, y);
         }
 

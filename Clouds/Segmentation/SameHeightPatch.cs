@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Mars.Clouds.Segmentation
@@ -57,7 +58,7 @@ namespace Mars.Clouds.Segmentation
             }
 
             double cells = this.Count;
-            return (rowIndexSum / cells, columnIndexSum / cells, double.CreateChecked(elevationSum) / cells);
+            return (rowIndexSum / cells, columnIndexSum / cells, Double.CreateChecked(elevationSum) / cells);
         }
     }
 }
