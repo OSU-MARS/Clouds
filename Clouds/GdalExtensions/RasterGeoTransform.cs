@@ -32,16 +32,9 @@ namespace Mars.Clouds.GdalExtensions
         public double OriginY { get { return this.PadfTransform[3]; } }
         public double RowRotation { get { return this.PadfTransform[2]; } } // zero if north up
 
-        public (double x, double y) GetCellCenter(int rowIndex, int columnIndex)
+        public (double x, double y) GetCellCenterCoordinate(int rowIndex, int columnIndex)
         {
-            double columnCenterIndex = columnIndex + 0.5;
-            double rowCenterIndex = rowIndex + 0.5;
-
-            // Xprojected = padfTransform[0] + pixelIndexX * padfTransform[1] + pixelIndexY * padfTransform[2];
-            double x = this.OriginX + columnCenterIndex * this.CellWidth + rowCenterIndex * this.RowRotation;
-            // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
-            double y = this.OriginY + columnCenterIndex * this.ColumnRotation + rowCenterIndex * this.CellHeight;
-            return (x, y);
+            return this.ToProjectedCoordinate(rowIndex + 0.5, columnIndex + 0.5);
         }
 
         public (int rowIndex, int columnIndex) GetCellIndex(double x, double y)
@@ -51,12 +44,12 @@ namespace Mars.Clouds.GdalExtensions
             return ((int)rowIndex, (int)columnIndex);
         }
 
-        public (double x, double y) ToProjectedCoordinate(double xIndex, double yIndex)
+        public (double x, double y) ToProjectedCoordinate(double rowIndexFractional, double columnIndexFractional)
         {
             // Xprojected = padfTransform[0] + pixelIndexX * padfTransform[1] + pixelIndexY * padfTransform[2];
-            double x = this.OriginX + xIndex * this.CellWidth + yIndex * this.RowRotation;
+            double x = this.OriginX + columnIndexFractional * this.CellWidth + rowIndexFractional * this.RowRotation;
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
-            double y = this.OriginY + xIndex * this.ColumnRotation + yIndex * this.CellHeight;
+            double y = this.OriginY + columnIndexFractional * this.ColumnRotation + rowIndexFractional * this.CellHeight;
             return (x, y);
         }
 

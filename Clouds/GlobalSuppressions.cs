@@ -5,4 +5,5 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-[assembly: SuppressMessage("Style", "IDE0075:Simplify conditional expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.SinglebandRaster`1.IsNoData(`0)~System.Boolean")]
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetTreetops.ProcessTile(System.Int32,System.String)~System.Int32")]
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.GdalExtensions.GetDriverByExtension(System.String)~OSGeo.GDAL.Driver")]

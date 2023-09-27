@@ -9,10 +9,10 @@ namespace Mars.Clouds.GdalExtensions
     internal class VirtualRaster<TBand> where TBand : INumber<TBand>
     {
         private SpatialReference? crs;
-        private SinglebandRaster<TBand>?[,] tileGrid;
+        private Raster<TBand>?[,] tileGrid;
         private int[] tileGridIndexX;
         private int[] tileGridIndexY;
-        private readonly List<SinglebandRaster<TBand>> tiles;
+        private readonly List<Raster<TBand>> tiles;
 
         public double OrginX { get; private set; }
         public double OrginY { get; private set; }
@@ -26,7 +26,7 @@ namespace Mars.Clouds.GdalExtensions
         public VirtualRaster()
         {
             this.crs = null;
-            this.tileGrid = new SinglebandRaster<TBand>[0, 0];
+            this.tileGrid = new Raster<TBand>[0, 0];
             this.tileGridIndexX = Array.Empty<int>();
             this.tileGridIndexY = Array.Empty<int>();
             this.tiles = new();
@@ -39,7 +39,7 @@ namespace Mars.Clouds.GdalExtensions
             this.TileSizeInCellsY = -1;
         }
 
-        public SinglebandRaster<TBand> this[int index]
+        public Raster<TBand> this[int index]
         {
             get { return this.tiles[index]; }
         }
@@ -67,7 +67,7 @@ namespace Mars.Clouds.GdalExtensions
             set { this.tiles.Capacity = value; }
         }
 
-        public void Add(SinglebandRaster<TBand> tile)
+        public void Add(Raster<TBand> tile)
         {
             if (this.tiles.Count == 0)
             {
@@ -117,7 +117,7 @@ namespace Mars.Clouds.GdalExtensions
             double minimumOriginY = Double.MaxValue;
             for (int tileIndex = 0; tileIndex < this.tiles.Count; ++tileIndex)
             {
-                SinglebandRaster<TBand> tile = this.tiles[tileIndex];
+                Raster<TBand> tile = this.tiles[tileIndex];
                 if (maximumOriginX < tile.Transform.OriginX)
                 {
                     maximumOriginX = tile.Transform.OriginX;
@@ -144,7 +144,7 @@ namespace Mars.Clouds.GdalExtensions
 
             if ((this.tileGrid.GetLength(0) != this.VirtualRasterSizeInTilesY) || (this.tileGrid.GetLength(1) != this.VirtualRasterSizeInTilesX))
             {
-                this.tileGrid = new SinglebandRaster<TBand>?[this.VirtualRasterSizeInTilesY, this.VirtualRasterSizeInTilesX];
+                this.tileGrid = new Raster<TBand>?[this.VirtualRasterSizeInTilesY, this.VirtualRasterSizeInTilesX];
             }
             else
             {
@@ -161,7 +161,7 @@ namespace Mars.Clouds.GdalExtensions
 
             for (int tileIndex = 0; tileIndex < this.tiles.Count; ++tileIndex)
             {
-                SinglebandRaster<TBand> tile = this.tiles[tileIndex];
+                Raster<TBand> tile = this.tiles[tileIndex];
                 int xIndex = (int)Double.Round((tile.Transform.OriginX - minimumOriginX) / tileSizeInTileUnitsX);
                 int yIndex = (int)Double.Round((tile.Transform.OriginY - maximumOriginY) / tileSizeInTileUnitsY);
                 Debug.Assert(this.tileGrid[yIndex, xIndex] == null, "Unexpected attempt to place two tiles in the same position.");
@@ -174,7 +174,7 @@ namespace Mars.Clouds.GdalExtensions
             this.OrginY = maximumOriginY;
         }
 
-        public VirtualRasterNeighborhood8<TBand> GetNeighborhood8(int tileIndex)
+        public VirtualRasterNeighborhood8<TBand> GetNeighborhood8(int tileIndex, int bandIndex)
         {
             int tileXindex = this.tileGridIndexX[tileIndex];
             int tileYindex = this.tileGridIndexY[tileIndex];
@@ -184,9 +184,9 @@ namespace Mars.Clouds.GdalExtensions
             int eastIndex = tileXindex + 1;
             int westIndex = tileXindex - 1;
 
-            SinglebandRaster<TBand>? north = null;
-            SinglebandRaster<TBand>? northeast = null;
-            SinglebandRaster<TBand>? northwest = null;
+            Raster<TBand>? north = null;
+            Raster<TBand>? northeast = null;
+            Raster<TBand>? northwest = null;
             if (northIndex >= 0)
             {
                 north = this.tileGrid[northIndex, tileXindex];
@@ -200,9 +200,9 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            SinglebandRaster<TBand>? south = null;
-            SinglebandRaster<TBand>? southeast = null;
-            SinglebandRaster<TBand>? southwest = null;
+            Raster<TBand>? south = null;
+            Raster<TBand>? southeast = null;
+            Raster<TBand>? southwest = null;
             if (southIndex < this.VirtualRasterSizeInTilesY)
             {
                 south = this.tileGrid[southIndex, tileXindex];
@@ -216,28 +216,28 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            SinglebandRaster<TBand>? east = null;
+            Raster<TBand>? east = null;
             if (eastIndex < this.VirtualRasterSizeInTilesX)
             {
                 east = this.tileGrid[tileYindex, eastIndex];
             }
 
-            SinglebandRaster<TBand>? west = null;
+            Raster<TBand>? west = null;
             if (westIndex >= 0)
             {
                 west = this.tileGrid[tileYindex, westIndex];
             }
 
-            return new VirtualRasterNeighborhood8<TBand>(this.tiles[tileIndex])
+            return new VirtualRasterNeighborhood8<TBand>(this.tiles[tileIndex].Bands[bandIndex])
             {
-                North = north,
-                Northeast = northeast,
-                Northwest = northwest,
-                South = south,
-                Southeast = southeast,
-                Southwest = southwest,
-                East = east,
-                West = west
+                North = north?.Bands[bandIndex],
+                Northeast = northeast?.Bands[bandIndex],
+                Northwest = northwest?.Bands[bandIndex],
+                South = south?.Bands[bandIndex],
+                Southeast = southeast?.Bands[bandIndex],
+                Southwest = southwest?.Bands[bandIndex],
+                East = east?.Bands[bandIndex],
+                West = west?.Bands[bandIndex]
             };
         }
 

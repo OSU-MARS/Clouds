@@ -13,10 +13,10 @@ namespace Mars.Clouds.Cmdlets
             GdalBase.ConfigureAll();
         }
 
-        protected static SinglebandRaster<float> ReadSingleBandFloatRaster(string rasterPath)
+        protected static Raster<float> ReadRasterFloat(string rasterPath)
         {
             using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-            (DataType rasterDataType, long totalCells) = SinglebandRaster.GetBandProperties(rasterDataset);
+            (DataType rasterDataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
             if (rasterDataType != DataType.GDT_Float32)
             {
                 throw new NotSupportedException("Raster '" + rasterPath + "' band 1 has data type " + rasterDataType + ".");
@@ -26,7 +26,7 @@ namespace Mars.Clouds.Cmdlets
                 throw new NotSupportedException("Raster '" + rasterPath + "' has " + totalCells + " cells, which exceeds the maximum supported size of " + Array.MaxLength + " cells.");
             }
 
-            return new SinglebandRaster<float>(rasterDataset)
+            return new Raster<float>(rasterDataset)
             {
                 FilePath = rasterPath
             };

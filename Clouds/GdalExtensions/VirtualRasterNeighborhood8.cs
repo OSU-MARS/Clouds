@@ -5,17 +5,17 @@ namespace Mars.Clouds.GdalExtensions
 {
     internal class VirtualRasterNeighborhood8<TBand> where TBand : INumber<TBand>
     {
-        public SinglebandRaster<TBand> Center { get; private init; }
-        public SinglebandRaster<TBand>? North { get; init; }
-        public SinglebandRaster<TBand>? Northeast { get; init; }
-        public SinglebandRaster<TBand>? Northwest { get; init; }
-        public SinglebandRaster<TBand>? South { get; init; }
-        public SinglebandRaster<TBand>? Southeast { get; init; }
-        public SinglebandRaster<TBand>? Southwest { get; init; }
-        public SinglebandRaster<TBand>? East { get; init; }
-        public SinglebandRaster<TBand>? West { get; init; }
+        public RasterBand<TBand> Center { get; private init; }
+        public RasterBand<TBand>? North { get; init; }
+        public RasterBand<TBand>? Northeast { get; init; }
+        public RasterBand<TBand>? Northwest { get; init; }
+        public RasterBand<TBand>? South { get; init; }
+        public RasterBand<TBand>? Southeast { get; init; }
+        public RasterBand<TBand>? Southwest { get; init; }
+        public RasterBand<TBand>? East { get; init; }
+        public RasterBand<TBand>? West { get; init; }
 
-        public VirtualRasterNeighborhood8(SinglebandRaster<TBand> center)
+        public VirtualRasterNeighborhood8(RasterBand<TBand> center)
         {
             this.Center = center;
         }
