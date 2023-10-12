@@ -24,31 +24,24 @@ namespace Mars.Clouds.GdalExtensions
             : this(band.GetDescription(), crs, transform, band.XSize, band.YSize, data)
         {
             band.GetNoDataValue(out double noDataValue, out int hasNoDataValue);
-
+            
             this.HasNoDataValue = hasNoDataValue != 0;
-            if (Type.GetTypeCode(typeof(TBand)) == TypeCode.Single)
-            {
-                this.NoDataValue = this.HasNoDataValue ? (TBand)(object)Single.CreateChecked(noDataValue) : (TBand)(object)Single.NaN;
-                this.noDataIsNaN = this.HasNoDataValue && TBand.IsNaN(this.NoDataValue);
+            if (this.HasNoDataValue)
+            {                
+                this.NoDataValue = TBand.CreateChecked(noDataValue);
             }
             else
             {
-                throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".");
+                this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
             }
+            this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
         }
 
         public RasterBand(string name, SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize, Memory<TBand> data)
         {
             this.HasNoDataValue = false;
             this.noDataIsNaN = false;
-            if (Type.GetTypeCode(typeof(TBand)) == TypeCode.Single)
-            {
-                this.NoDataValue = (TBand)(object)Single.NaN;
-            }
-            else
-            {
-                throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".");
-            }
+            this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
 
             this.Crs = crs;
             this.Data = data;
@@ -58,10 +51,16 @@ namespace Mars.Clouds.GdalExtensions
             this.YSize = ySize;
         }
 
-        public TBand this[int rowIndex, int columnIndex]
+        public TBand this[int index]
         {
-            get { return this.Data.Span[columnIndex + rowIndex * this.YSize]; }
-            set { this.Data.Span[columnIndex + rowIndex * this.YSize] = value; }
+            get { return this.Data.Span[index]; }
+            set { this.Data.Span[index] = value; }
+        }
+
+        public TBand this[int xIndex, int yIndex]
+        {
+            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            set { this[this.ToCellIndex(xIndex, yIndex)] = value; }
         }
 
         public bool IsNoData(TBand value)
@@ -78,6 +77,11 @@ namespace Mars.Clouds.GdalExtensions
             this.HasNoDataValue = true;
             this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
+        }
+
+        public int ToCellIndex(int xIndex, int yIndex)
+        {
+            return xIndex + yIndex * this.XSize;
         }
     }
 }

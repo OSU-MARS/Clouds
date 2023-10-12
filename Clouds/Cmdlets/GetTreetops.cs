@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
 
         private static void AddToLayer(TreetopLayer treetopLayer, TileSearchState tileSearch, int treeID, double rowIndexFractional, double columnIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation)
         {
-            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.ToProjectedCoordinate(rowIndexFractional, columnIndexFractional);
+            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.ToProjectedCoordinate(columnIndexFractional, rowIndexFractional);
             float treeHeightInCrsUnits = treetopElevation - groundElevationAtBaseOfTree;
             Debug.Assert((groundElevationAtBaseOfTree > -200.0F) && (groundElevationAtBaseOfTree < 30000.0F) && (treeHeightInCrsUnits < 400.0F));
             treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits);
@@ -308,7 +308,7 @@ namespace Mars.Clouds.Cmdlets
                     // read DTM interpolated to DSM resolution to get local height
                     // (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenter(dsmRowIndex, dsmColumnIndex);
                     // (int dtmRowIndex, int dtmColumnIndex) = dtm.Transform.GetCellIndex(cellX, cellY); 
-                    float dtmElevation = tileSearch.Dtm[dsmRowIndex, dsmColumnIndex]; // could use dsmIndex
+                    float dtmElevation = tileSearch.Dtm[dsmColumnIndex, dsmRowIndex]; // could use dsmIndex
                     if (tileSearch.Dtm.IsNoData(dtmElevation))
                     {
                         continue;
@@ -336,7 +336,7 @@ namespace Mars.Clouds.Cmdlets
                     // create point if this cell is a unique local maxima
                     if (addTreetop)
                     {
-                        (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenterCoordinate(dsmRowIndex, dsmColumnIndex);
+                        (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenterCoordinate(dsmColumnIndex, dsmRowIndex);
                         treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits);
                     }
                 }
@@ -585,17 +585,17 @@ namespace Mars.Clouds.Cmdlets
             {
                 Debug.Assert((searchState.NetProminenceBand != null) && (searchState.RadiusBand != null) && (searchState.RangeProminenceRatioBand != null) && (searchState.TotalProminenceBand != null) && (searchState.TotalRangeBand != null));
 
-                searchState.NetProminenceBand[dsmRowIndex, dsmColumnIndex] = netProminenceNormalized;
-                searchState.RadiusBand[dsmRowIndex, dsmColumnIndex] = maxRingIndex;
+                searchState.NetProminenceBand[dsmColumnIndex, dsmRowIndex] = netProminenceNormalized;
+                searchState.RadiusBand[dsmColumnIndex, dsmRowIndex] = maxRingIndex;
 
                 float rangeProminenceRatioNormalized = totalRange / (maxRingIndex * heightInCrsUnits * netProminence);
-                searchState.RangeProminenceRatioBand[dsmRowIndex, dsmColumnIndex] = rangeProminenceRatioNormalized;
+                searchState.RangeProminenceRatioBand[dsmColumnIndex, dsmRowIndex] = rangeProminenceRatioNormalized;
                 
                 float totalProminenceNormalized = netProminence / (maxRingIndex * heightInCrsUnits);
-                searchState.TotalProminenceBand[dsmRowIndex, dsmColumnIndex] = totalProminenceNormalized;
+                searchState.TotalProminenceBand[dsmColumnIndex, dsmRowIndex] = totalProminenceNormalized;
                 
                 float totalRangeNormalized = totalRange / (maxRingIndex * heightInCrsUnits);
-                searchState.TotalRangeBand[dsmRowIndex, dsmColumnIndex] = totalRangeNormalized;
+                searchState.TotalRangeBand[dsmColumnIndex, dsmRowIndex] = totalRangeNormalized;
             }
 
             if (netProminenceNormalized <= 0.02F)
@@ -723,7 +723,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                     if (this.MostRecentEqualHeightPatch == null)
                     {
-                        float dtmElevation = this.Dtm[dsmRowIndex, dsmColumnIndex];
+                        float dtmElevation = this.Dtm[dsmColumnIndex, dsmRowIndex];
                         if (this.Dtm.IsNoData(dtmElevation))
                         {
                             dtmElevation = Single.NaN;

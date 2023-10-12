@@ -35,7 +35,7 @@ namespace Mars.Clouds.GdalExtensions
             this.CellDataType = cellDataType;
             this.Crs = rasterDataset.GetSpatialRef();
             this.FilePath = String.Empty;
-
+            
             this.Transform = new(rasterDataset);
             this.XSize = -1;
             this.YSize = -1;
@@ -146,8 +146,37 @@ namespace Mars.Clouds.GdalExtensions
             int[] bandMap = ArrayExtensions.CreateSequence(1, this.Bands.Length);
             switch (this.CellDataType)
             {
+                case DataType.GDT_Byte:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<byte[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
                 case DataType.GDT_Float32:
                     rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<float[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_Float64:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_Int16:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int16[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_Int32:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int32[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                // no ReadRaster() overloads for Int8, Int64, UInt16, UInt32, UInt64 as of MaxRev.Gdal 3.7.0: use closest type of same size instead
+                // https://github.com/MaxRev-Dev/gdal.netcore/issues/111
+                case DataType.GDT_Int8:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<byte[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_Int64:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_UInt16:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int16[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_UInt32:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int32[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    break;
+                case DataType.GDT_UInt64:
+                    rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
                     break;
                 default:
                     throw new NotSupportedException("Unhandled cell data type " + this.CellDataType + ".");
@@ -178,16 +207,42 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public static TBand GetDefaultNoDataValue()
+        {
+            return Type.GetTypeCode(typeof(TBand)) switch
+            {
+                TypeCode.Byte => TBand.CreateChecked(Byte.MaxValue),
+                TypeCode.Double => TBand.CreateChecked(Double.NaN),
+                TypeCode.Int16 => TBand.CreateChecked(Int16.MinValue),
+                TypeCode.Int32 => TBand.CreateChecked(Int32.MinValue),
+                TypeCode.Int64 => TBand.CreateChecked(Int64.MinValue),
+                TypeCode.SByte => TBand.CreateChecked(SByte.MinValue),
+                TypeCode.Single => TBand.CreateChecked(Single.NaN),
+                TypeCode.UInt16 => TBand.CreateChecked(UInt16.MaxValue),
+                TypeCode.UInt32 => TBand.CreateChecked(UInt32.MaxValue),
+                TypeCode.UInt64 => TBand.CreateChecked(UInt64.MaxValue),
+                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and not GDT_TypeCount not currently reachable
+                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
+            };
+        }
+
         private static DataType GetGdalDataType()
         {
-            if (Type.GetTypeCode(typeof(TBand)) == TypeCode.Single)
+            return Type.GetTypeCode(typeof(TBand)) switch
             {
-                return DataType.GDT_Float32;
-            }
-            else
-            {
-                throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".");
-            }
+                TypeCode.Byte => DataType.GDT_Byte,
+                TypeCode.Double => DataType.GDT_Float64,
+                TypeCode.Int16 => DataType.GDT_Int16,
+                TypeCode.Int32 => DataType.GDT_Int32,
+                TypeCode.Int64 => DataType.GDT_Int64,
+                TypeCode.SByte => DataType.GDT_Int8,
+                TypeCode.Single => DataType.GDT_Float32,
+                TypeCode.UInt16 => DataType.GDT_UInt16,
+                TypeCode.UInt32 => DataType.GDT_UInt32,
+                TypeCode.UInt64 => DataType.GDT_UInt64,
+                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and not GDT_TypeCount not currently reachable
+                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
+            };
         }
 
         public void Write(string rasterPath)

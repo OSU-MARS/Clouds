@@ -19,7 +19,7 @@ namespace Mars.Clouds.Cmdlets
             (DataType rasterDataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
             if (rasterDataType != DataType.GDT_Float32)
             {
-                throw new NotSupportedException("Raster '" + rasterPath + "' band 1 has data type " + rasterDataType + ".");
+                throw new NotSupportedException("Raster '" + rasterPath + "' has data type " + rasterDataType + ".");
             }
             if (totalCells > Array.MaxLength)
             {

@@ -24,6 +24,12 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public RasterGeoTransform(RasterGeoTransform other)
+        {
+            this.PadfTransform = new double[6];
+            Array.Copy(other.PadfTransform, this.PadfTransform, other.PadfTransform.Length);
+        }
+
         // https://gdal.org/tutorials/geotransforms_tut.html
         public double CellHeight { get { return this.PadfTransform[5]; } } // north-south resolution, negative if north up
         public double CellWidth { get { return this.PadfTransform[1]; } } // east-west resolution
@@ -32,26 +38,38 @@ namespace Mars.Clouds.GdalExtensions
         public double OriginY { get { return this.PadfTransform[3]; } }
         public double RowRotation { get { return this.PadfTransform[2]; } } // zero if north up
 
-        public (double x, double y) GetCellCenterCoordinate(int rowIndex, int columnIndex)
+        public (double x, double y) GetCellCenterCoordinate(int xIndex, int yIndex)
         {
-            return this.ToProjectedCoordinate(rowIndex + 0.5, columnIndex + 0.5);
+            return this.ToProjectedCoordinate(xIndex + 0.5, yIndex + 0.5);
         }
 
-        public (int rowIndex, int columnIndex) GetCellIndex(double x, double y)
+        public (int xIndex, int yIndex) GetCellIndex(double x, double y)
         {
-            double rowIndex = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
-            double columnIndex = (x - this.OriginX - rowIndex * this.RowRotation) / this.CellWidth;
-            return ((int)rowIndex, (int)columnIndex);
+            double yIndex = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
+            double xIndex = (x - this.OriginX - yIndex * this.RowRotation) / this.CellWidth;
+            return ((int)xIndex, (int)yIndex);
         }
 
-        public (double x, double y) ToProjectedCoordinate(double rowIndexFractional, double columnIndexFractional)
+        public (double x, double y) ToProjectedCoordinate(double xIndexFractional, double yIndexFractional)
         {
             // Xprojected = padfTransform[0] + pixelIndexX * padfTransform[1] + pixelIndexY * padfTransform[2];
-            double x = this.OriginX + columnIndexFractional * this.CellWidth + rowIndexFractional * this.RowRotation;
+            double x = this.OriginX + xIndexFractional * this.CellWidth + yIndexFractional * this.RowRotation;
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
-            double y = this.OriginY + columnIndexFractional * this.ColumnRotation + rowIndexFractional * this.CellHeight;
+            double y = this.OriginY + xIndexFractional * this.ColumnRotation + yIndexFractional * this.CellHeight;
             return (x, y);
         }
 
+        public static bool Equals(RasterGeoTransform transform, RasterGeoTransform other)
+        {
+            for (int index = 0; index < transform.PadfTransform.Length; ++index)
+            {
+                if (transform.PadfTransform[index] != other.PadfTransform[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 }
