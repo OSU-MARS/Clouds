@@ -8,17 +8,12 @@ using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    public class Raster
+    public class Raster : Grid
     {
         protected static readonly string[] DefaultCompressionOptions;
 
         protected DataType CellDataType { get; private init; }
-
-        public SpatialReference Crs { get; private init; }
         public string FilePath { get; set; }
-        public RasterGeoTransform Transform { get; private init; }
-        public int XSize { get; protected set; }
-        public int YSize { get; protected set; }
 
         static Raster()
         {
@@ -31,25 +26,15 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         protected Raster(Dataset rasterDataset, DataType cellDataType)
+            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), -1, -1, cellDataType)
         {
-            this.CellDataType = cellDataType;
-            this.Crs = rasterDataset.GetSpatialRef();
-            this.FilePath = String.Empty;
-            
-            this.Transform = new(rasterDataset);
-            this.XSize = -1;
-            this.YSize = -1;
         }
 
-        protected Raster(SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize, DataType cellDataType)
+        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, DataType cellDataType)
+            : base(crs, transform, xSize, ySize)
         {
             this.CellDataType = cellDataType;
-            this.Crs = crs;
             this.FilePath = String.Empty;
-
-            this.Transform = transform;
-            this.XSize = xSize;
-            this.YSize = ySize;
         }
 
         public static (DataType dataType, long totalCells) GetBandProperties(Dataset rasterDataset)
@@ -183,7 +168,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public Raster(SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize, int bands, TBand noDataValue)
+        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, int bands, TBand noDataValue)
             : this(crs, transform, xSize, ySize, bands)
         {
             Array.Fill(this.Data, noDataValue);
@@ -194,7 +179,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public Raster(SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize, int bands)
+        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, int bands)
             : base(crs, transform, xSize, ySize, Raster<TBand>.GetGdalDataType())
         {
             this.Bands = new RasterBand<TBand>[bands];
@@ -255,7 +240,7 @@ namespace Mars.Clouds.GdalExtensions
                 rasterDriver.Delete(rasterPath);
             }
             using Dataset rasterDataset = rasterDriver.Create(rasterPath, this.XSize, this.YSize, this.Bands.Length, this.CellDataType, Raster.DefaultCompressionOptions);
-            rasterDataset.SetGeoTransform(this.Transform.PadfTransform);
+            rasterDataset.SetGeoTransform(this.Transform.GetPadfTransform());
             rasterDataset.SetSpatialRef(this.Crs);
 
             for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)

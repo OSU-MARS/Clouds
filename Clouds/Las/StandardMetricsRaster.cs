@@ -1,13 +1,24 @@
 ﻿using Mars.Clouds.GdalExtensions;
 using OSGeo.OSR;
+using System;
 
 namespace Mars.Clouds.Las
 {
+    /// <summary>
+    /// 56 band raster containing standard ABA point cloud metrics of z and intensity statistics with distribution of returns.
+    /// </summary>
     public class StandardMetricsRaster : Raster<float>
     {
-        public StandardMetricsRaster(SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize)
+        public StandardMetricsRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
             : base(crs, transform, xSize, ySize, 56)
         {
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
+            {
+                RasterBand<float> band = this.Bands[bandIndex];
+                band.SetNoDataValue(Single.NaN);
+            }
+            Array.Fill(this.Data, Single.NaN);
+
             this.AreaOfPointBoundingBox.Name = "areaOfPointBoundingBox";
             this.N.Name = "n";
             this.ZMax.Name = "zMax";
@@ -48,7 +59,7 @@ namespace Mars.Clouds.Las
             this.ZPCumulative90.Name = "zPcumulative90";
             this.IntensityTotal.Name = "intensityTotal";
             this.IntensityMax.Name = "intensityMax";
-            this.IntensityMean.Name = "intensitymean";
+            this.IntensityMean.Name = "intensityMean";
             this.IntensityStandardDeviation.Name = "intensityStdDev";
             this.IntensitySkew.Name = "intensitySkew";
             this.IntensityKurtosis.Name = "intensityKurtosis";

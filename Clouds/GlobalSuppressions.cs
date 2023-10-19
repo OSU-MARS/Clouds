@@ -5,5 +5,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetGridMetrics.ReadLasHeadersAndFormGrid(System.Int32)~Mars.Clouds.Las.LasTileGrid")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetTreetops.ProcessTile(System.Int32,System.String)~System.Int32")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.GdalExtensions.GetDriverByExtension(System.String)~OSGeo.GDAL.Driver")]

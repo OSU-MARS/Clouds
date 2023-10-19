@@ -2,6 +2,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Las
 {
@@ -159,13 +160,37 @@ namespace Mars.Clouds.Las
             return new LasFile(lasHeader);
         }
 
-        public void ReadPointsToGridZirn(LasFile lasFile, Grid<PointListZirn> abaGrid)
+        public void ReadPointsToGridZirn(LasFile lasFile, Grid<PointListZirnc> abaGrid)
         {
             if (this.reader.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
                 this.reader.BaseStream.Seek(lasFile.Header.OffsetToPointData, SeekOrigin.Begin);
             }
 
+            // cell capacity to a reasonable fraction of the tile's average density
+            // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
+            double cellArea = abaGrid.Transform.GetCellArea();
+            double tileArea = lasFile.Header.GetArea();
+            UInt64 tilePoints = lasFile.Header.GetNumberOfPoints();
+            double nominalMeanPointsPerCell = tilePoints * cellArea / tileArea;
+            int cellInitialPointCapacity = Int32.Min((int)(0.35 * nominalMeanPointsPerCell), (int)tilePoints); // edge case: guard against overallocation when tile is smaller than cell
+            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = abaGrid.GetIntersectingCellIndices(lasFile.Header.MinX, lasFile.Header.MaxX, lasFile.Header.MinY, lasFile.Header.MaxY);
+            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            {
+                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                {
+                    PointListZirnc? abaCell = abaGrid[abaXindex, abaYindex];
+                    if (abaCell != null)
+                    {
+                        if (abaCell.Capacity == 0) // if cell already has some allocation, assume it's overlapped by another tile and do nothing
+                        {
+                            abaCell.Capacity = cellInitialPointCapacity;
+                        }
+                    }
+                }
+            }
+
+            // read points
             byte pointFormat = lasFile.Header.PointDataRecordFormat;
             long unusedBytesPerPartiallyReadPoint = lasFile.Header.PointDataRecordLength - 8; // x+y = 2*4
             long unusedBytesPerFullyReadPoint = lasFile.Header.PointDataRecordLength - 16; // x+y+z + intensity + return + classification = 3*4 + 2 + 1 + 1
@@ -191,9 +216,17 @@ namespace Mars.Clouds.Las
                 double x = xOffset + xScale * this.reader.ReadInt32();
                 double y = yOffset + yScale * this.reader.ReadInt32();
                 (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndex(x, y);
-                PointListZirn? abaCell = abaGrid[xIndex, yIndex];
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= abaGrid.XSize) || (yIndex >= abaGrid.YSize))
+                {
+                    // point lies outside of the ABA grid and is therefore not of interest
+                    // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
+                    this.reader.BaseStream.Seek(unusedBytesPerPartiallyReadPoint, SeekOrigin.Current);
+                    continue;
+                }
+                PointListZirnc? abaCell = abaGrid[xIndex, yIndex];
                 if (abaCell == null)
                 {
+                    // point lies within ABA grid but is not within a cell of interest
                     this.reader.BaseStream.Seek(unusedBytesPerPartiallyReadPoint, SeekOrigin.Current);
                     continue;
                 }
@@ -237,6 +270,20 @@ namespace Mars.Clouds.Las
                 abaCell.Classification.Add(classification);
 
                 this.reader.BaseStream.Seek(unusedBytesPerFullyReadPoint, SeekOrigin.Current);
+            }
+
+            // increment ABA cell tile load counts
+            // Could include this in the initial loop, though that's not strictly proper.
+            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            {
+                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                {
+                    PointListZirnc? abaCell = abaGrid[abaXindex, abaYindex];
+                    if (abaCell != null)
+                    {
+                        ++abaCell.TilesLoaded;
+                    }
+                }
             }
         }
 

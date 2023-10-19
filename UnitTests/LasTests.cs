@@ -5,8 +5,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using static System.Net.WebRequestMethods;
 
 namespace Mars.Clouds.UnitTests
 {
@@ -30,33 +32,10 @@ namespace Mars.Clouds.UnitTests
         {
             Debug.Assert(this.unitTestPath != null);
 
-            using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.unitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
-            Raster<UInt16> gridCellDefinitions = new(gridCellDefinitionDataset);
-            Grid<PointListZirn> abaGrid = new(gridCellDefinitions);
+            FileInfo lasFileInfo = new(Path.Combine(this.unitTestPath, "PSME LAS 1.4 point type 6.las"));
+            using LasTile lasTile = new(lasFileInfo.FullName);
 
-            Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, Array.Empty<string>()) == 1);
-            Assert.IsTrue(RasterGeoTransform.Equals(gridCellDefinitions.Transform, abaGrid.Transform));
-            Assert.IsTrue(gridCellDefinitions.XSize == abaGrid.XSize);
-            Assert.IsTrue(gridCellDefinitions.YSize == abaGrid.YSize);
-            Assert.IsTrue(Int32.Parse(abaGrid.Crs.GetAuthorityCode("PROJCS")) == 32610);
-            int populatedGridCells = 0;
-            for (int yIndex = 0; yIndex < abaGrid.YSize; ++yIndex)
-            {
-                for (int xIndex = 0; xIndex < abaGrid.XSize; ++xIndex)
-                {
-                    if (abaGrid[xIndex, yIndex] != null)
-                    {
-                        ++populatedGridCells;
-                    }
-                }
-            }
-            Assert.IsTrue(populatedGridCells == 575);
-
-            using FileStream stream = new(Path.Combine(this.unitTestPath, "PSME LAS 1.4 point type 6.las"), FileMode.Open, FileAccess.Read, FileShare.Read, 512 * 1024, FileOptions.SequentialScan);
-            using LasReader lasReader = new(stream);
-            LasFile lasFile = lasReader.ReadHeader();
-            lasReader.ReadVariableLengthRecords(lasFile);
-
+            LasFile lasFile = lasTile.File;
             LasHeader14 lasHeader14 = (LasHeader14)lasFile.Header;
             Assert.IsTrue(String.Equals(lasHeader14.FileSignature, LasFile.Signature, StringComparison.Ordinal));
             Assert.IsTrue(lasHeader14.GlobalEncoding == GlobalEncoding.WellKnownText);
@@ -92,7 +71,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(lasHeader14.MaxZ == 928.63061226561206);
             Assert.IsTrue(lasHeader14.MinZ == 920.520912265612);
             Assert.IsTrue(lasHeader14.StartOfWaveformDataPacketRecord == 0);
-            Assert.IsTrue(lasHeader14.StartOfFirstExtendedVariableLengthRecord == (UInt64)stream.Length); // not well defined by spec; proactively setting to end of file is reasonable when there are zero EVLRs
+            Assert.IsTrue(lasHeader14.StartOfFirstExtendedVariableLengthRecord == (UInt64)lasFileInfo.Length); // not well defined by spec; proactively setting to end of file is reasonable when there are zero EVLRs
             Assert.IsTrue(lasHeader14.NumberOfExtendedVariableLengthRecords == 0);
             Assert.IsTrue(lasHeader14.NumberOfPointRecords == 207617);
             Assert.IsTrue(lasHeader14.NumberOfPointsByReturn[0] == 0);
@@ -139,25 +118,82 @@ namespace Mars.Clouds.UnitTests
             int lasFileEpsg = lasFile.GetProjectedCoordinateSystemEpsg();
             Assert.IsTrue(lasFileEpsg == 32610);
 
-            lasReader.ReadPointsToGridZirn(lasFile, abaGrid);
-            PointListZirn? psmeCell1 = abaGrid[8, 14];
+            // bypass LasTileGrid.Create(lasTiles, 32610) as test point cloud is much smaller than a full LiDAR/SfM tile
+            using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.unitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
+            Raster<UInt16> gridCellDefinitions = new(gridCellDefinitionDataset);
+            GridGeoTransform lasFileTransform = new(lasFile.Header.MinX, lasFile.Header.MaxY, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
+            using LasTileGrid lasGrid = new(lasFile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
+
+            AbaGrid abaGrid = new(gridCellDefinitions, lasGrid);
+
+            Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, Array.Empty<string>()) == 1);
+            Assert.IsTrue(GridGeoTransform.Equals(gridCellDefinitions.Transform, abaGrid.Transform));
+            Assert.IsTrue(gridCellDefinitions.XSize == abaGrid.XSize);
+            Assert.IsTrue(gridCellDefinitions.YSize == abaGrid.YSize);
+            Assert.IsTrue(Int32.Parse(abaGrid.Crs.GetAuthorityCode("PROJCS")) == 32610);
+            int populatedGridCells = 0;
+            for (int yIndex = 0; yIndex < abaGrid.YSize; ++yIndex)
+            {
+                for (int xIndex = 0; xIndex < abaGrid.XSize; ++xIndex)
+                {
+                    if (abaGrid[xIndex, yIndex] != null)
+                    {
+                        ++populatedGridCells;
+                    }
+                }
+            }
+            Assert.IsTrue(populatedGridCells == 4); // two cells with points (8, 14 and 9, 14) plus two cells without points due to proxied tile size (8, 15 and 9, 15)
+
+            lasTile.Reader.ReadPointsToGridZirn(lasFile, abaGrid);
+            PointListZirnc? psmeCell1 = abaGrid[8, 14];
             Assert.IsTrue(psmeCell1 != null);
-            Assert.IsTrue(psmeCell1.Z.Count == 162764);
-            Assert.IsTrue(psmeCell1.Intensity.Count == psmeCell1.Z.Count);
-            Assert.IsTrue(psmeCell1.ReturnNumber.Count == psmeCell1.Z.Count);
-            PointListZirn? psmeCell2 = abaGrid[9, 14];
+            Assert.IsTrue(psmeCell1.TilesIntersected == 1);
+            Assert.IsTrue(psmeCell1.TilesLoaded == 1);
+            Assert.IsTrue(psmeCell1.XIndex == 8);
+            Assert.IsTrue(psmeCell1.YIndex == 14);
+            Assert.IsTrue(psmeCell1.Count == 162764);
+            Assert.IsTrue(psmeCell1.Z.Count == psmeCell1.Count);
+            Assert.IsTrue(psmeCell1.Intensity.Count == psmeCell1.Count);
+            Assert.IsTrue(psmeCell1.ReturnNumber.Count == psmeCell1.Count);
+            Assert.IsTrue(psmeCell1.Classification.Count == psmeCell1.Count);
+
+            PointListZirnc? psmeCell2 = abaGrid[9, 14];
             Assert.IsTrue(psmeCell2 != null);
-            Assert.IsTrue(psmeCell2.Z.Count == 44853);
-            Assert.IsTrue(psmeCell2.Intensity.Count == psmeCell2.Z.Count);
-            Assert.IsTrue(psmeCell2.ReturnNumber.Count == psmeCell2.Z.Count);
+            Assert.IsTrue(psmeCell2.TilesIntersected == 1);
+            Assert.IsTrue(psmeCell2.TilesLoaded == 1);
+            Assert.IsTrue(psmeCell2.XIndex == 9);
+            Assert.IsTrue(psmeCell2.YIndex == 14);
+            Assert.IsTrue(psmeCell2.Count == 44853);
+            Assert.IsTrue(psmeCell2.Z.Count == psmeCell2.Count);
+            Assert.IsTrue(psmeCell2.Intensity.Count == psmeCell2.Count);
+            Assert.IsTrue(psmeCell2.ReturnNumber.Count == psmeCell2.Count);
+            Assert.IsTrue(psmeCell2.Classification.Count == psmeCell2.Count);
+
+            PointListZirnc? adjacentCell1 = abaGrid[8, 15];
+            Assert.IsTrue(adjacentCell1 != null);
+            Assert.IsTrue(adjacentCell1.TilesIntersected == 1);
+            Assert.IsTrue(adjacentCell1.TilesLoaded == 1);
+            Assert.IsTrue(adjacentCell1.XIndex == 8);
+            Assert.IsTrue(adjacentCell1.YIndex == 15);
+            Assert.IsTrue(adjacentCell1.Count == 0);
+
+            PointListZirnc? adjacentCell2 = abaGrid[9, 15];
+            Assert.IsTrue(adjacentCell2 != null);
+            Assert.IsTrue(adjacentCell2.TilesIntersected == 1);
+            Assert.IsTrue(adjacentCell2.TilesLoaded == 1);
+            Assert.IsTrue(adjacentCell2.XIndex == 9);
+            Assert.IsTrue(adjacentCell2.YIndex == 15);
+            Assert.IsTrue(adjacentCell2.Count == 0);
 
             SpatialReference lasSpatialReference = lasFile.GetSpatialReference();
             float crsLinearUnits = (float)lasSpatialReference.GetLinearUnits();
             float oneMeterHeightClass = 1.0F / crsLinearUnits;
             float twoMeterHeightThreshold = 920.52F + 2.0F / crsLinearUnits;
             StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
-            psmeCell1.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold, 8, 14);
-            psmeCell2.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold, 9, 14);
+            psmeCell1.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+            psmeCell2.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+            adjacentCell1.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+            adjacentCell2.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
 
             Assert.IsTrue(abaMetrics.N[8, 14] == 162764);
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
@@ -190,7 +226,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZQuantile95[8, 14] == 926.7014F);
             Assert.IsTrue(abaMetrics.ZPCumulative10[8, 14] == 0.08913519F);
             Assert.IsTrue(abaMetrics.ZPCumulative20[8, 14] == 0.181962848F);
-            Assert.IsTrue(abaMetrics.ZPCumulative30[8, 14] == 0.3759185F);
+            Assert.IsTrue(abaMetrics.ZPCumulative30[8, 14] == 0.3758755F);
             Assert.IsTrue(abaMetrics.ZPCumulative40[8, 14] == 0.5440515F);
             Assert.IsTrue(abaMetrics.ZPCumulative50[8, 14] == 0.708209455F);
             Assert.IsTrue(abaMetrics.ZPCumulative60[8, 14] == 0.8307365F);
@@ -272,6 +308,180 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PFifthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PGround[9, 14] == 0.0F);
+
+            Assert.IsTrue(abaMetrics.N[8, 15] == 0);
+            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZStandardDeviation[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZSkew[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZKurtosis[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZNormalizedEntropy[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PZAboveZMean[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PZAboveThreshold[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile05[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile10[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile15[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile20[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile25[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile30[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile35[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile40[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile45[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile50[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile55[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile60[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile65[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile70[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile75[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile80[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile85[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile90[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile95[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative10[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative20[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative30[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative40[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative50[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative60[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative70[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative80[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative90[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityTotal[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityMax[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityMean[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityStandardDeviation[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensitySkew[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityKurtosis[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPGround[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ10[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ30[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ50[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ70[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ90[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFirstReturn[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PSecondReturn[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PThirdReturn[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PGround[8, 15]));
+
+            Assert.IsTrue(abaMetrics.N[9, 15] == 0);
+            // for now, remaining bands aren't checked for NaN as coverage of previous cell should suffice
+
+            Assert.IsTrue(abaMetrics.N.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZMax.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZMean.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZStandardDeviation.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZSkew.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZKurtosis.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZNormalizedEntropy.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PZAboveZMean.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PZAboveThreshold.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile05.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile10.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile15.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile20.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile25.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile30.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile35.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile40.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile45.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile50.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile55.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile60.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile65.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile70.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile75.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile80.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile85.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile90.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZQuantile95.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative10.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative20.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative30.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative40.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative50.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative60.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative70.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative80.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZPCumulative90.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityTotal.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityMax.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityMean.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityStandardDeviation.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensitySkew.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityKurtosis.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPGround.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ10.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ30.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ50.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ70.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ90.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PFirstReturn.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PSecondReturn.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PThirdReturn.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PFourthReturn.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PFifthReturn.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.PGround.HasNoDataValue);
+
+            Assert.IsTrue(Single.IsNaN(abaMetrics.N.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZStandardDeviation.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZSkew.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZKurtosis.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZNormalizedEntropy.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PZAboveZMean.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PZAboveThreshold.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile05.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile10.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile15.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile20.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile25.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile30.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile35.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile40.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile45.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile50.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile55.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile60.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile65.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile70.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile75.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile80.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile85.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile90.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZQuantile95.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative10.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative20.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative30.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative40.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative50.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative60.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative70.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative80.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZPCumulative90.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityTotal.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityMax.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityMean.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityStandardDeviation.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensitySkew.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityKurtosis.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPGround.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ10.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ30.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ50.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ70.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ90.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFirstReturn.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PSecondReturn.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PThirdReturn.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.PGround.NoDataValue));
         }
     }
 }

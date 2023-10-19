@@ -4,8 +4,16 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
-    public class PointListZirn
+    /// <summary>
+    /// List of points with Z, intensity (I), return number (RN), and classification (C; ZIRNC).
+    /// </summary>
+    public class PointListZirnc
     {
+        public int TilesLoaded { get; set; }
+        public int TilesIntersected { get; init; }
+        public int XIndex { get; init; }
+        public int YIndex { get; init; }
+
         public List<PointClassification> Classification { get; set; }
         public List<UInt16> Intensity { get; private init; }
         public List<byte> ReturnNumber { get; private init; }
@@ -15,8 +23,13 @@ namespace Mars.Clouds.Las
         public double YMin { get; set; }
         public List<float> Z { get; private init; }
 
-        public PointListZirn() 
+        public PointListZirnc(int indexX, int indexY, int tilesIntersected)
         {
+            this.TilesLoaded = 0;
+            this.TilesIntersected = tilesIntersected;
+            this.XIndex = indexX;
+            this.YIndex = indexY;
+
             this.Classification = new();
             this.Intensity = new();
             this.ReturnNumber = new();
@@ -25,6 +38,22 @@ namespace Mars.Clouds.Las
             this.YMax = Double.MinValue;
             this.YMin = Double.MaxValue;
             this.Z = new();
+        }
+
+        public int Capacity
+        {
+            get
+            {
+                Debug.Assert((this.Intensity.Capacity == this.ReturnNumber.Capacity) && (this.Intensity.Capacity == this.Z.Capacity));
+                return this.Intensity.Capacity;
+            }
+            set
+            {
+                this.Classification.Capacity = value;
+                this.Intensity.Capacity = value;
+                this.ReturnNumber.Capacity = value;
+                this.Z.Capacity = value;
+            }
         }
 
         public int Count
@@ -36,46 +65,102 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void GetStandardMetrics(StandardMetricsRaster abaMetrics, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits, int xIndex, int yIndex)
+        public void ClearAndRelease()
+        {
+            this.TilesLoaded = 0;
+            // no changes to this.TilesIntersected, XIndex, YIndex, XMax, XMin, YMax, YMin
+
+            this.Classification.Clear();
+            this.Classification.Capacity = 0;
+            this.Intensity.Clear();
+            this.Intensity.Capacity = 0;
+            this.ReturnNumber.Clear();
+            this.ReturnNumber.Capacity = 0;
+            this.Z.Clear();
+            this.Z.Capacity = 0;
+        }
+
+        public void GetStandardMetrics(StandardMetricsRaster abaMetrics, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
         {
             int pointCount = this.Count;
-            if (pointCount < 1)
-            {
-                throw new NotSupportedException("Cell has no metrics as no points have been loaded into it (x index in ABA raster = " + xIndex + ", y index = " + yIndex + ").");
-            }
-
-            int cellIndex = abaMetrics.N.ToCellIndex(xIndex, yIndex); // all bands are the same size and therefore have the same indexing
-            abaMetrics.AreaOfPointBoundingBox[cellIndex] = (float)((this.XMax - this.XMin) * (this.YMax - this.YMin));
+            int cellIndex = abaMetrics.N.ToCellIndex(this.XIndex, this.YIndex); // all bands are the same size and therefore have the same indexing
             abaMetrics.N[cellIndex] = pointCount;
 
+            if (pointCount < 1)
+            {
+                return; // cell contains no points; all statistics but n are undefined
+            }
+
+            abaMetrics.AreaOfPointBoundingBox[cellIndex] = (float)((this.XMax - this.XMin) * (this.YMax - this.YMin));
+
             // z quantiles
+            // For now, quantiles are obtained with direct lookups as most likely there are thousands to tens of thousands of points in an
+            // ABA cell. If needed, interpolation can be included to estimate quantiles more precisely in cells with low point counts.
             float[] sortedZ = new float[pointCount];
             this.Z.CopyTo(sortedZ);
             Array.Sort(sortedZ);
-            abaMetrics.ZQuantile05[cellIndex] = sortedZ[pointCount / 20 - 1];
-            float zQuantile10 = sortedZ[2 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile10[cellIndex] = zQuantile10;
-            abaMetrics.ZQuantile15[cellIndex] = sortedZ[3 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile20[cellIndex] = sortedZ[4 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile25[cellIndex] = sortedZ[5 * pointCount / 20 - 1];
-            float zQuantile30 = sortedZ[6 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile30[cellIndex] = zQuantile30;
-            abaMetrics.ZQuantile35[cellIndex] = sortedZ[7 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile40[cellIndex] = sortedZ[8 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile45[cellIndex] = sortedZ[9 * pointCount / 20 - 1];
-            float zQuantile50 = sortedZ[10 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile50[cellIndex] = zQuantile50;
-            abaMetrics.ZQuantile55[cellIndex] = sortedZ[11 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile60[cellIndex] = sortedZ[12 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile65[cellIndex] = sortedZ[13 * pointCount / 20 - 1];
-            float zQuantile70 = sortedZ[14 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile70[cellIndex] = zQuantile70;
-            abaMetrics.ZQuantile75[cellIndex] = sortedZ[15 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile80[cellIndex] = sortedZ[16 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile85[cellIndex] = sortedZ[17 * pointCount / 20 - 1];
-            float zQuantile90 = sortedZ[18 * pointCount / 20 - 1];
-            abaMetrics.ZQuantile90[cellIndex] = zQuantile90;
-            abaMetrics.ZQuantile95[cellIndex] = sortedZ[19 * pointCount / 20 - 1];
+
+            float zQuantile10;
+            float zQuantile30;
+            float zQuantile50;
+            float zQuantile70;
+            float zQuantile90;
+            if (pointCount < 20)
+            {
+                // if cell has less than 20 points then n * pointCount / 20 will be zero at least some of the time
+                // Negative indices result in this case due to the subtraction of 1.
+                abaMetrics.ZQuantile05[cellIndex] = sortedZ[Int32.Max((int)(pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile10 = sortedZ[Int32.Max((int)(2.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile10[cellIndex] = zQuantile10;
+                abaMetrics.ZQuantile15[cellIndex] = sortedZ[Int32.Max((int)(3.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile20[cellIndex] = sortedZ[Int32.Max((int)(4.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile25[cellIndex] = sortedZ[Int32.Max((int)(5.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile30 = sortedZ[Int32.Max((int)(6.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile30[cellIndex] = zQuantile30;
+                abaMetrics.ZQuantile35[cellIndex] = sortedZ[Int32.Max((int)(7.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile40[cellIndex] = sortedZ[Int32.Max((int)(8.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile45[cellIndex] = sortedZ[Int32.Max((int)(9.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile50 = sortedZ[Int32.Max((int)(10.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile50[cellIndex] = zQuantile50;
+                abaMetrics.ZQuantile55[cellIndex] = sortedZ[Int32.Max((int)(11.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile60[cellIndex] = sortedZ[Int32.Max((int)(12.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile65[cellIndex] = sortedZ[Int32.Max((int)(13.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile70 = sortedZ[Int32.Max((int)(14.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile70[cellIndex] = zQuantile70;
+                abaMetrics.ZQuantile75[cellIndex] = sortedZ[Int32.Max((int)(15.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile80[cellIndex] = sortedZ[Int32.Max((int)(16.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile85[cellIndex] = sortedZ[Int32.Max((int)(17.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile90 = sortedZ[Int32.Max((int)(18.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                abaMetrics.ZQuantile90[cellIndex] = zQuantile90;
+                abaMetrics.ZQuantile95[cellIndex] = sortedZ[Int32.Max((int)(19.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+            }
+            else
+            {
+                abaMetrics.ZQuantile05[cellIndex] = sortedZ[pointCount / 20 - 1];
+                zQuantile10 = sortedZ[2 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile10[cellIndex] = zQuantile10;
+                abaMetrics.ZQuantile15[cellIndex] = sortedZ[3 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile20[cellIndex] = sortedZ[4 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile25[cellIndex] = sortedZ[5 * pointCount / 20 - 1];
+                zQuantile30 = sortedZ[6 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile30[cellIndex] = zQuantile30;
+                abaMetrics.ZQuantile35[cellIndex] = sortedZ[7 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile40[cellIndex] = sortedZ[8 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile45[cellIndex] = sortedZ[9 * pointCount / 20 - 1];
+                zQuantile50 = sortedZ[10 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile50[cellIndex] = zQuantile50;
+                abaMetrics.ZQuantile55[cellIndex] = sortedZ[11 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile60[cellIndex] = sortedZ[12 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile65[cellIndex] = sortedZ[13 * pointCount / 20 - 1];
+                zQuantile70 = sortedZ[14 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile70[cellIndex] = zQuantile70;
+                abaMetrics.ZQuantile75[cellIndex] = sortedZ[15 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile80[cellIndex] = sortedZ[16 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile85[cellIndex] = sortedZ[17 * pointCount / 20 - 1];
+                zQuantile90 = sortedZ[18 * pointCount / 20 - 1];
+                abaMetrics.ZQuantile90[cellIndex] = zQuantile90;
+                abaMetrics.ZQuantile95[cellIndex] = sortedZ[19 * pointCount / 20 - 1];
+            }
             float zMax = sortedZ[^1];
             abaMetrics.ZMax[cellIndex] = zMax;
 
@@ -113,10 +198,10 @@ namespace Mars.Clouds.Las
             int[] pointCountByHeightClass = new int[heightClasses]; // leave at default of zero
 
             UInt16 intensityMax = UInt16.MinValue;
-            double intensitySum = 0.0; // keep intensity sums as doubles as (Int32 points) * UInt16^4 requires an Int96 to avoid overflow
+            double intensitySum = 0.0;
             double intensitySumSquared = 0.0;
             double intensitySumCubed = 0.0;
-            double intensitySumFourthPower = 0.0;
+            double intensitySumFourthPower = 0.0; // keep intensity sums as doubles as (Int32 points) * UInt16^4 requires an Int96 to avoid overflow
 
             int groundPoints = 0;
             long intensityGroundSum = 0;
@@ -232,6 +317,8 @@ namespace Mars.Clouds.Las
             abaMetrics.ZStandardDeviation[cellIndex] = (float)zStandardDeviation;
             double zSkew = (zSumCubed - 3.0 * zSumSquared * zMean + 3.0 * zSum * zMean * zMean - pointCountAsDouble * zMean * zMean * zMean) / (zVariance * zStandardDeviation) * pointCountAsDouble / (pointCountAsDouble - 1.0) / (pointCountAsDouble - 2.0);
             abaMetrics.ZSkew[cellIndex] = (float)zSkew;
+            // kurtosis is subject to numerical precision effects when calculated at double precision
+            // Can be changed to Int128 if needed.
             double zKurtosis = (zSumFourthPower - 4.0 * zSumCubed * zMean + 6.0 * zSumSquared * zMean * zMean - 4.0 * zSum * zMean * zMean * zMean + pointCountAsDouble * zMean * zMean * zMean * zMean) / (zVariance * zVariance) * pointCountAsDouble * (pointCountAsDouble + 1.0) / ((pointCountAsDouble - 1.0) * (pointCountAsDouble - 2.0) * (pointCountAsDouble - 3.0));
             abaMetrics.ZKurtosis[cellIndex] = (float)zKurtosis;
 
@@ -254,6 +341,7 @@ namespace Mars.Clouds.Las
             pointsBelowZLevel += pointsFromZ80to90;
             abaMetrics.ZPCumulative90[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
 
+            // entropy is of debatable value: sensitive to bin size and location
             double zEntropy = 0.0F;
             for (int heightClassIndex = 0; heightClassIndex < pointCountByHeightClass.Length; ++heightClassIndex)
             {

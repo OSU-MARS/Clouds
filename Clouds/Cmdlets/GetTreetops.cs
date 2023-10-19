@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
 
         private static void AddToLayer(TreetopLayer treetopLayer, TileSearchState tileSearch, int treeID, double rowIndexFractional, double columnIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation)
         {
-            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.ToProjectedCoordinate(columnIndexFractional, rowIndexFractional);
+            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.GetProjectedCoordinate(columnIndexFractional, rowIndexFractional);
             float treeHeightInCrsUnits = treetopElevation - groundElevationAtBaseOfTree;
             Debug.Assert((groundElevationAtBaseOfTree > -200.0F) && (groundElevationAtBaseOfTree < 30000.0F) && (treeHeightInCrsUnits < 400.0F));
             treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits);
@@ -164,13 +164,11 @@ namespace Mars.Clouds.Cmdlets
                     // Parallel.For() not using PowerShell's entry thread.
                     if (Environment.CurrentManagedThreadId == loggingThreadID)
                     {
-                        double fractionComplete = (double)loadedTileCount / (double)dsmTilePaths.Count;
-                        double secondsElapsed = stopwatch.Elapsed.TotalSeconds;
-                        int secondsRemaining = (int)Double.Round(secondsElapsed * (1.0 / fractionComplete - 1.0));
+                        float fractionComplete = (float)loadedTileCount / (float)dsmTilePaths.Count;
                         this.WriteProgress(new ProgressRecord(0, "Get-Treetops", "Loading " + dsmTileName + "...")
                         {
                             PercentComplete = (int)(100.0F * fractionComplete),
-                            SecondsRemaining = secondsRemaining
+                            SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0
                         });
                     }
                 });
@@ -219,13 +217,11 @@ namespace Mars.Clouds.Cmdlets
 
                     if (Environment.CurrentManagedThreadId == loggingThreadID)
                     {
-                        double fractionComplete = (double)completedTileCount / (double)dsmTilePaths.Count;
-                        double secondsElapsed = stopwatch.Elapsed.TotalSeconds;
-                        int secondsRemaining = (int)Double.Round(secondsElapsed * (1.0 / fractionComplete - 1.0));
+                        float fractionComplete = (float)completedTileCount / (float)dsmTilePaths.Count;
                         this.WriteProgress(new ProgressRecord(0, "Get-Treetops", "Finding trees in " + dsmFileName + "...")
                         {
                             PercentComplete = (int)(100.0F * fractionComplete),
-                            SecondsRemaining = secondsRemaining
+                            SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0
                         });
                     }
                 });
@@ -239,7 +235,7 @@ namespace Mars.Clouds.Cmdlets
 
         private string LoadTile(List<string> dsmTiles, int tileIndex)
         {
-            Debug.Assert(String.IsNullOrWhiteSpace(this.Dtm) == false);
+            Debug.Assert(String.IsNullOrEmpty(this.Dtm) == false);
             string dsmTilePath = dsmTiles[tileIndex];
             string dsmFileName = Path.GetFileName(dsmTilePath);
             string dtmTilePath = Path.Combine(this.Dtm, dsmFileName);
@@ -336,7 +332,7 @@ namespace Mars.Clouds.Cmdlets
                     // create point if this cell is a unique local maxima
                     if (addTreetop)
                     {
-                        (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenterCoordinate(dsmColumnIndex, dsmRowIndex);
+                        (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenter(dsmColumnIndex, dsmRowIndex);
                         treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits);
                     }
                 }

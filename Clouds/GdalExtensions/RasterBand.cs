@@ -5,22 +5,16 @@ using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    public class RasterBand<TBand> where TBand : INumber<TBand>
+    public class RasterBand<TBand> : Grid where TBand : INumber<TBand>
     {
         private bool noDataIsNaN;
 
-        public SpatialReference Crs { get; private init; }
         public Memory<TBand> Data { get; private init; }
-
         public bool HasNoDataValue { get; private set; }
         public string Name { get; set; }
         public TBand NoDataValue { get; private set; }
 
-        public RasterGeoTransform Transform { get; private init; }
-        public int XSize { get; private init; }
-        public int YSize { get; private init; }
-
-        public RasterBand(Band band, SpatialReference crs, RasterGeoTransform transform, Memory<TBand> data)
+        public RasterBand(Band band, SpatialReference crs, GridGeoTransform transform, Memory<TBand> data)
             : this(band.GetDescription(), crs, transform, band.XSize, band.YSize, data)
         {
             band.GetNoDataValue(out double noDataValue, out int hasNoDataValue);
@@ -37,18 +31,15 @@ namespace Mars.Clouds.GdalExtensions
             this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
         }
 
-        public RasterBand(string name, SpatialReference crs, RasterGeoTransform transform, int xSize, int ySize, Memory<TBand> data)
+        public RasterBand(string name, SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, Memory<TBand> data)
+            : base(crs, transform, xSize, ySize)
         {
             this.HasNoDataValue = false;
             this.noDataIsNaN = false;
             this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
 
-            this.Crs = crs;
             this.Data = data;
             this.Name = name;
-            this.Transform = transform;
-            this.XSize = xSize;
-            this.YSize = ySize;
         }
 
         public TBand this[int index]
@@ -77,11 +68,6 @@ namespace Mars.Clouds.GdalExtensions
             this.HasNoDataValue = true;
             this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
-        }
-
-        public int ToCellIndex(int xIndex, int yIndex)
-        {
-            return xIndex + yIndex * this.XSize;
         }
     }
 }

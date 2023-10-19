@@ -1,106 +1,207 @@
 ﻿using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using OSGeo.GDAL;
+using OSGeo.OSR;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
+using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
 {
+    /// <summary>
+    /// Caclculate standard ABA (area based approach) point cloud metrics using a set of point cloud tiles and a raster defining ABA cells.
+    /// </summary>
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Raster defining grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not caculated for cells outside the point cloud or which have a no data value in the raster.")]
+        [Parameter(Mandatory = true, HelpMessage = "Raster defining grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the raster. The raster must be in the same CRS as the LiDAR tiles specified by -Las.")]
         [ValidateNotNullOrEmpty]
         public string? AbaCells { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = ".las file to measure load speed on.")]
+        [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used. .las files must be in the same CRS as the grid specified by -AbaCells.")]
         [ValidateNotNullOrEmpty]
         public string? Las { get; set; }
 
+        [Parameter(HelpMessage = "Maximum number of tiles to have fully loaded at the same time. This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
+        public int MaxTiles { get; set; }
+
+        public GetGridMetrics()
+        {
+            this.MaxTiles = 50;
+        }
+
         protected override void ProcessRecord()
         {
-            Debug.Assert((String.IsNullOrWhiteSpace(this.AbaCells) == false) && (String.IsNullOrWhiteSpace(this.Las) == false));
+            Debug.Assert(String.IsNullOrEmpty(this.AbaCells) == false);
+
+            using Dataset gridCellDefinitionDataset = Gdal.Open(this.AbaCells, Access.GA_ReadOnly);
+            Raster<UInt16> abaCellDefinitions = new(gridCellDefinitionDataset);
+            int abaEpsg = Int32.Parse(abaCellDefinitions.Crs.GetAuthorityCode("PROJCS"));
+
+            using LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(abaEpsg);
+            AbaGrid abaGrid = new(abaCellDefinitions, lasGrid);
+
+            StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
+            BlockingCollection<List<PointListZirnc>> fullyPopulatedAbaCells = new(this.MaxTiles);
+
+            Stopwatch stopwatch = new();
+            stopwatch.Start();
+            
+            int tilesLoaded = 0;
+            Task readPoints = Task.Run(() => 
+            {
+                try
+                {
+                    for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
+                    {
+                        for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
+                        {
+                            LasTile? tile = lasGrid[tileXindex, tileYindex];
+                            if ((tile == null) || (abaGrid.HasCellsInTile(tile.File) == false))
+                            {
+                                continue;
+                            }
+
+                            tile.Reader.ReadPointsToGridZirn(tile.File, abaGrid);
+                            tile.Dispose();
+
+                            abaGrid.QueueCompletedCells(tile.File, fullyPopulatedAbaCells);
+                            ++tilesLoaded;
+
+                            if (this.Stopping)
+                            {
+                                break;
+                            }
+
+                            //FileInfo fileInfo = new(this.Las);
+                            //UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();
+                            //float megabytesRead = fileInfo.Length / (1024.0F * 1024.0F);
+                            //float gigabytesRead = megabytesRead / 1024.0F;
+                            //double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
+                            //this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,0") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
+                        }
+
+                        if (this.Stopping)
+                        {
+                            break;
+                        }
+                    }
+
+                    // TODO: error checking to detect any incompletely loaded, and thus unqueued, ABA cells?
+                }
+                finally // ensure metrics calculation doesn't block indefinitely if an exception occurs during tile loading
+                {
+                    fullyPopulatedAbaCells.CompleteAdding();
+                }
+            });
+
+            int abaCellsCompleted = 0;
+            Task calculateMetrics = Task.Run(() => 
+            {
+                SpatialReference crs = new(null);
+                crs.ImportFromEPSG(abaEpsg);
+                float crsLinearUnits = (float)crs.GetLinearUnits();
+                float oneMeterHeightClass = 1.0F / crsLinearUnits;
+                float twoMeterHeightThreshold = 2.0F / crsLinearUnits;
+
+                foreach (List<PointListZirnc> populatedAbaCellBatch in fullyPopulatedAbaCells.GetConsumingEnumerable())
+                {
+                    for (int batchIndex = 0; batchIndex < populatedAbaCellBatch.Count; ++batchIndex)
+                    {
+                        PointListZirnc abaCell = populatedAbaCellBatch[batchIndex];
+                        abaCell.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+                        // cell's lists are no longer needed; release them so the memory can be used for continuing tile loading
+                        // Since ClearAndRelease() zeros TilesLoaded it's called for consistency even if a cell contains no points.
+                        abaCell.ClearAndRelease();
+                        ++abaCellsCompleted;
+
+                        if (this.Stopping)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (this.Stopping)
+                    {
+                        break;
+                    }
+                }
+            });
+
+            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " LiDAR tiles)...");
+            this.WriteProgress(gridMetricsProgress);
+
+            TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(15.0);
+            Task[] gridMetricsTasks = new Task[] { readPoints, calculateMetrics };
+            while (Task.WaitAll(gridMetricsTasks, progressUpdateInterval) == false) // rethrows exception if a task faults
+            {
+                float fractionComplete = (float)abaCellsCompleted / (float)abaGrid.NonNullCells;
+                gridMetricsProgress.StatusDescription = "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " LiDAR tiles)...";
+                gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
+                gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                this.WriteProgress(gridMetricsProgress);
+            }
+
+            this.WriteObject(abaMetrics);
+            stopwatch.Stop();
+
+            string elapsedTimeFormat = stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
+            this.WriteVerbose("Calculated metrics for " + abaCellsCompleted.ToString("#,#,0") + " cells from " + tilesLoaded + " tiles in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (abaCellsCompleted / stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            base.ProcessRecord();
+        }
+
+        private LasTileGrid ReadLasHeadersAndFormGrid(int abaEpsg)
+        {
+            Debug.Assert(String.IsNullOrEmpty(this.Las) == false);
+
+            string[] lasTilePaths;
+            if (this.Las.Contains('*', StringComparison.Ordinal) || this.Las.Contains('?', StringComparison.Ordinal))
+            {
+                string? directoryPath = Path.GetDirectoryName(this.Las);
+                if (directoryPath == null)
+                {
+                    throw new NotSupportedException("Wildcarded LAS file path '" + this.Las + "' doesn't contain a directory path.");
+                }
+                string? filePattern = Path.GetFileName(this.Las);
+                if (filePattern == null)
+                {
+                    throw new NotSupportedException("Wildcarded LAS file path '" + this.Las + "' doesn't contain a file pattern.");
+                }
+                lasTilePaths = Directory.GetFiles(directoryPath, filePattern);
+            }
+            else
+            {
+                lasTilePaths = new string[] { this.Las };
+            }
+
             Stopwatch stopwatch = new();
             stopwatch.Start();
 
-            using Dataset gridCellDefinitionDataset = Gdal.Open(this.AbaCells, Access.GA_ReadOnly);
-            Raster<UInt16> gridCellDefinitions = new(gridCellDefinitionDataset);
-
-            using FileStream stream = new(this.Las, FileMode.Open, FileAccess.Read, FileShare.Read, 512 * 1024, FileOptions.SequentialScan);
-            using LasReader lasReader = new(stream);
-            LasFile lasFile = lasReader.ReadHeader();
-            lasReader.ReadVariableLengthRecords(lasFile);
-
-            int gridEpsg = Int32.Parse(gridCellDefinitions.Crs.GetAuthorityCode("PROJCS"));
-            int lasEpsg = lasFile.GetProjectedCoordinateSystemEpsg();
-            if (gridEpsg != lasEpsg)
+            List<LasTile> lasTiles = new(lasTilePaths.Length);
+            ProgressRecord tileIndexProgress = new(0, "Get-GridMetrics", "placeholder"); // can't pass null or empty statusDescription
+            for (int tileIndex = 0; tileIndex < lasTilePaths.Length; tileIndex++) 
             {
-                throw new NotSupportedException("ABA grid coordinate system (EPSG:" + gridEpsg + ") differs from the .las file's coordinate system (EPSG:" + lasEpsg + "). Currently, the two inputs are required to be in the same coordinate system.");
+                float fractionComplete = (float)tileIndex / (float)lasTilePaths.Length;
+                tileIndexProgress.StatusDescription = "Reading tile header " + tileIndex + " of " + lasTilePaths.Length + "...";
+                tileIndexProgress.PercentComplete = (int)(100.0F * fractionComplete);
+                tileIndexProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                this.WriteProgress(tileIndexProgress);
+
+                string lasTilePath = lasTilePaths[tileIndex];
+                lasTiles.Add(new(lasTilePath));
             }
 
-            this.WriteProgress(new ProgressRecord(0, "Get-GridMetrics", "Loading " + Path.GetFileName(this.Las) + "..."));
+            tileIndexProgress.StatusDescription = "Forming LiDAR tile grid...";
+            tileIndexProgress.PercentComplete = 0;
+            tileIndexProgress.SecondsRemaining = 0;
+            this.WriteProgress(tileIndexProgress);
 
-            Grid<PointListZirn> abaGrid = new(gridCellDefinitions);
-            lasReader.ReadPointsToGridZirn(lasFile, abaGrid);
-
-            stopwatch.Stop();
-            int abaGridCellsWithPoints = 0;
-            for (int yIndex = 0; yIndex < abaGrid.YSize; ++yIndex)
-            {
-                for (int xIndex = 0; xIndex < abaGrid.XSize; ++xIndex)
-                {
-                    PointListZirn? abaCell = abaGrid[xIndex, yIndex];
-                    if ((abaCell != null) && (abaCell.Count > 0))
-                    {
-                        ++abaGridCellsWithPoints;
-                    }
-                }
-            }
-
-            FileInfo fileInfo = new(this.Las);
-            UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();
-            float megabytesRead = fileInfo.Length / (1024.0F * 1024.0F);
-            float gigabytesRead = megabytesRead / 1024.0F;
-            double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-            this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,#") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
-
-            stopwatch.Restart();
-            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating grid metrics...")
-            {
-                PercentComplete = 0
-            };
-            this.WriteProgress(gridMetricsProgress);
-
-            StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
-            float crsLinearUnits = (float)lasFile.GetSpatialReference().GetLinearUnits();
-            float oneMeterHeightClass = 1.0F / crsLinearUnits;
-            float twoMeterHeightThreshold = 920.52F + 2.0F / crsLinearUnits;
-            int abaGridCellsWithCalculatedMetrics = 0;
-            for (int yIndex = 0; yIndex < abaGrid.YSize; ++yIndex)
-            {
-                for (int xIndex = 0; xIndex < abaGrid.XSize; ++xIndex)
-                {
-                    PointListZirn? abaCell = abaGrid[xIndex, yIndex];
-                    if ((abaCell != null) && (abaCell.Count > 0))
-                    {
-                        abaCell.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold, xIndex, yIndex);
-
-                        ++abaGridCellsWithCalculatedMetrics;
-                        double fractionComplete = (double)abaGridCellsWithCalculatedMetrics / (double)abaGridCellsWithPoints;
-                        gridMetricsProgress.PercentComplete = (int)(100.0 * fractionComplete);
-                        gridMetricsProgress.SecondsRemaining = (int)(stopwatch.Elapsed.TotalSeconds / fractionComplete);
-                        this.WriteProgress(gridMetricsProgress);
-                    }
-                }
-            }
-
-            stopwatch.Stop();
-            elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-            this.WriteVerbose("Calculated metrics for " + abaGridCellsWithPoints + " cells in " + elapsedSeconds.ToString("0.000") + " s: " + (abaGridCellsWithPoints / elapsedSeconds).ToString("0.0") + " cells/s.");
-            this.WriteObject(abaMetrics);
-            base.ProcessRecord();
+            LasTileGrid lasGrid = LasTileGrid.Create(lasTiles, abaEpsg);
+            return lasGrid;
         }
     }
 }

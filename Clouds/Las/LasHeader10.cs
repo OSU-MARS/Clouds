@@ -163,6 +163,18 @@ namespace Mars.Clouds.Las
             this.LegacyNumberOfPointsByReturn = new UInt32[5];
         }
 
+        public (double xCentroid, double yCentroid) GetCentroidXY()
+        {
+            double xCentroid = 0.5 * (this.MinX + this.MaxX);
+            double yCentroid = 0.5 * (this.MinY + this.MaxY);
+            return (xCentroid, yCentroid);
+        }
+
+        public double GetArea()
+        {
+            return (this.MaxX - this.MinX) * (this.MaxY - this.MinY);
+        }
+
         public virtual UInt64 GetNumberOfPoints()
         {
             return this.LegacyNumberOfPointRecords;
