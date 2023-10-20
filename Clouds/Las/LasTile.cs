@@ -16,7 +16,7 @@ namespace Mars.Clouds.Las
             : base(reader)
         {
             this.FilePath = lasFilePath;
-            this.FileSize = reader.BaseStream.BaseStream.Length;
+            this.FileSize = reader.BaseStream.Length;
             this.GridExtent = new(this.Header.MinX, this.Header.MaxX, this.Header.MinY, this.Header.MaxY);
         }
 
@@ -43,7 +43,7 @@ namespace Mars.Clouds.Las
 
             FileStream stream = new(this.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSizeInKB * 1024);
             LasReader reader = new(stream);
-            reader.BaseStream.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
             return reader;
         }
     }

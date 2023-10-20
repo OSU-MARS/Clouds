@@ -61,7 +61,7 @@ namespace Mars.Clouds.Segmentation
                     this.layer.Dispose();
                 }
 
-                isDisposed = true;
+                this.isDisposed = true;
             }
         }
     }

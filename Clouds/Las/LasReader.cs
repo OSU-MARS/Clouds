@@ -10,17 +10,16 @@ namespace Mars.Clouds.Las
     {
         private bool isDisposed;
 
-        public BinaryReader BaseStream { get; private init; }
+        public Stream BaseStream { get; private init; }
 
         public LasReader(Stream stream)
         {
             this.isDisposed = false;
-            this.BaseStream = new(stream);
+            this.BaseStream = stream;
         }
 
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             this.Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
@@ -34,18 +33,21 @@ namespace Mars.Clouds.Las
                     this.BaseStream.Dispose();
                 }
 
-                isDisposed = true;
+                this.isDisposed = true;
             }
         }
 
         public LasHeader10 ReadHeader()
         {
-            if (this.BaseStream.BaseStream.Position != 0)
+            if (this.BaseStream.Position != 0)
             {
-                this.BaseStream.BaseStream.Seek(0, SeekOrigin.Begin);
+                this.BaseStream.Seek(0, SeekOrigin.Begin);
             }
 
-            UInt32 signatureAsUInt32 = this.BaseStream.ReadUInt32();
+            Span<byte> headerBytes = stackalloc byte[LasHeader10.HeaderSizeInBytes];
+            this.BaseStream.ReadExactly(headerBytes);
+
+            UInt32 signatureAsUInt32 = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes);
             if (signatureAsUInt32 != 0x4653414c)
             {
                 Span<byte> signatureBytes = stackalloc byte[4];
@@ -54,15 +56,13 @@ namespace Mars.Clouds.Las
                 throw new IOException("File begins with '" + signature + "'. .las files are expected to begin with \"LASF\".");;
             }
 
-            UInt16 fileSourceID = this.BaseStream.ReadUInt16();
-            GlobalEncoding globalEncoding = (GlobalEncoding)this.BaseStream.ReadUInt16();
+            UInt16 fileSourceID = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[4..]);
+            GlobalEncoding globalEncoding = (GlobalEncoding)BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[6..]);
 
-            Span<byte> readBuffer16 = stackalloc byte[16];
-            this.BaseStream.Read(readBuffer16);
-            Guid projectID = new(readBuffer16);
+            Guid projectID = new(headerBytes.Slice(8, 16));
 
-            byte versionMajor = this.BaseStream.ReadByte();
-            byte versionMinor = this.BaseStream.ReadByte();
+            byte versionMajor = headerBytes[24];
+            byte versionMinor = headerBytes[25];
             if ((versionMajor != 1) || (versionMinor > 4))
             {
                 throw new NotSupportedException("Unknown .las file version " + versionMajor + "." + versionMinor + ".");
@@ -100,60 +100,59 @@ namespace Mars.Clouds.Las
                 _ => throw new NotSupportedException("Unhandled .las file version " + versionMajor + "." + versionMinor + " in header creation.")
             };
 
-            if (this.BaseStream.BaseStream.Length < lasHeader.HeaderSize)
+            if (this.BaseStream.Length < lasHeader.HeaderSize)
             {
-                throw new IOException("File size of " + this.BaseStream.BaseStream.Length + " bytes is less than the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
+                throw new IOException("File size of " + this.BaseStream.Length + " bytes is less than the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
             }
 
-            Span<byte> readBuffer32 = stackalloc byte[32];
-            this.BaseStream.Read(readBuffer32);
-            lasHeader.SystemIdentifier = Encoding.UTF8.GetString(readBuffer32).Trim('\0');
-            this.BaseStream.Read(readBuffer32);
-            lasHeader.GeneratingSoftware = Encoding.UTF8.GetString(readBuffer32).Trim('\0');
+            lasHeader.SystemIdentifier = Encoding.UTF8.GetString(headerBytes.Slice(26, 32)).Trim('\0');
+            lasHeader.GeneratingSoftware = Encoding.UTF8.GetString(headerBytes.Slice(58, 32)).Trim('\0');
 
-            lasHeader.FileCreationDayOfYear = this.BaseStream.ReadUInt16();
-            lasHeader.FileCreationYear = this.BaseStream.ReadUInt16();
-            UInt16 headerSizeInBytes = this.BaseStream.ReadUInt16();
+            lasHeader.FileCreationDayOfYear = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[90..]);
+            lasHeader.FileCreationYear = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[92..]);
+            UInt16 headerSizeInBytes = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[94..]);
             if (headerSizeInBytes != lasHeader.HeaderSize)
             {
-                throw new IOException("Header of " + this.BaseStream.BaseStream.Length + " bytes differs from the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
+                throw new IOException("Header of " + this.BaseStream.Length + " bytes differs from the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
             }
 
-            lasHeader.OffsetToPointData = this.BaseStream.ReadUInt32();
-            lasHeader.NumberOfVariableLengthRecords = this.BaseStream.ReadUInt32();
-            lasHeader.PointDataRecordFormat = this.BaseStream.ReadByte();
-            lasHeader.PointDataRecordLength = this.BaseStream.ReadUInt16();
-            lasHeader.LegacyNumberOfPointRecords = this.BaseStream.ReadUInt32();
+            lasHeader.OffsetToPointData = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[96..]);
+            lasHeader.NumberOfVariableLengthRecords = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[100..]);
+            lasHeader.PointDataRecordFormat = headerBytes[104];
+            lasHeader.PointDataRecordLength = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[105..]);
+            lasHeader.LegacyNumberOfPointRecords = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[107..]);
             for (int returnIndex = 0; returnIndex < lasHeader.LegacyNumberOfPointsByReturn.Length; ++returnIndex)
             {
-                lasHeader.LegacyNumberOfPointsByReturn[returnIndex] = this.BaseStream.ReadUInt32();
+                lasHeader.LegacyNumberOfPointsByReturn[returnIndex] = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[(111 + 4 * returnIndex)..]);
             }
-            lasHeader.XScaleFactor = this.BaseStream.ReadDouble();
-            lasHeader.YScaleFactor = this.BaseStream.ReadDouble();
-            lasHeader.ZScaleFactor = this.BaseStream.ReadDouble();
-            lasHeader.XOffset = this.BaseStream.ReadDouble();
-            lasHeader.YOffset = this.BaseStream.ReadDouble();
-            lasHeader.ZOffset = this.BaseStream.ReadDouble();
-            lasHeader.MaxX = this.BaseStream.ReadDouble();
-            lasHeader.MinX = this.BaseStream.ReadDouble();
-            lasHeader.MaxY = this.BaseStream.ReadDouble();
-            lasHeader.MinY = this.BaseStream.ReadDouble();
-            lasHeader.MaxZ = this.BaseStream.ReadDouble();
-            lasHeader.MinZ = this.BaseStream.ReadDouble();
+            lasHeader.XScaleFactor = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[131..]);
+            lasHeader.YScaleFactor = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[139..]);
+            lasHeader.ZScaleFactor = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[147..]);
+            lasHeader.XOffset = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[155..]);
+            lasHeader.YOffset = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[163..]);
+            lasHeader.ZOffset = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[171..]);
+            lasHeader.MaxX = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[179..]);
+            lasHeader.MinX = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[187..]);
+            lasHeader.MaxY = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[195..]);
+            lasHeader.MinY = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[203..]);
+            lasHeader.MaxZ = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[211..]);
+            lasHeader.MinZ = BinaryPrimitives.ReadDoubleLittleEndian(headerBytes[219..]);
 
             if (versionMinor > 2)
             {
-                ((LasHeader13)lasHeader).StartOfWaveformDataPacketRecord = this.BaseStream.ReadUInt64();
-            }
-            if (versionMinor > 3) 
-            {
-                LasHeader14 lasHeader14 = (LasHeader14)lasHeader;
-                lasHeader14.StartOfFirstExtendedVariableLengthRecord = this.BaseStream.ReadUInt64();
-                lasHeader14.NumberOfExtendedVariableLengthRecords = this.BaseStream.ReadUInt32();
-                lasHeader14.NumberOfPointRecords = this.BaseStream.ReadUInt64();
-                for (int returnIndex = 0; returnIndex < lasHeader14.NumberOfPointsByReturn.Length; ++returnIndex)
+                this.BaseStream.ReadExactly(headerBytes[..(lasHeader.HeaderSize - headerBytes.Length)]);
+                ((LasHeader13)lasHeader).StartOfWaveformDataPacketRecord = BinaryPrimitives.ReadUInt64LittleEndian(headerBytes);
+
+                if (versionMinor > 3) 
                 {
-                    lasHeader14.NumberOfPointsByReturn[returnIndex] = this.BaseStream.ReadUInt64();
+                    LasHeader14 lasHeader14 = (LasHeader14)lasHeader;
+                    lasHeader14.StartOfFirstExtendedVariableLengthRecord = BinaryPrimitives.ReadUInt64LittleEndian(headerBytes[8..]);
+                    lasHeader14.NumberOfExtendedVariableLengthRecords = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[16..]);
+                    lasHeader14.NumberOfPointRecords = BinaryPrimitives.ReadUInt64LittleEndian(headerBytes[20..]);
+                    for (int returnIndex = 0; returnIndex < lasHeader14.NumberOfPointsByReturn.Length; ++returnIndex)
+                    {
+                        lasHeader14.NumberOfPointsByReturn[returnIndex] = BinaryPrimitives.ReadUInt64LittleEndian(headerBytes[(28 + 8 * returnIndex)..]);
+                    }
                 }
             }
 
@@ -164,9 +163,9 @@ namespace Mars.Clouds.Las
         public void ReadPointsToGridZirn(LasTile tile, Grid<PointListZirnc> abaGrid)
         {
             LasHeader10 lasHeader = tile.Header;
-            if (this.BaseStream.BaseStream.Position != lasHeader.OffsetToPointData)
+            if (this.BaseStream.Position != lasHeader.OffsetToPointData)
             {
-                this.BaseStream.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
+                this.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
             }
 
             // cell capacity to a reasonable fraction of the tile's average density
@@ -193,16 +192,17 @@ namespace Mars.Clouds.Las
             }
 
             // read points
+            // This implementation is currently synchronous as both synchronous and overlapped asynchronous reads hold an 18 TB IronWolf
+            // Pro at a steady ~260 MB/s (ST18000NT001, 285 MB/s sustained transfer rate) under Windows 10 22H2, suggesting little ability
+            // to improve on OS prefetching given the 128 kB to 1 MB buffer sizes used by LasTile.CreatePointReader(). Since SSDs and NVMes
+            // offer lower read latencies additional read threads appear likely to be of limited benefit. If a tile is cached in memory
+            // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
+            // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
+            // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
             byte pointFormat = lasHeader.PointDataRecordFormat;
-            long unusedBytesPerPartiallyReadPoint = lasHeader.PointDataRecordLength - 8; // x+y = 2*4
-            long unusedBytesPerFullyReadPoint = lasHeader.PointDataRecordLength - 16; // x+y+z + intensity + return + classification = 3*4 + 2 + 1 + 1
             if (pointFormat > 10)
             {
                 throw new NotSupportedException("Unhandled point data record format " + pointFormat + ".");
-            }
-            else if (pointFormat > 5)
-            {
-                --unusedBytesPerFullyReadPoint; // x+y+z + intensity + return + classification flags + classification = 3*4 + 2 + 1 + 1 + 1
             }
 
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
@@ -213,23 +213,23 @@ namespace Mars.Clouds.Las
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
             int returnNumberMask = lasHeader.GetReturnNumberMask();
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
-                double x = xOffset + xScale * this.BaseStream.ReadInt32();
-                double y = yOffset + yScale * this.BaseStream.ReadInt32();
+                this.BaseStream.ReadExactly(pointBytes);
+                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
                 (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndex(x, y);
                 if ((xIndex < 0) || (yIndex < 0) || (xIndex >= abaGrid.XSize) || (yIndex >= abaGrid.YSize))
                 {
                     // point lies outside of the ABA grid and is therefore not of interest
                     // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
-                    this.BaseStream.BaseStream.Seek(unusedBytesPerPartiallyReadPoint, SeekOrigin.Current);
                     continue;
                 }
                 PointListZirnc? abaCell = abaGrid[xIndex, yIndex];
                 if (abaCell == null)
                 {
                     // point lies within ABA grid but is not within a cell of interest
-                    this.BaseStream.BaseStream.Seek(unusedBytesPerPartiallyReadPoint, SeekOrigin.Current);
                     continue;
                 }
 
@@ -250,28 +250,25 @@ namespace Mars.Clouds.Las
                     abaCell.YMax = y;
                 }
 
-                float z = zOffset + zScale * this.BaseStream.ReadInt32();
+                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
                 abaCell.Z.Add(z);
 
-                UInt16 intensity = this.BaseStream.ReadUInt16();
+                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
                 abaCell.Intensity.Add(intensity);
 
-                byte returnNumber = (byte)(this.BaseStream.ReadByte() & returnNumberMask);
+                byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
                 abaCell.ReturnNumber.Add(returnNumber);
 
-                PointClassification classification;
+                byte classification;
                 if (pointFormat < 6)
                 {
-                    classification = (PointClassification)(this.BaseStream.ReadByte() & 0x1f);
+                    classification = (byte)(pointBytes[15] & 0x1f);
                 }
                 else
                 {
-                    this.BaseStream.BaseStream.Seek(1, SeekOrigin.Current); // skip classification flags
-                    classification = (PointClassification)this.BaseStream.ReadByte();
+                    classification = pointBytes[16];
                 }
-                abaCell.Classification.Add(classification);
-
-                this.BaseStream.BaseStream.Seek(unusedBytesPerFullyReadPoint, SeekOrigin.Current);
+                abaCell.Classification.Add((PointClassification)classification);
             }
 
             // increment ABA cell tile load counts
@@ -299,9 +296,9 @@ namespace Mars.Clouds.Las
             LasHeader10 lasHeader = lasFile.Header;
             if (lasHeader.NumberOfVariableLengthRecords > 0)
             {
-                if (this.BaseStream.BaseStream.Position != lasHeader.HeaderSize)
+                if (this.BaseStream.Position != lasHeader.HeaderSize)
                 {
-                    this.BaseStream.BaseStream.Seek(lasHeader.HeaderSize, SeekOrigin.Begin);
+                    this.BaseStream.Seek(lasHeader.HeaderSize, SeekOrigin.Begin);
                 }
 
                 lasFile.VariableLengthRecords.Capacity += (int)lasHeader.NumberOfVariableLengthRecords;
@@ -313,9 +310,9 @@ namespace Mars.Clouds.Las
                 LasHeader14 header14 = (LasHeader14)lasHeader;
                 if (header14.NumberOfExtendedVariableLengthRecords > 0)
                 {
-                    if (this.BaseStream.BaseStream.Position != (long)header14.StartOfFirstExtendedVariableLengthRecord)
+                    if (this.BaseStream.Position != (long)header14.StartOfFirstExtendedVariableLengthRecord)
                     {
-                        this.BaseStream.BaseStream.Seek((long)header14.StartOfFirstExtendedVariableLengthRecord, SeekOrigin.Begin);
+                        this.BaseStream.Seek((long)header14.StartOfFirstExtendedVariableLengthRecord, SeekOrigin.Begin);
                     }
 
                     lasFile.VariableLengthRecords.Capacity += (int)header14.NumberOfExtendedVariableLengthRecords;
@@ -331,20 +328,18 @@ namespace Mars.Clouds.Las
                 throw new ObjectDisposedException(nameof(LasReader));
             }
 
-            Span<byte> readBuffer16 = stackalloc byte[16];
-            Span<byte> readBuffer32 = stackalloc byte[32];
+            Span<byte> vlrBytes = stackalloc byte[readExtendedRecords ? 60 : 54];
             for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
             {
-                UInt16 reserved = this.BaseStream.ReadUInt16();
-                this.BaseStream.Read(readBuffer16);
-                string userID = Encoding.UTF8.GetString(readBuffer16).Trim('\0');
-                UInt16 recordID = this.BaseStream.ReadUInt16();
-                UInt64 recordLengthAfterHeader = readExtendedRecords ? this.BaseStream.ReadUInt64() : this.BaseStream.ReadUInt16();
-                this.BaseStream.Read(readBuffer32);
-                string description = Encoding.UTF8.GetString(readBuffer32).Trim('\0');
+                this.BaseStream.ReadExactly(vlrBytes);
+                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
+                string userID = Encoding.UTF8.GetString(vlrBytes.Slice(2, 16)).Trim('\0');
+                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[18..]);
+                UInt64 recordLengthAfterHeader = readExtendedRecords ? BinaryPrimitives.ReadUInt64LittleEndian(vlrBytes[20..]) : BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[20..]);
+                string description = Encoding.UTF8.GetString(vlrBytes.Slice(readExtendedRecords ? 28 : 22, 32)).Trim('\0');
 
                 // create specific object if record has a well known type
-                long endOfRecordPosition = this.BaseStream.BaseStream.Position + (long)recordLengthAfterHeader;
+                long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
                 VariableLengthRecordBase? vlr = null;
                 if (String.Equals(userID, LasFile.LasfProjection, StringComparison.Ordinal))
                 {
@@ -355,7 +350,9 @@ namespace Mars.Clouds.Las
                     }
                     else if (recordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID)
                     {
-                        OgcCoordinateSystemWktRecord wkt = new(new(Encoding.UTF8.GetString(this.BaseStream.ReadBytes(recordLengthAfterHeader16))))
+                        byte[] wktBytes = new byte[recordLengthAfterHeader16]; // assume too long for stackalloc
+                        this.BaseStream.ReadExactly(wktBytes);
+                        OgcCoordinateSystemWktRecord wkt = new(new(Encoding.UTF8.GetString(wktBytes)))
                         {
                             Reserved = reserved,
                             RecordLengthAfterHeader = recordLengthAfterHeader16,
@@ -365,24 +362,26 @@ namespace Mars.Clouds.Las
                     }
                     else if (recordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID)
                     {
+                        this.BaseStream.ReadExactly(vlrBytes[..8]);
                         GeoKeyDirectoryTagRecord crs = new()
                         {
                             Reserved = reserved,
                             RecordLengthAfterHeader = recordLengthAfterHeader16,
                             Description = description,
-                            KeyDirectoryVersion = this.BaseStream.ReadUInt16(),
-                            KeyRevision = this.BaseStream.ReadUInt16(),
-                            MinorRevision = this.BaseStream.ReadUInt16(),
-                            NumberOfKeys = this.BaseStream.ReadUInt16()
+                            KeyDirectoryVersion = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes),
+                            KeyRevision = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]),
+                            MinorRevision = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]),
+                            NumberOfKeys = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..])
                         };
                         for (int keyEntryIndex = 0; keyEntryIndex < crs.NumberOfKeys; ++keyEntryIndex)
                         {
+                            this.BaseStream.ReadExactly(vlrBytes[..8]);
                             crs.KeyEntries.Add(new()
                             {
-                                KeyID = this.BaseStream.ReadUInt16(),
-                                TiffTagLocation = this.BaseStream.ReadUInt16(),
-                                Count = this.BaseStream.ReadUInt16(),
-                                ValueOrOffset = this.BaseStream.ReadUInt16()
+                                KeyID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes),
+                                TiffTagLocation = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]),
+                                Count = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]),
+                                ValueOrOffset = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..])
                             });
                         }
                         vlr = crs;
@@ -423,6 +422,8 @@ namespace Mars.Clouds.Las
                 // otherwise, create a general container for the record which the caller can parse
                 if (vlr == null)
                 {
+                    byte[] data = new byte[(int)recordLengthAfterHeader];
+                    this.BaseStream.ReadExactly(data);
                     if (readExtendedRecords)
                     {
                         vlr = new ExtendedVariableLengthRecord()
@@ -432,7 +433,7 @@ namespace Mars.Clouds.Las
                             RecordID = recordID,
                             RecordLengthAfterHeader = recordLengthAfterHeader,
                             Description = description,
-                            Data = BaseStream.ReadBytes((int)recordLengthAfterHeader)
+                            Data = data
                         };
                     }
                     else
@@ -445,7 +446,7 @@ namespace Mars.Clouds.Las
                             RecordID = recordID,
                             RecordLengthAfterHeader = recordLengthAfterHeader16,
                             Description = description,
-                            Data = BaseStream.ReadBytes(recordLengthAfterHeader16)
+                            Data = data
                         };
                     }
                 }
@@ -453,9 +454,9 @@ namespace Mars.Clouds.Las
                 lasFile.VariableLengthRecords.Add(vlr);
 
                 // skip any unused bytes at end of record
-                if (this.BaseStream.BaseStream.Position != endOfRecordPosition)
+                if (this.BaseStream.Position != endOfRecordPosition)
                 {
-                    this.BaseStream.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
+                    this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
                 }
             }
         }

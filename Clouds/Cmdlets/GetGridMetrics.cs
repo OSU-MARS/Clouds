@@ -194,7 +194,9 @@ namespace Mars.Clouds.Cmdlets
                 // create tile by reading header and variable length records
                 // FileStream with default 4 kB buffer is used here as a compromise. The LAS header is 227-375 bytes and often only a single
                 // CRS VLR is present with length 54 + 8 + 2 * 8 = 78 bytes if it's GeoKey record with GeoTIFF horizontal and vertical EPSG
-                // tags, meaning only 305-453 bytes need be read. However, if it's an OGC WKT record then it's likely ~5 kB long.
+                // tags, meaning only 305-453 bytes need be read. However, if it's an OGC WKT record then it's likely ~5 kB long. Buffer size
+                // when reading LAS headers and VLRs is negligible to long compute runs but can influence tile indexing time by a factor of
+                // 2-3x if overlarge buffers result in unnecessary prefetching.
                 string lasTilePath = lasTilePaths[tileIndex];
                 using FileStream stream = new(lasTilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4 * 1024);
                 using LasReader headerVlrReader = new(stream);
