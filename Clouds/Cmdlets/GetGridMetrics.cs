@@ -18,7 +18,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Raster defining grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the raster. The raster must be in the same CRS as the LiDAR tiles specified by -Las.")]
+        [Parameter(Mandatory = true, HelpMessage = "Raster defining grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the raster. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
         [ValidateNotNullOrEmpty]
         public string? AbaCells { get; set; }
 
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
             Raster<UInt16> abaCellDefinitions = new(gridCellDefinitionDataset);
             int abaEpsg = Int32.Parse(abaCellDefinitions.Crs.GetAuthorityCode("PROJCS"));
 
-            using LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(abaEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(abaEpsg);
             AbaGrid abaGrid = new(abaCellDefinitions, lasGrid);
 
             StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
@@ -61,15 +61,14 @@ namespace Mars.Clouds.Cmdlets
                         for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
                         {
                             LasTile? tile = lasGrid[tileXindex, tileYindex];
-                            if ((tile == null) || (abaGrid.HasCellsInTile(tile.File) == false))
+                            if ((tile == null) || (abaGrid.HasCellsInTile(tile) == false))
                             {
                                 continue;
                             }
 
-                            tile.Reader.ReadPointsToGridZirn(tile.File, abaGrid);
-                            tile.Dispose();
-
-                            abaGrid.QueueCompletedCells(tile.File, fullyPopulatedAbaCells);
+                            using LasReader pointReader = tile.CreatePointReader();
+                            pointReader.ReadPointsToGridZirn(tile, abaGrid);
+                            abaGrid.QueueCompletedCells(tile, fullyPopulatedAbaCells);
                             ++tilesLoaded;
 
                             if (this.Stopping)
@@ -132,7 +131,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             });
 
-            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " LiDAR tiles)...");
+            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
             this.WriteProgress(gridMetricsProgress);
 
             TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(15.0);
@@ -140,7 +139,7 @@ namespace Mars.Clouds.Cmdlets
             while (Task.WaitAll(gridMetricsTasks, progressUpdateInterval) == false) // rethrows exception if a task faults
             {
                 float fractionComplete = (float)abaCellsCompleted / (float)abaGrid.NonNullCells;
-                gridMetricsProgress.StatusDescription = "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " LiDAR tiles)...";
+                gridMetricsProgress.StatusDescription = "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
                 gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(gridMetricsProgress);
@@ -185,17 +184,24 @@ namespace Mars.Clouds.Cmdlets
             ProgressRecord tileIndexProgress = new(0, "Get-GridMetrics", "placeholder"); // can't pass null or empty statusDescription
             for (int tileIndex = 0; tileIndex < lasTilePaths.Length; tileIndex++) 
             {
+                // tile load status
                 float fractionComplete = (float)tileIndex / (float)lasTilePaths.Length;
                 tileIndexProgress.StatusDescription = "Reading tile header " + tileIndex + " of " + lasTilePaths.Length + "...";
                 tileIndexProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 tileIndexProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(tileIndexProgress);
 
+                // create tile by reading header and variable length records
+                // FileStream with default 4 kB buffer is used here as a compromise. The LAS header is 227-375 bytes and often only a single
+                // CRS VLR is present with length 54 + 8 + 2 * 8 = 78 bytes if it's GeoKey record with GeoTIFF horizontal and vertical EPSG
+                // tags, meaning only 305-453 bytes need be read. However, if it's an OGC WKT record then it's likely ~5 kB long.
                 string lasTilePath = lasTilePaths[tileIndex];
-                lasTiles.Add(new(lasTilePath));
+                using FileStream stream = new(lasTilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4 * 1024);
+                using LasReader headerVlrReader = new(stream);
+                lasTiles.Add(new(lasTilePath, headerVlrReader));
             }
 
-            tileIndexProgress.StatusDescription = "Forming LiDAR tile grid...";
+            tileIndexProgress.StatusDescription = "Forming grid of point clouds...";
             tileIndexProgress.PercentComplete = 0;
             tileIndexProgress.SecondsRemaining = 0;
             this.WriteProgress(tileIndexProgress);

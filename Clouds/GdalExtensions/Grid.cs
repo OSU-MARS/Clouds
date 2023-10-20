@@ -27,6 +27,11 @@ namespace Mars.Clouds.GdalExtensions
             return (this.Transform.OriginX, xMax, yMin, this.Transform.OriginY);
         }
 
+        public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(Extent extent)
+        {
+            return this.GetIntersectingCellIndices(extent.XMin, extent.XMax, extent.YMin, extent.YMax);
+        }
+
         public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(double xMin, double xMax, double yMin, double yMax)
         {
             Debug.Assert(this.Transform.CellHeight < 0.0);

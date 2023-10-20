@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using static System.Net.WebRequestMethods;
 
 namespace Mars.Clouds.UnitTests
 {
@@ -33,10 +32,11 @@ namespace Mars.Clouds.UnitTests
             Debug.Assert(this.unitTestPath != null);
 
             FileInfo lasFileInfo = new(Path.Combine(this.unitTestPath, "PSME LAS 1.4 point type 6.las"));
-            using LasTile lasTile = new(lasFileInfo.FullName);
+            using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 4 * 1024);
+            using LasReader headerVlrReader = new(stream);
+            LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
 
-            LasFile lasFile = lasTile.File;
-            LasHeader14 lasHeader14 = (LasHeader14)lasFile.Header;
+            LasHeader14 lasHeader14 = (LasHeader14)lasTile.Header;
             Assert.IsTrue(String.Equals(lasHeader14.FileSignature, LasFile.Signature, StringComparison.Ordinal));
             Assert.IsTrue(lasHeader14.GlobalEncoding == GlobalEncoding.WellKnownText);
             Assert.IsTrue(lasHeader14.FileSourceID == 0);
@@ -90,9 +90,13 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(lasHeader14.NumberOfPointsByReturn[13] == 0);
             Assert.IsTrue(lasHeader14.NumberOfPointsByReturn[14] == 0);
             Assert.IsTrue(lasHeader14.GetNumberOfPoints() == 207617);
+            Assert.IsTrue(lasTile.GridExtent.XMin == lasHeader14.MinX);
+            Assert.IsTrue(lasTile.GridExtent.XMax == lasHeader14.MaxX);
+            Assert.IsTrue(lasTile.GridExtent.YMin == lasHeader14.MinY);
+            Assert.IsTrue(lasTile.GridExtent.YMax == lasHeader14.MaxY);
 
-            Assert.IsTrue(lasFile.VariableLengthRecords.Count == 1);
-            GeoKeyDirectoryTagRecord crs = (GeoKeyDirectoryTagRecord)lasFile.VariableLengthRecords[0];
+            Assert.IsTrue(lasTile.VariableLengthRecords.Count == 1);
+            GeoKeyDirectoryTagRecord crs = (GeoKeyDirectoryTagRecord)lasTile.VariableLengthRecords[0];
             Assert.IsTrue(crs.Reserved == 43707); // bug in originating writer; should be zero
             Assert.IsTrue(String.Equals(crs.UserID, "LASF_Projection", StringComparison.Ordinal));
             Assert.IsTrue(crs.RecordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID);
@@ -115,14 +119,18 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(verticalCrsKey.ValueOrOffset == 32610);
             // third key is a write error and is all zero; ignore for now
 
-            int lasFileEpsg = lasFile.GetProjectedCoordinateSystemEpsg();
+            int lasFileEpsg = lasTile.GetProjectedCoordinateSystemEpsg();
             Assert.IsTrue(lasFileEpsg == 32610);
 
             // bypass LasTileGrid.Create(lasTiles, 32610) as test point cloud is much smaller than a full LiDAR/SfM tile
+            // Since a tile smaller than an ABA cell is an error, the test path is to boost the tile's extent to be the size of an ABA
+            // cell and set the LAS tile grid pitch matches the expanded tile size.
             using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.unitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
             Raster<UInt16> gridCellDefinitions = new(gridCellDefinitionDataset);
-            GridGeoTransform lasFileTransform = new(lasFile.Header.MinX, lasFile.Header.MaxY, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
-            using LasTileGrid lasGrid = new(lasFile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
+            lasTile.GridExtent.XMax = lasTile.GridExtent.XMin + gridCellDefinitions.Transform.CellWidth;
+            lasTile.GridExtent.YMin = lasTile.GridExtent.YMax + gridCellDefinitions.Transform.CellHeight; // cell height is negative
+            GridGeoTransform lasFileTransform = new(lasTile.GridExtent.XMin, lasTile.GridExtent.YMax, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
+            LasTileGrid lasGrid = new(lasTile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
 
             AbaGrid abaGrid = new(gridCellDefinitions, lasGrid);
 
@@ -144,7 +152,8 @@ namespace Mars.Clouds.UnitTests
             }
             Assert.IsTrue(populatedGridCells == 4); // two cells with points (8, 14 and 9, 14) plus two cells without points due to proxied tile size (8, 15 and 9, 15)
 
-            lasTile.Reader.ReadPointsToGridZirn(lasFile, abaGrid);
+            using LasReader pointReader = lasTile.CreatePointReader();
+            headerVlrReader.ReadPointsToGridZirn(lasTile, abaGrid);
             PointListZirnc? psmeCell1 = abaGrid[8, 14];
             Assert.IsTrue(psmeCell1 != null);
             Assert.IsTrue(psmeCell1.TilesIntersected == 1);
@@ -185,7 +194,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(adjacentCell2.YIndex == 15);
             Assert.IsTrue(adjacentCell2.Count == 0);
 
-            SpatialReference lasSpatialReference = lasFile.GetSpatialReference();
+            SpatialReference lasSpatialReference = lasTile.GetSpatialReference();
             float crsLinearUnits = (float)lasSpatialReference.GetLinearUnits();
             float oneMeterHeightClass = 1.0F / crsLinearUnits;
             float twoMeterHeightThreshold = 920.52F + 2.0F / crsLinearUnits;

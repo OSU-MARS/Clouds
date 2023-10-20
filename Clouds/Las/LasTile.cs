@@ -1,44 +1,50 @@
-﻿using System;
+﻿using Mars.Clouds.GdalExtensions;
 using System.IO;
 
 namespace Mars.Clouds.Las
 {
-    public class LasTile : IDisposable
+    /// <summary>
+    /// Thin shell over <see cref="LasFile"/> to support grids of point cloud tiles.
+    /// </summary>
+    public class LasTile : LasFile
     {
-        private bool isDisposed;
+        public string FilePath { get; private init; }
+        public long FileSize { get; private init; }
+        public Extent GridExtent { get; set; }
 
-        public LasFile File { get; private init; }
-        public LasReader Reader { get; private init; }
-
-        public LasTile(string lasFilePath)
+        public LasTile(string lasFilePath, LasReader reader)
+            : base(reader)
         {
-            this.isDisposed = false;
-
-            FileStream stream = new(lasFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 512 * 1024, FileOptions.SequentialScan);
-            this.Reader = new(stream);
-
-            this.File = this.Reader.ReadHeader();
-            this.Reader.ReadVariableLengthRecords(this.File);
+            this.FilePath = lasFilePath;
+            this.FileSize = reader.BaseStream.BaseStream.Length;
+            this.GridExtent = new(this.Header.MinX, this.Header.MaxX, this.Header.MinY, this.Header.MaxY);
         }
 
-        public void Dispose()
+        public LasReader CreatePointReader()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            this.Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!this.isDisposed)
+            // rough scaling with file size from https://github.com/dotnet/runtime/discussions/74405#discussioncomment-3488674
+            int bufferSizeInKB;
+            if (this.FileSize > 512 * 1024 * 1024) // 512 MB
             {
-                if (disposing)
-                {
-                    this.Reader.Dispose();
-                }
-
-                this.isDisposed = true;
+                bufferSizeInKB = 1024;
             }
+            else if (this.FileSize > 64 * 1024 * 1024) // 64 MB
+            {
+                bufferSizeInKB = 512;
+            }
+            else if (this.FileSize > 8 * 1024 * 1024) // 8 MB
+            {
+                bufferSizeInKB = 256;
+            }
+            else
+            {
+                bufferSizeInKB = 128;
+            }
+
+            FileStream stream = new(this.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSizeInKB * 1024);
+            LasReader reader = new(stream);
+            reader.BaseStream.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return reader;
         }
     }
 }

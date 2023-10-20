@@ -6,16 +6,25 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
-    public class LasTileGrid : GridDisposable<LasTile>
+    public class LasTileGrid : Grid<LasTile>
     {
         public LasTileGrid(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, IList<LasTile> tiles)
             : base(crs, transform, xSize, ySize)
         {
+            Debug.Assert(this.Transform.CellHeight < 0.0);
+
             for (int tileIndex = 0; tileIndex < tiles.Count; ++tileIndex)
             {
                 LasTile tile = tiles[tileIndex];
-                (double xCentroid, double yCentroid) = tile.File.Header.GetCentroidXY();
+                (double xCentroid, double yCentroid) = tile.GridExtent.GetCentroid();
                 (int xIndex, int yIndex) = this.Transform.GetCellIndex(xCentroid, yCentroid);
+                // if needed, expand tile's grid extent to match the grid assuming tiles are anchored at their min (x, y) corner
+                // This provides correction for tile sizes being slightly smaller than grid pitch. See LasTileGrid.Create().
+                // An alternative to maintianing a separate grid extent per tile would be editing the LAS header's extents. However, this
+                // is potentially confusing as the tile data does not change. An extra 32 bytes of memory per tile is not a concern.
+                tile.GridExtent.XMax = Double.Max(tile.GridExtent.XMin + this.Transform.CellWidth, tile.GridExtent.XMax);
+                tile.GridExtent.YMax = Double.Max(tile.GridExtent.YMin - this.Transform.CellHeight, tile.GridExtent.YMax);
+
                 int cellIndex = this.ToCellIndex(xIndex, yIndex);
                 Debug.Assert(this.Cells[cellIndex] == null); // check for duplicate inserts
                 this.Cells[cellIndex] = tile;
@@ -32,66 +41,89 @@ namespace Mars.Clouds.Las
             }
 
             LasTile tile = tiles[0];
-            LasHeader10 lasHeader = tile.File.Header;
-            SpatialReference gridCrs = tile.File.GetSpatialReference();
-            int tileEpsg = tile.File.GetProjectedCoordinateSystemEpsg();
+            SpatialReference gridCrs = tile.GetSpatialReference();
+            int tileEpsg = tile.GetProjectedCoordinateSystemEpsg();
             if (tileEpsg != requiredEpsg)
             {
                 throw new ArgumentOutOfRangeException(nameof(tiles), "Tile EPSG:" + tileEpsg + " does not match the tile grid's required EPSG of " + requiredEpsg + ".");
             }
 
-            double gridMinX = lasHeader.MinX;
-            double gridMaxX = lasHeader.MaxX;
-            double gridMinY = lasHeader.MinY;
-            double gridMaxY = lasHeader.MaxY;
-            double gridCellXextentInCrsUnits = lasHeader.MaxX - lasHeader.MinX;
-            double gridCellYextentInCrsUnits = lasHeader.MaxY - lasHeader.MinY;
+            Extent tileExtent = tile.GridExtent;
+            double gridMinX = tileExtent.XMin;
+            double gridMaxMinX = tileExtent.XMin;
+            double gridMaxX = tileExtent.XMax;
+            double gridMinY = tileExtent.YMin;
+            double gridMaxMinY = tileExtent.YMin;
+            double gridMaxY = tileExtent.YMax;
+            double tileReportedWidth = tileExtent.Width; // since small variations are allowed, could possibly be useful to track min and max width and height?
+            double tileReportedHeight = tileExtent.Height;
 
             // best effort validation for consistency within a grid of tiles
             for (int tileIndex = 1; tileIndex < tiles.Count; ++tileIndex)
             {
                 tile = tiles[tileIndex];
-                tileEpsg = tile.File.GetProjectedCoordinateSystemEpsg();
+                tileEpsg = tile.GetProjectedCoordinateSystemEpsg();
                 if (tileEpsg != requiredEpsg)
                 {
                     throw new ArgumentOutOfRangeException(nameof(tiles), "Tile EPSG:" + tileEpsg + " does not match the tile grid's required EPSG of " + requiredEpsg + ".");
                 }
 
-                lasHeader = tile.File.Header;
-                double tileXextentInCrsUnits = lasHeader.MaxX - lasHeader.MinX;
-                double tileYextentInCrsUnits = lasHeader.MaxY - lasHeader.MinY;
-                if ((Double.Abs(tileXextentInCrsUnits / gridCellXextentInCrsUnits - 1.0) > 0.000001) ||
-                    (Double.Abs(tileYextentInCrsUnits / gridCellYextentInCrsUnits - 1.0) > 0.000001))
+                tileExtent = tile.GridExtent;
+                double tileXextentInCrsUnits = tileExtent.Width;
+                double tileYextentInCrsUnits = tileExtent.Height;
+                if ((Double.Abs(tileXextentInCrsUnits / tileReportedWidth - 1.0) > 0.000001) ||
+                    (Double.Abs(tileYextentInCrsUnits / tileReportedHeight - 1.0) > 0.000001))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile " + tileIndex + " has extents (" + lasHeader.MinX + ", " + lasHeader.MaxX + ", " + lasHeader.MinY + ", " + lasHeader.MaxY + ") in EPSG:" + tileEpsg + " with a width of " + tileXextentInCrsUnits + " and height of " + tileYextentInCrsUnits + ".  This does not match the expected width " + gridCellXextentInCrsUnits + " and height " + gridCellYextentInCrsUnits + ".");
+                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile " + tileIndex + " has extents (" + tileExtent.XMin + ", " + tileExtent.XMax + ", " + tileExtent.YMin + ", " + tileExtent.YMax + ") in EPSG:" + tileEpsg + " with a width of " + tileXextentInCrsUnits + " and height of " + tileYextentInCrsUnits + ".  This does not match the expected width " + tileReportedWidth + " and height " + tileReportedHeight + ".");
                 }
 
                 // LAS files have only a bounding box, so no way to check whether tile is in fact a rectangle (or square) aligned to its
                 // coordinate system, if it's rotated with respect to the coordinate system, or if it's some more complex shape without
                 // loading and inspecting all of its points.
 
-                if (lasHeader.MinX < gridMinX)
+                if (tileExtent.XMin < gridMinX)
                 {
-                    gridMinX = lasHeader.MinX;
+                    gridMinX = tileExtent.XMin;
                 }
-                if (lasHeader.MaxX > gridMaxX)
+                if (tileExtent.XMin > gridMaxMinX)
                 {
-                    gridMaxX = lasHeader.MaxX;
+                    gridMaxMinX = tileExtent.XMin;
                 }
-                if (lasHeader.MinY < gridMinY)
+                if (tileExtent.XMax > gridMaxX)
                 {
-                    gridMinY = lasHeader.MinY;
+                    gridMaxX = tileExtent.XMax;
                 }
-                if (lasHeader.MaxY > gridMaxY)
+                if (tileExtent.YMin < gridMinY)
                 {
-                    gridMaxY = lasHeader.MaxY;
+                    gridMinY = tileExtent.YMin;
+                }
+                if (tileExtent.YMin > gridMaxMinY)
+                {
+                    gridMaxMinY = tileExtent.YMin;
+                }
+                if (tileExtent.YMax > gridMaxY)
+                {
+                    gridMaxY = tileExtent.YMax;
                 }
             }
 
-            GridGeoTransform gridTransform = new(gridMinX, gridMaxY, gridCellXextentInCrsUnits, -gridCellYextentInCrsUnits);
-            int gridSizeX = (int)((gridMaxX - gridMinX) / gridCellXextentInCrsUnits + 0.5);
-            int gridSizeY = (int)((gridMaxY - gridMinY) / gridCellYextentInCrsUnits + 0.5);
-            return new LasTileGrid(gridCrs, gridTransform, gridSizeX, gridSizeY, tiles);
+            double gridTotalWidth = gridMaxX - gridMinX;
+            double gridTotalHeight = gridMaxY - gridMinY;
+            int gridXsizeInCells = (int)(gridTotalWidth / tileReportedWidth + 0.5);
+            int gridYSizeInCells = (int)(gridTotalHeight / tileReportedHeight + 0.5);
+            // ideally point cloud tiles' reported extent exactly matches the grid pitch
+            // However, this is not always the case as some LiDAR vendors generate LAS headers with small gaps (a few millimeters) between
+            // tiles. If such a gap aligns with a break in the ABA grid then tile hit testing of ABA cell corners against tile extents will
+            // fail (modulo numerical precision) as an ABA corner over a gap is not part of any tile. Alternatively, tiles may have some
+            // overlap, in which case the tile size is larger than the grid's effective cell size rather than smaller.
+            // For now, assume tiles are anchored from their minimum (x, y) corner and calculate grid cell size as the mean spacing across
+            // the grid from the minimum (x, y) corner to the grid cell whose minimum corner has the largest values available. Assuming tiles
+            // are identically shrunk or expanded, this method is robust to both cases in recovering the grid spacing.
+            double gridCellWidth = gridXsizeInCells > 1 ? (gridMaxMinX - gridMinX) / (gridXsizeInCells - 1) : gridTotalWidth;
+            double gridCellHeight = gridYSizeInCells > 1 ? (gridMaxMinY - gridMinY) / (gridYSizeInCells - 1) : gridTotalHeight;
+            double gridOriginY = gridYSizeInCells > 1 ? Double.Max(gridMaxMinY + gridCellHeight, gridMaxY) : gridMaxY;
+            GridGeoTransform gridTransform = new(gridMinX, gridOriginY, gridCellWidth, -gridCellHeight);
+            return new LasTileGrid(gridCrs, gridTransform, gridXsizeInCells, gridYSizeInCells, tiles);
         }
     }
 }

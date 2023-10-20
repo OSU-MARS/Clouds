@@ -83,9 +83,9 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public bool HasCellsInTile(LasFile tile)
+        public bool HasCellsInTile(LasTile tile)
         {
-            (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) = this.GetIntersectingCellIndices(tile.Header.MinX, tile.Header.MaxX, tile.Header.MinY, tile.Header.MaxY);
+            (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) = this.GetIntersectingCellIndices(tile.GridExtent);
             for (int yIndex = yIndexMin; yIndex <= yIndexMaxInclusive; ++yIndex)
             {
                 for (int xIndex = xIndexMin; xIndex <= xIndexMaxInclusive; ++xIndex)
@@ -101,12 +101,12 @@ namespace Mars.Clouds.Las
             return false;
         }
 
-        public void QueueCompletedCells(LasFile completedTile, BlockingCollection<List<PointListZirnc>> abaFullyPopulatedCellQueue)
+        public void QueueCompletedCells(LasTile completedTile, BlockingCollection<List<PointListZirnc>> abaFullyPopulatedCellQueue)
         {
             Debug.Assert((this.Transform.ColumnRotation == 0.0) && (this.Transform.RowRotation == 0.0));
 
             List<PointListZirnc> completedCells = new();
-            (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) = this.GetIntersectingCellIndices(completedTile.Header.MinX, completedTile.Header.MaxX, completedTile.Header.MinY, completedTile.Header.MaxY);
+            (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) = this.GetIntersectingCellIndices(completedTile.GridExtent);
             for (int yIndex = yIndexMin; yIndex <= yIndexMaxInclusive; ++yIndex)
             {
                 for (int xIndex = xIndexMin; xIndex <= xIndexMaxInclusive; ++xIndex)
@@ -117,6 +117,11 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
+                    // useful breakpoint in debugging loaded-intersected issues between tiles
+                    //if (cell.TilesIntersected > 1)
+                    //{
+                    //    int q = 0;
+                    //}
                     if (cell.TilesLoaded == cell.TilesIntersected)
                     {
                         completedCells.Add(cell);

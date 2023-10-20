@@ -13,10 +13,12 @@ namespace Mars.Clouds.Las
         public LasHeader10 Header { get; private init; }
         public List<VariableLengthRecordBase> VariableLengthRecords { get; private init; }
 
-        public LasFile(LasHeader10 header)
+        public LasFile(LasReader reader)
         {
-            this.Header = header;
+            this.Header = reader.ReadHeader();
             this.VariableLengthRecords = new();
+
+            reader.ReadVariableLengthRecords(this);
         }
 
         public int GetProjectedCoordinateSystemEpsg()
@@ -80,10 +82,10 @@ namespace Mars.Clouds.Las
     {
         public new THeader Header { get; private init; }
 
-        public LasFile(THeader header)
-            : base(header)
+        public LasFile(LasReader reader)
+            : base(reader)
         {
-            this.Header = header; // should not be necessary but clears a nullability warning
+            this.Header = (THeader)base.Header;
         }
     }
 }
