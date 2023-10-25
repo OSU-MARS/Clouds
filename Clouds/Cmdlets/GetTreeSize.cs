@@ -14,15 +14,24 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string? Path { get; set; }
 
+        [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 256 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
+        public EnumerationOptions EnumerationOptions { get; set; }
+
         public GetTreeSize()
         {
             this.directorySizes = new();
+
+            this.EnumerationOptions = new()
+            {
+                BufferSize = 256 * 1024,
+                IgnoreInaccessible = true
+            };
         }
 
         private void EnumerateDirectoryFilesAndSubdirectories(DirectoryInfo directoryInfo)
         {
             DirectorySize directorySize = new(directoryInfo.FullName);
-            foreach (FileInfo fileInfo in directoryInfo.EnumerateFiles())
+            foreach (FileInfo fileInfo in directoryInfo.EnumerateFiles("*", this.EnumerationOptions))
             {
                 switch (fileInfo.Extension.ToLowerInvariant()) // assume case insensitive use of file extensions
                 {
@@ -62,7 +71,7 @@ namespace Mars.Clouds.Cmdlets
                 this.WriteProgress(new ProgressRecord(0, "directory enumeration", this.directorySizes.Count + " directories..."));
             }
 
-            foreach (DirectoryInfo subdirectoryInfo in directoryInfo.EnumerateDirectories())
+            foreach (DirectoryInfo subdirectoryInfo in directoryInfo.EnumerateDirectories("*", this.EnumerationOptions))
             {
                 this.EnumerateDirectoryFilesAndSubdirectories(subdirectoryInfo);
             }

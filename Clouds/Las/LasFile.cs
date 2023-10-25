@@ -1,4 +1,5 @@
-﻿using OSGeo.OSR;
+﻿using Mars.Clouds.Laz;
+using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
 
@@ -8,11 +9,15 @@ namespace Mars.Clouds.Las
     {
         public const string LasfProjection = "LASF_Projection";
         public const string LasfSpec = "LASF_Spec";
+        public const byte MaxPointFormat = 10;
         public const string Signature = "LASF";
 
         public LasHeader10 Header { get; private init; }
         public List<VariableLengthRecordBase> VariableLengthRecords { get; private init; }
 
+        /// <summary>
+        /// Create a <see cref="LasFile"/>  by reading the .las or .laz file's header and variable length records.
+        /// </summary>
         public LasFile(LasReader reader)
         {
             this.Header = reader.ReadHeader();
@@ -75,6 +80,11 @@ namespace Mars.Clouds.Las
             }
 
             throw new KeyNotFoundException("Could not find coordinate system record.");
+        }
+
+        public bool IsPointFormatCompressed()
+        {
+            return (this.Header.PointDataRecordFormat & LazVariableLengthRecord.PointDataFormatMask) == LazVariableLengthRecord.PointDataFormatMask;
         }
     }
 

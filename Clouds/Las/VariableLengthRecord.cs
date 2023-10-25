@@ -9,9 +9,10 @@ namespace Mars.Clouds.Las
     {
         public byte[] Data { get; set; }
 
-        public VariableLengthRecord() 
+        public VariableLengthRecord(UInt16 reserved, string userID, UInt16 recordID, UInt16 recordLengthAfterHeader, string description, byte[] data) 
+            : base(reserved, userID, recordID, recordLengthAfterHeader, description)
         { 
-            this.Data = Array.Empty<byte>();
+            this.Data = data;
         }
     }
 }

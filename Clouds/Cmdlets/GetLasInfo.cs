@@ -19,7 +19,6 @@ namespace Mars.Clouds.Cmdlets
             using FileStream stream = new(this.Las, FileMode.Open, FileAccess.Read, FileShare.Read);
             using LasReader reader = new(stream);
             LasFile lasFile = new(reader);
-            reader.ReadVariableLengthRecords(lasFile);
             reader.Dispose();
             this.WriteObject(lasFile);
         }

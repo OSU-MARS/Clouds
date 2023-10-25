@@ -1,5 +1,6 @@
 ﻿using OSGeo.OSR;
 using System;
+using System.Text;
 
 namespace Mars.Clouds.Las
 {
@@ -9,11 +10,10 @@ namespace Mars.Clouds.Las
 
         public SpatialReference SpatialReference { get; set; }
 
-        public OgcCoordinateSystemWktRecord(SpatialReference spatialReference)
+        public OgcCoordinateSystemWktRecord(UInt16 reserved, UInt16 recordLengthAfterHeader, string description, ReadOnlySpan<byte> wktBytes)
+            : base(reserved, LasFile.LasfProjection, OgcCoordinateSystemWktRecord.LasfProjectionRecordID, recordLengthAfterHeader, description)
         {
-            this.RecordID = OgcCoordinateSystemWktRecord.LasfProjectionRecordID;
-            this.SpatialReference = spatialReference;
-            this.UserID = LasFile.LasfProjection;
+            this.SpatialReference = new(Encoding.UTF8.GetString(wktBytes));
         }
     }
 }

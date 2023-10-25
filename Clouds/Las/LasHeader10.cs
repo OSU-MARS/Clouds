@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -174,7 +175,7 @@ namespace Mars.Clouds.Las
             {
                 return 0x07; // returns 0-8 for point types 0-5
             }
-            if (this.PointDataRecordFormat <= 10)
+            if (this.PointDataRecordFormat <= LasFile.MaxPointFormat)
             {
                 return 0x0f; // returns 0-15 for point types 6-10
             }
@@ -210,14 +211,19 @@ namespace Mars.Clouds.Las
             }
             // currently permissive: allows any point format with any LAS version
             // Can be made more restrictive if needed.
-            if (this.PointDataRecordFormat > 10) 
+            int pointDataRecordFormatWithoutLazOffset = this.PointDataRecordFormat;
+            if (this.PointDataRecordFormat > LasFile.MaxPointFormat) 
             {
-                throw new InvalidDataException("PointDataRecordFormat");
+                pointDataRecordFormatWithoutLazOffset = this.PointDataRecordFormat - LazVariableLengthRecord.PointDataFormatMask;
+                if (pointDataRecordFormatWithoutLazOffset > LasFile.MaxPointFormat)
+                {
+                    throw new InvalidDataException("PointDataRecordFormat");
+                }
             }
 
-            UInt16 minimumPointDataRecordLength = this.PointDataRecordFormat switch
+            UInt16 minimumPointDataRecordLength = pointDataRecordFormatWithoutLazOffset switch
             {
-                0 => 20, // LAS 1.4 R15, Tables 7, 10-
+                0 => 20, // LAS 1.4 R15, Tables 7, 10-21
                 1 => 28,
                 2 => 26,
                 3 => 34,

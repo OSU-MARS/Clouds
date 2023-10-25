@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -163,6 +165,10 @@ namespace Mars.Clouds.Las
         public void ReadPointsToGridZirn(LasTile tile, Grid<PointListZirnc> abaGrid)
         {
             LasHeader10 lasHeader = tile.Header;
+            if (tile.IsPointFormatCompressed())
+            {
+                throw new ArgumentOutOfRangeException(nameof(tile), ".laz files are not currently supported.");
+            }
             if (this.BaseStream.Position != lasHeader.OffsetToPointData)
             {
                 this.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
@@ -340,83 +346,77 @@ namespace Mars.Clouds.Las
 
                 // create specific object if record has a well known type
                 long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
+                UInt16 recordLengthAfterHeader16 = (UInt16)recordLengthAfterHeader;
                 VariableLengthRecordBase? vlr = null;
-                if (String.Equals(userID, LasFile.LasfProjection, StringComparison.Ordinal))
+                switch (userID)
                 {
-                    UInt16 recordLengthAfterHeader16 = (UInt16)recordLengthAfterHeader;
-                    if (recordID == 2111)
-                    {
-                        throw new NotImplementedException("OgcMathTransformWktRecord");
-                    }
-                    else if (recordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID)
-                    {
-                        byte[] wktBytes = new byte[recordLengthAfterHeader16]; // assume too long for stackalloc
-                        this.BaseStream.ReadExactly(wktBytes);
-                        OgcCoordinateSystemWktRecord wkt = new(new(Encoding.UTF8.GetString(wktBytes)))
+                    case LasFile.LasfProjection:
+                        if (recordID == 2111)
                         {
-                            Reserved = reserved,
-                            RecordLengthAfterHeader = recordLengthAfterHeader16,
-                            Description = description
-                        };
-                        vlr = wkt;
-                    }
-                    else if (recordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID)
-                    {
-                        this.BaseStream.ReadExactly(vlrBytes[..8]);
-                        GeoKeyDirectoryTagRecord crs = new()
-                        {
-                            Reserved = reserved,
-                            RecordLengthAfterHeader = recordLengthAfterHeader16,
-                            Description = description,
-                            KeyDirectoryVersion = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes),
-                            KeyRevision = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]),
-                            MinorRevision = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]),
-                            NumberOfKeys = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..])
-                        };
-                        for (int keyEntryIndex = 0; keyEntryIndex < crs.NumberOfKeys; ++keyEntryIndex)
-                        {
-                            this.BaseStream.ReadExactly(vlrBytes[..8]);
-                            crs.KeyEntries.Add(new()
-                            {
-                                KeyID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes),
-                                TiffTagLocation = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]),
-                                Count = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]),
-                                ValueOrOffset = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..])
-                            });
+                            throw new NotImplementedException("OgcMathTransformWktRecord");
                         }
-                        vlr = crs;
-                    }
-                    else if (recordID == 34736)
-                    {
-                        throw new NotImplementedException("GeoDoubleParamsTagRecord");
-                    }
-                    else if (recordID == 34737)
-                    {
-                        throw new NotImplementedException("GeoAsciiParamsTagRecord");
-                    }
-                }
-                else if (String.Equals(userID, LasFile.LasfSpec, StringComparison.Ordinal))
-                {
-                    if (recordID == 0)
-                    {
-                        throw new NotImplementedException("ClassificationLookupRecord");
-                    }
-                    else if (recordID == 3)
-                    {
-                        throw new NotImplementedException("TextAreaDescriptionRecord");
-                    }
-                    else if (recordID == 4)
-                    {
-                        throw new NotImplementedException("ExtraBytesRecord");
-                    }
-                    else if (recordID == 7)
-                    {
-                        throw new NotImplementedException("SupersededRecord");
-                    }
-                    else if ((recordID > 99) && (recordID < 355))
-                    {
-                        throw new NotImplementedException("WaveformPacketDescriptorRecord");
-                    }
+                        else if (recordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID)
+                        {
+                            byte[] wktBytes = new byte[recordLengthAfterHeader16]; // assume too long for stackalloc
+                            this.BaseStream.ReadExactly(wktBytes);
+                            OgcCoordinateSystemWktRecord wkt = new(reserved, recordLengthAfterHeader16, description, wktBytes);
+                            vlr = wkt;
+                        }
+                        else if (recordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID)
+                        {
+                            this.BaseStream.ReadExactly(vlrBytes[..GeoKeyDirectoryTagRecord.CoreSizeInBytes]);
+                            GeoKeyDirectoryTagRecord crs = new(reserved, recordLengthAfterHeader16, description, vlrBytes);
+                            for (int keyEntryIndex = 0; keyEntryIndex < crs.NumberOfKeys; ++keyEntryIndex)
+                            {
+                                this.BaseStream.ReadExactly(vlrBytes[..GeoKeyEntry.SizeInBytes]);
+                                crs.KeyEntries.Add(new(vlrBytes));
+                            }
+                            vlr = crs;
+                        }
+                        else if (recordID == 34736)
+                        {
+                            throw new NotImplementedException("GeoDoubleParamsTagRecord");
+                        }
+                        else if (recordID == 34737)
+                        {
+                            throw new NotImplementedException("GeoAsciiParamsTagRecord");
+                        }
+                        break;
+                    case LasFile.LasfSpec:
+                        if (recordID == 0)
+                        {
+                            throw new NotImplementedException("ClassificationLookupRecord");
+                        }
+                        else if (recordID == 3)
+                        {
+                            throw new NotImplementedException("TextAreaDescriptionRecord");
+                        }
+                        else if (recordID == 4)
+                        {
+                            throw new NotImplementedException("ExtraBytesRecord");
+                        }
+                        else if (recordID == 7)
+                        {
+                            throw new NotImplementedException("SupersededRecord");
+                        }
+                        else if ((recordID > 99) && (recordID < 355))
+                        {
+                            throw new NotImplementedException("WaveformPacketDescriptorRecord");
+                        }
+                        break;
+                    case LazVariableLengthRecord.LazEncodingUserID:
+                        this.BaseStream.ReadExactly(vlrBytes[..LazVariableLengthRecord.CoreSizeInBytes]);
+                        LazVariableLengthRecord laz = new(reserved, recordLengthAfterHeader16, description, vlrBytes);
+                        for (int itemIndex = 0; itemIndex < laz.NumItems; ++itemIndex)
+                        {
+                            this.BaseStream.ReadExactly(vlrBytes[..LazVariableLengthRecord.ItemSizeInBytes]);
+                            laz.ReadItem(itemIndex, vlrBytes);
+                        }
+                        vlr = laz;
+                        break;
+                    default:
+                        // leave vlr null
+                        break;
                 }
 
                 // otherwise, create a general container for the record which the caller can parse
@@ -426,28 +426,11 @@ namespace Mars.Clouds.Las
                     this.BaseStream.ReadExactly(data);
                     if (readExtendedRecords)
                     {
-                        vlr = new ExtendedVariableLengthRecord()
-                        {
-                            Reserved = reserved,
-                            UserID = userID,
-                            RecordID = recordID,
-                            RecordLengthAfterHeader = recordLengthAfterHeader,
-                            Description = description,
-                            Data = data
-                        };
+                        vlr = new ExtendedVariableLengthRecord(reserved, userID, recordID, recordLengthAfterHeader, description, data);
                     }
                     else
                     {
-                        UInt16 recordLengthAfterHeader16 = (UInt16)recordLengthAfterHeader;
-                        vlr = new VariableLengthRecord()
-                        {
-                            Reserved = reserved,
-                            UserID = userID,
-                            RecordID = recordID,
-                            RecordLengthAfterHeader = recordLengthAfterHeader16,
-                            Description = description,
-                            Data = data
-                        };
+                        vlr = new VariableLengthRecord(reserved, userID, recordID, recordLengthAfterHeader16, description, data);
                     }
                 }
 

@@ -25,11 +25,12 @@ namespace Mars.Clouds.Las
         /// </summary>
         public string Description { get; set; }
 
-        protected VariableLengthRecordBase()
+        protected VariableLengthRecordBase(UInt16 reserved, string userID, UInt16 recordID, string description)
         {
-            this.Reserved = 0;
-            this.UserID = String.Empty;
-            this.Description = String.Empty;
+            this.Reserved = reserved;
+            this.UserID = userID;
+            this.RecordID = recordID;
+            this.Description = description;
         }
     }
 
@@ -40,9 +41,10 @@ namespace Mars.Clouds.Las
         /// </summary>
         public TRecordLength RecordLengthAfterHeader { get; set; }
 
-        public VariableLengthRecordBase()
+        protected VariableLengthRecordBase(UInt16 reserved, string userID, UInt16 recordID, TRecordLength recordLengthAfterHeader, string description)
+            : base(reserved, userID, recordID, description)
         {
-            this.RecordLengthAfterHeader = TRecordLength.Zero;
+            this.RecordLengthAfterHeader = recordLengthAfterHeader;
         }
     }
 }
