@@ -223,6 +223,21 @@ namespace Mars.Clouds.Las
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
+
+                PointClassification classification;
+                if (pointFormat < 6)
+                {
+                    classification = (PointClassification)(pointBytes[15] & 0x1f);
+                }
+                else
+                {
+                    classification = (PointClassification)pointBytes[16];
+                }
+                if ((classification == PointClassification.HighNoise) || (classification == PointClassification.LowNoise))
+                {
+                    continue; // exclude noise points from consideration
+                }
+
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
                 (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndex(x, y);
@@ -265,16 +280,7 @@ namespace Mars.Clouds.Las
                 byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
                 abaCell.ReturnNumber.Add(returnNumber);
 
-                byte classification;
-                if (pointFormat < 6)
-                {
-                    classification = (byte)(pointBytes[15] & 0x1f);
-                }
-                else
-                {
-                    classification = pointBytes[16];
-                }
-                abaCell.Classification.Add((PointClassification)classification);
+                abaCell.Classification.Add(classification);
             }
 
             // increment ABA cell tile load counts

@@ -10,9 +10,9 @@ namespace Mars.Clouds.Las
     public class PointListZirnc
     {
         public int TilesLoaded { get; set; }
-        public int TilesIntersected { get; init; }
-        public int XIndex { get; init; }
-        public int YIndex { get; init; }
+        public int TilesIntersected { get; private init; }
+        public int XIndex { get; private init; }
+        public int YIndex { get; private init; }
 
         public List<PointClassification> Classification { get; set; }
         public List<UInt16> Intensity { get; private init; }
@@ -23,12 +23,12 @@ namespace Mars.Clouds.Las
         public double YMin { get; set; }
         public List<float> Z { get; private init; }
 
-        public PointListZirnc(int indexX, int indexY, int tilesIntersected)
+        public PointListZirnc(int xIndex, int yIndex, int tilesIntersected)
         {
             this.TilesLoaded = 0;
             this.TilesIntersected = tilesIntersected;
-            this.XIndex = indexX;
-            this.YIndex = indexY;
+            this.XIndex = xIndex;
+            this.YIndex = yIndex;
 
             this.Classification = new();
             this.Intensity = new();
@@ -194,7 +194,7 @@ namespace Mars.Clouds.Las
             int pointsFromZ70to80 = 0;
             int pointsFromZ80to90 = 0;
             int pointsAboveZThreshold = 0;
-            int heightClasses = (int)Single.Ceiling((zMax - zMin) / heightClassSizeInCrsUnits + 0.5F);
+            int heightClasses = (int)Single.Ceiling((zMax - zMin) / heightClassSizeInCrsUnits + 0.5F) + 1; // one additional height class as a numeric guard
             int[] pointCountByHeightClass = new int[heightClasses]; // leave at default of zero
 
             UInt16 intensityMax = UInt16.MinValue;
@@ -262,6 +262,12 @@ namespace Mars.Clouds.Las
                     ++pointsFromZ80to90;
                 }
 
+                // numeric edge case: if division produces a fractional value of nnnn.5 then integer conversion leads to nnn + 1
+                // Without the inclusion of an additional guard height class above an IndexOutOfRangeException results from incrementing
+                // the height class's point count. There are at least two causes of this
+                // 1) nnn.5 + 0.5 produces exactly nnn + 1 in the the single precision calculation of the number of height classes 
+                // 2) conversion from float to double slightly increases z, leading the double precision calculation below to round up
+                //    where single precision rounds down
                 int heightClass = (int)((z - zMin) / heightClassSizeInCrsUnits + 0.5F);
                 ++pointCountByHeightClass[heightClass];
 
@@ -341,7 +347,8 @@ namespace Mars.Clouds.Las
             pointsBelowZLevel += pointsFromZ80to90;
             abaMetrics.ZPCumulative90[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
 
-            // entropy is of debatable value: sensitive to bin size and location
+            // entropy is of debatable value: sensitive to bin width and edge positioning
+            // Entropy is also not well defined if there are no points or if there's only a single height class.
             double zEntropy = 0.0F;
             for (int heightClassIndex = 0; heightClassIndex < pointCountByHeightClass.Length; ++heightClassIndex)
             {

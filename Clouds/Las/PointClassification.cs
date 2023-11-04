@@ -2,28 +2,30 @@
 {
     public enum PointClassification : byte
     {
-        // LAS 1.4 R15 Table 9: point types 0-5, Table 17: point types 6-10
-        NeverClassified = 0, // all point types
-        Unclassified = 1, // all point types
-        Ground = 2, // all point types
-        LowVegetation = 3, // all point types
-        MediumVegitation = 4, // all point types
-        HighVegetation = 5, // all point types
-        Building = 6, // all point types
-        LowPointNoise = 7, // all point types
-        ModelKeyPoint = 8, // reserved for point types 6-10
-        Water = 9, // all point types
-        Rail = 10, // point types 6-10
-        RoadSurface = 11, // point types 6-10
-        OverlapPoints = 12, // reserved for point types 6-10
-        WireGuard = 13, // point types 6-10
-        WireConductor = 14, // point types 6-10
-        TransmissionTower = 15, // point types 6-10
-        WireStructureConnector = 16, // point types 6-10
-        BridgeDeck = 17, // point types 6-10
-        HighNoise = 18, // point types 6-10
-        OverheadStructure = 19, // point types 6-10
-        IgnoredGround = 20, // point types 6-10
-        Snow = 21 // point types 6-10
+        // LAS 1.4 R15 Table 5 (point formats 0-5) and Table 17 (point formats 6-10)
+        NeverClassified = 0,
+        Unclassified = 1,
+        Ground = 2,
+        LowVegetation = 3,
+        MediumVegetation = 4,
+        HighVegetation = 5,
+        Building = 6,
+        LowNoise = 7, // low point
+        ModelKeyPoint = 8, // mass point, reserved for point types 6-10
+        Water = 9,
+        Rail = 10, // reserved for point types 0-5
+        RoadSurface = 11, // reserved for point types 0-5
+        OverlapPoint = 12, // reserved for point types 6-10
+        // values of 13 or greater reserved for point types 0-5
+        WireGuard = 13, // shield
+        WireConductor = 14, // phase
+        TransmissionTower = 15,
+        WireStructureConnector = 16, // e.g., insulators
+        BridgeDeck = 17,
+        HighNoise = 18,
+        OverheadStructure = 19, // e.g., conveyors, mining equipment, traffic lights
+        IgnoredGround = 20, // e.g., breakline proximity
+        Snow = 21,
+        TemporalExclusion = 22 // Features excluded due to changes over time between data sources – e.g., water levels, landslides, permafrost
     }
 }

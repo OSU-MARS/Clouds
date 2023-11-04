@@ -63,7 +63,7 @@ namespace Mars.Clouds.Las
             this.IntensityStandardDeviation.Name = "intensityStdDev";
             this.IntensitySkew.Name = "intensitySkew";
             this.IntensityKurtosis.Name = "intensityKurtosis";
-            this.IntensityPGround.Name = "pGround";
+            this.IntensityPGround.Name = "intensityPground";
             this.IntensityPCumulativeZQ10.Name = "pCumulativeZQ10";
             this.IntensityPCumulativeZQ30.Name = "pCumulativeZQ30";
             this.IntensityPCumulativeZQ50.Name = "pCumulativeZQ50";

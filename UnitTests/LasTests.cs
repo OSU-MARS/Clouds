@@ -211,7 +211,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZStandardDeviation[8, 14] == 1.69425166F);
             Assert.IsTrue(abaMetrics.ZSkew[8, 14] == 0.3093502F);
             Assert.IsTrue(abaMetrics.ZKurtosis[8, 14] == 2.619736F);
-            Assert.IsTrue(abaMetrics.ZNormalizedEntropy[8, 14] == 0.871817946F);
+            Assert.IsTrue(abaMetrics.ZNormalizedEntropy[8, 14] == 0.83192575F);
             Assert.IsTrue(abaMetrics.PZAboveZMean[8, 14] == 0.4679106F);
             Assert.IsTrue(abaMetrics.PZAboveThreshold[8, 14] == 0.740716636F);
             Assert.IsTrue(abaMetrics.ZQuantile05[8, 14] == 920.903137F);
@@ -268,7 +268,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZStandardDeviation[9, 14] == 1.39960063F);
             Assert.IsTrue(abaMetrics.ZSkew[9, 14] == 0.329364121F);
             Assert.IsTrue(abaMetrics.ZKurtosis[9, 14] == 2.12710214F);
-            Assert.IsTrue(abaMetrics.ZNormalizedEntropy[9, 14] == 0.885059357F);
+            Assert.IsTrue(abaMetrics.ZNormalizedEntropy[9, 14] == 0.828225255F);
             Assert.IsTrue(abaMetrics.PZAboveZMean[9, 14] == 0.454975128F);
             Assert.IsTrue(abaMetrics.PZAboveThreshold[9, 14] == 0.5062315F);
             Assert.IsTrue(abaMetrics.ZQuantile05[9, 14] == 920.749F);

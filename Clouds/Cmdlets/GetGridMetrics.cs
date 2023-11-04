@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
@@ -26,12 +27,15 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string? Las { get; set; }
 
-        [Parameter(HelpMessage = "Maximum number of tiles to have fully loaded at the same time. This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
+        // quick solution for constraining memory consumption
+        // A more adaptive implementation would track memory consumption (e.g. GlobalMemoryStatusEx()), estimate it from the size of the
+        // tiles, or use a rasonably stable bound such as the total number of points loaded.
+        [Parameter(HelpMessage = "Maximum number of tiles to have fully loaded at the same time (default is 25). This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
         public int MaxTiles { get; set; }
 
         public GetGridMetrics()
         {
-            this.MaxTiles = 50;
+            this.MaxTiles = 25;
         }
 
         protected override void ProcessRecord()
@@ -51,6 +55,7 @@ namespace Mars.Clouds.Cmdlets
             Stopwatch stopwatch = new();
             stopwatch.Start();
             
+            CancellationTokenSource cancellationTokenSource = new();
             int tilesLoaded = 0;
             Task readPoints = Task.Run(() => 
             {
@@ -68,13 +73,18 @@ namespace Mars.Clouds.Cmdlets
 
                             using LasReader pointReader = tile.CreatePointReader();
                             pointReader.ReadPointsToGridZirn(tile, abaGrid);
-                            abaGrid.QueueCompletedCells(tile, fullyPopulatedAbaCells);
-                            ++tilesLoaded;
 
-                            if (this.Stopping)
+                            // check for cancellation before queing tile for metrics calculation
+                            // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
+                            // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
+                            // entirely, but currently seems unnecessary as this appears to be an edge case.)
+                            if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
                             {
                                 break;
                             }
+
+                            abaGrid.QueueCompletedCells(tile, fullyPopulatedAbaCells);
+                            ++tilesLoaded;
 
                             //FileInfo fileInfo = new(this.Las);
                             //UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();
@@ -84,7 +94,7 @@ namespace Mars.Clouds.Cmdlets
                             //this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,0") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
                         }
 
-                        if (this.Stopping)
+                        if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
                         {
                             break;
                         }
@@ -92,11 +102,12 @@ namespace Mars.Clouds.Cmdlets
 
                     // TODO: error checking to detect any incompletely loaded, and thus unqueued, ABA cells?
                 }
-                finally // ensure metrics calculation doesn't block indefinitely if an exception occurs during tile loading
+                finally
                 {
+                    // ensure metrics calculation doesn't block indefinitely waiting for more data if an exception occurs during tile loading
                     fullyPopulatedAbaCells.CompleteAdding();
                 }
-            });
+            }, cancellationTokenSource.Token);
 
             int abaCellsCompleted = 0;
             Task calculateMetrics = Task.Run(() => 
@@ -112,32 +123,49 @@ namespace Mars.Clouds.Cmdlets
                     for (int batchIndex = 0; batchIndex < populatedAbaCellBatch.Count; ++batchIndex)
                     {
                         PointListZirnc abaCell = populatedAbaCellBatch[batchIndex];
-                        abaCell.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
-                        // cell's lists are no longer needed; release them so the memory can be used for continuing tile loading
-                        // Since ClearAndRelease() zeros TilesLoaded it's called for consistency even if a cell contains no points.
-                        abaCell.ClearAndRelease();
-                        ++abaCellsCompleted;
+                        try
+                        {
+                            abaCell.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+                            // cell's lists are no longer needed; release them so the memory can be used for continuing tile loading
+                            // Since ClearAndRelease() zeros TilesLoaded it's called for consistency even if a cell contains no points.
+                            abaCell.ClearAndRelease();
+                            ++abaCellsCompleted;
+                        }
+                        catch (Exception exception)
+                        {
+                            throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + abaCell.XMin + ", " + abaCell.XMax + ", " + abaCell.YMin + ", " + abaCell.YMax + ") at grid position (" + abaCell.XIndex + ", " + abaCell.YIndex + ").", exception, cancellationTokenSource.Token);
+                        }
 
-                        if (this.Stopping)
+                        if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
                         {
                             break;
                         }
                     }
 
-                    if (this.Stopping)
+                    if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
                 }
-            });
+            }, cancellationTokenSource.Token);
 
             ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
             this.WriteProgress(gridMetricsProgress);
 
-            TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(15.0);
+            TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(10.0);
             Task[] gridMetricsTasks = new Task[] { readPoints, calculateMetrics };
-            while (Task.WaitAll(gridMetricsTasks, progressUpdateInterval) == false) // rethrows exception if a task faults
+            while (Task.WaitAll(gridMetricsTasks, progressUpdateInterval) == false)
             {
+                // unlike Task.WaitAll(Task[]), Task.WaitAll(Task[], TimeSpan) does not unblock and throw the exception if any task faults
+                // If one task has faulted then cancellation is therefore desirable to stop the other tasks. If tile read faults metrics
+                // calculation can see no more tiles will be added and can complete normally, leading to incomplete metrics in any grid cells
+                // which weren't compeletely read. If metrics calculation faults the cmdlet will exit but, if not cancelled, tile read continues
+                // until blocking indefinitely when maximum tile load is reached.
+                if (readPoints.IsFaulted || calculateMetrics.IsFaulted)
+                {
+                    cancellationTokenSource.Cancel();
+                }
+
                 float fractionComplete = (float)abaCellsCompleted / (float)abaGrid.NonNullCells;
                 gridMetricsProgress.StatusDescription = "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
                 gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
