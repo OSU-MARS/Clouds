@@ -116,7 +116,7 @@ namespace Mars.Clouds.Cmdlets
                 crs.ImportFromEPSG(abaEpsg);
                 float crsLinearUnits = (float)crs.GetLinearUnits();
                 float oneMeterHeightClass = 1.0F / crsLinearUnits;
-                float twoMeterHeightThreshold = 2.0F / crsLinearUnits;
+                float twoMeterHeightThreshold = 2.0F / crsLinearUnits; // applied relative to mean ground height in each cell if ground points are classified, used as is if points aren't classified
 
                 foreach (List<PointListZirnc> populatedAbaCellBatch in fullyPopulatedAbaCells.GetConsumingEnumerable())
                 {

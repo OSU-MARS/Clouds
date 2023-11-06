@@ -205,9 +205,9 @@ namespace Mars.Clouds.UnitTests
             adjacentCell2.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
 
             Assert.IsTrue(abaMetrics.N[8, 14] == 162764);
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
             Assert.IsTrue(abaMetrics.ZMax[8, 14] == 928.6306F);
             Assert.IsTrue(abaMetrics.ZMean[8, 14] == 923.698242F);
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 14])); // points not classified
             Assert.IsTrue(abaMetrics.ZStandardDeviation[8, 14] == 1.69425166F);
             Assert.IsTrue(abaMetrics.ZSkew[8, 14] == 0.3093502F);
             Assert.IsTrue(abaMetrics.ZKurtosis[8, 14] == 2.619736F);
@@ -235,7 +235,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZQuantile95[8, 14] == 926.7014F);
             Assert.IsTrue(abaMetrics.ZPCumulative10[8, 14] == 0.08913519F);
             Assert.IsTrue(abaMetrics.ZPCumulative20[8, 14] == 0.181962848F);
-            Assert.IsTrue(abaMetrics.ZPCumulative30[8, 14] == 0.3758755F);
+            Assert.IsTrue(abaMetrics.ZPCumulative30[8, 14] == 0.3759185F);
             Assert.IsTrue(abaMetrics.ZPCumulative40[8, 14] == 0.5440515F);
             Assert.IsTrue(abaMetrics.ZPCumulative50[8, 14] == 0.708209455F);
             Assert.IsTrue(abaMetrics.ZPCumulative60[8, 14] == 0.8307365F);
@@ -260,11 +260,12 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn[8, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PFifthReturn[8, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PGround[8, 14] == 0.0F); // points not classified
+            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
 
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[9, 14] == 3.70189786F);
             Assert.IsTrue(abaMetrics.N[9, 14] == 44853.0F);
             Assert.IsTrue(abaMetrics.ZMax[9, 14] == 926.576538F);
             Assert.IsTrue(abaMetrics.ZMean[9, 14] == 922.74585F);
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[9, 14]));
             Assert.IsTrue(abaMetrics.ZStandardDeviation[9, 14] == 1.39960063F);
             Assert.IsTrue(abaMetrics.ZSkew[9, 14] == 0.329364121F);
             Assert.IsTrue(abaMetrics.ZKurtosis[9, 14] == 2.12710214F);
@@ -317,11 +318,12 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PFifthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PGround[9, 14] == 0.0F);
+            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[9, 14] == 3.70189786F);
 
             Assert.IsTrue(abaMetrics.N[8, 15] == 0);
-            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZStandardDeviation[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZSkew[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZKurtosis[8, 15]));
@@ -374,14 +376,15 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
 
             Assert.IsTrue(abaMetrics.N[9, 15] == 0);
             // for now, remaining bands aren't checked for NaN as coverage of previous cell should suffice
 
             Assert.IsTrue(abaMetrics.N.HasNoDataValue);
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMax.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMean.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.ZGroundMean.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZStandardDeviation.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZSkew.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZKurtosis.HasNoDataValue);
@@ -434,11 +437,12 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn.HasNoDataValue);
             Assert.IsTrue(abaMetrics.PFifthReturn.HasNoDataValue);
             Assert.IsTrue(abaMetrics.PGround.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
 
             Assert.IsTrue(Single.IsNaN(abaMetrics.N.NoDataValue));
-            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZStandardDeviation.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZSkew.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZKurtosis.NoDataValue));
@@ -491,6 +495,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox.NoDataValue));
         }
     }
 }

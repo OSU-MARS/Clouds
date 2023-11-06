@@ -170,20 +170,21 @@ namespace Mars.Clouds.Las
             // probability point z is above z threshold
             // intensity by z
             float zMin = sortedZ[0];
+            double zGroundSum = 0.0;
             double zSum = 0.0;
             double zSumSquared = 0.0;
             double zSumCubed = 0.0;
             double zSumFourthPower = 0.0;
 
-            float zThreshold10 = zMin + 0.10F * (zMax - zMin);
-            float zThreshold20 = zMin + 0.20F * (zMax - zMin);
-            float zThreshold30 = zMin + 0.30F * (zMax - zMin);
-            float zThreshold40 = zMin + 0.40F * (zMax - zMin);
-            float zThreshold50 = zMin + 0.50F * (zMax - zMin);
-            float zThreshold60 = zMin + 0.60F * (zMax - zMin);
-            float zThreshold70 = zMin + 0.70F * (zMax - zMin);
-            float zThreshold80 = zMin + 0.80F * (zMax - zMin);
-            float zThreshold90 = zMin + 0.90F * (zMax - zMin);
+            double zThreshold10 = zMin + 0.10 * (zMax - zMin);
+            double zThreshold20 = zMin + 0.20 * (zMax - zMin);
+            double zThreshold30 = zMin + 0.30 * (zMax - zMin);
+            double zThreshold40 = zMin + 0.40 * (zMax - zMin);
+            double zThreshold50 = zMin + 0.50 * (zMax - zMin);
+            double zThreshold60 = zMin + 0.60 * (zMax - zMin);
+            double zThreshold70 = zMin + 0.70 * (zMax - zMin);
+            double zThreshold80 = zMin + 0.80 * (zMax - zMin);
+            double zThreshold90 = zMin + 0.90 * (zMax - zMin);
             int pointsFromZ00to10 = 0;
             int pointsFromZ10to20 = 0;
             int pointsFromZ20to30 = 0;
@@ -193,8 +194,7 @@ namespace Mars.Clouds.Las
             int pointsFromZ60to70 = 0;
             int pointsFromZ70to80 = 0;
             int pointsFromZ80to90 = 0;
-            int pointsAboveZThreshold = 0;
-            int heightClasses = (int)Single.Ceiling((zMax - zMin) / heightClassSizeInCrsUnits + 0.5F) + 1; // one additional height class as a numeric guard
+            int heightClasses = (int)Double.Ceiling((zMax - zMin) / heightClassSizeInCrsUnits + 0.5) + 1; // one additional height class as a numeric guard
             int[] pointCountByHeightClass = new int[heightClasses]; // leave at default of zero
 
             UInt16 intensityMax = UInt16.MinValue;
@@ -221,10 +221,6 @@ namespace Mars.Clouds.Las
                 zPower *= z;
                 zSumFourthPower += zPower;
 
-                if (z > zThresholdInCrsUnits)
-                {
-                    ++pointsAboveZThreshold;
-                }
                 if (z < zThreshold10)
                 {
                     ++pointsFromZ00to10;
@@ -311,9 +307,13 @@ namespace Mars.Clouds.Las
                 if (classification == PointClassification.Ground)
                 {
                     intensityGroundSum += intensity;
+                    zGroundSum += z;
                     ++groundPoints;
                 }
             }
+
+            float zGroundMean = groundPoints > 0 ? (float)(zGroundSum / groundPoints) : Single.NaN;
+            abaMetrics.ZGroundMean[cellIndex] = zGroundMean;
 
             double pointCountAsDouble = (double)pointCount;
             double zMean = zSum / pointCountAsDouble;
@@ -361,8 +361,6 @@ namespace Mars.Clouds.Las
             }
             abaMetrics.ZNormalizedEntropy[cellIndex] = (float)(zEntropy / Double.Log(1.0 / pointCountByHeightClass.Length));
 
-            abaMetrics.PZAboveThreshold[cellIndex] = (float)(pointsAboveZThreshold / pointCountAsDouble);
-
             abaMetrics.IntensityMax[cellIndex] = intensityMax;
             double intensityTotalAsDouble = (double)intensitySum;
             abaMetrics.IntensityTotal[cellIndex] = (float)intensityTotalAsDouble;
@@ -388,8 +386,14 @@ namespace Mars.Clouds.Las
             cumulativeIntensityFractionFromZ0 += intensitySumZ70to90;
             abaMetrics.IntensityPCumulativeZQ90[cellIndex] = (float)(cumulativeIntensityFractionFromZ0 / intensityTotalAsDouble);
 
-            // second z statistics pass now that z mean is known
+            // second z statistics pass now that z means are known
             int pointsAboveZMean = 0;
+            int pointsAboveZThreshold = 0;
+            float zCountThreshold = zThresholdInCrsUnits;
+            if (Single.IsNaN(zGroundMean) == false)
+            {
+                zCountThreshold += zGroundMean; // if ground points have been classified, make threshold relative to ground
+            }
             for (int pointIndex = 0; pointIndex < pointCount; ++pointIndex)
             {
                 float z = this.Z[pointIndex];
@@ -397,8 +401,13 @@ namespace Mars.Clouds.Las
                 {
                     ++pointsAboveZMean;
                 }
+                if (z > zCountThreshold)
+                {
+                    ++pointsAboveZThreshold;
+                }
             }
             abaMetrics.PZAboveZMean[cellIndex] = (float)(pointsAboveZMean / pointCountAsDouble);
+            abaMetrics.PZAboveThreshold[cellIndex] = (float)(pointsAboveZThreshold / pointCountAsDouble);
 
             // return number statistics
             Span<int> pointsByReturnNumber = stackalloc int[6];

@@ -10,7 +10,7 @@ namespace Mars.Clouds.Las
     public class StandardMetricsRaster : Raster<float>
     {
         public StandardMetricsRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
-            : base(crs, transform, xSize, ySize, 56)
+            : base(crs, transform, xSize, ySize, 57)
         {
             for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
@@ -21,6 +21,7 @@ namespace Mars.Clouds.Las
 
             this.AreaOfPointBoundingBox.Name = "areaOfPointBoundingBox";
             this.N.Name = "n";
+            this.ZGroundMean.Name = "zGroundMean";
             this.ZMax.Name = "zMax";
             this.ZMean.Name = "zMean";
             this.ZStandardDeviation.Name = "zStdDev";
@@ -77,10 +78,10 @@ namespace Mars.Clouds.Las
             this.PGround.Name = "pGround";
         }
 
-        public RasterBand<float> AreaOfPointBoundingBox { get { return this.Bands[0]; } }
-        public RasterBand<float> N { get { return this.Bands[1]; } }
-        public RasterBand<float> ZMax { get { return this.Bands[2]; } }
-        public RasterBand<float> ZMean { get { return this.Bands[3]; } }
+        public RasterBand<float> N { get { return this.Bands[0]; } }
+        public RasterBand<float> ZMax { get { return this.Bands[1]; } }
+        public RasterBand<float> ZMean { get { return this.Bands[2]; } }
+        public RasterBand<float> ZGroundMean { get { return this.Bands[3]; } }
         public RasterBand<float> ZStandardDeviation { get { return this.Bands[4]; } }
         public RasterBand<float> ZSkew { get { return this.Bands[5]; } }
         public RasterBand<float> ZKurtosis { get { return this.Bands[6]; } }
@@ -133,5 +134,6 @@ namespace Mars.Clouds.Las
         public RasterBand<float> PFourthReturn { get { return this.Bands[53]; } }
         public RasterBand<float> PFifthReturn { get { return this.Bands[54]; } }
         public RasterBand<float> PGround { get { return this.Bands[55]; } }
+        public RasterBand<float> AreaOfPointBoundingBox { get { return this.Bands[56]; } }
     }
 }
