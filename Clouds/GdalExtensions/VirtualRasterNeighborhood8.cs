@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    internal class VirtualRasterNeighborhood8<TBand> where TBand : INumber<TBand>
+    public class VirtualRasterNeighborhood8<TBand> where TBand : INumber<TBand>
     {
         public RasterBand<TBand> Center { get; private init; }
         public RasterBand<TBand>? North { get; init; }
@@ -20,34 +20,34 @@ namespace Mars.Clouds.GdalExtensions
             this.Center = center;
         }
 
-        public bool TryGetValue(int searchRowIndex, int searchColumnIndex, [NotNullWhen(true)] out TBand? value)
+        public bool TryGetValue(int xIndex, int yIndex, [NotNullWhen(true)] out TBand? value)
         {
             value = default;
-            if (searchRowIndex < 0)
+            if (yIndex < 0)
             {
-                if (searchColumnIndex < 0)
+                if (xIndex < 0)
                 {
                     if (this.Northwest == null)
                     {
                         return false;
                     }
-                    int northwestRowSearchIndex = this.Northwest.YSize + searchRowIndex;
-                    int northwestColumnSearchIndex = this.Northwest.XSize + searchColumnIndex;
-                    value = this.Northwest[northwestColumnSearchIndex, northwestRowSearchIndex];
+                    int northwestYindex = this.Northwest.YSize + yIndex;
+                    int northwestXindex = this.Northwest.XSize + xIndex;
+                    value = this.Northwest[northwestXindex, northwestYindex];
                     if (this.Northwest.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (searchColumnIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.XSize)
                 {
                     if (this.Northeast == null)
                     {
                         return false;
                     }
-                    int northeastRowSearchIndex = this.Northeast.YSize + searchRowIndex;
-                    int northeastColumnSearchIndex = searchColumnIndex - this.Center.XSize;
-                    value = this.Northeast[northeastColumnSearchIndex, northeastRowSearchIndex];
+                    int northeastYindex = this.Northeast.YSize + yIndex;
+                    int northeastXindex = xIndex - this.Center.XSize;
+                    value = this.Northeast[northeastXindex, northeastYindex];
                     if (this.Northeast.IsNoData(value))
                     {
                         return false;
@@ -59,38 +59,38 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         return false;
                     }
-                    int northRowSearchIndex = this.North.YSize + searchRowIndex;
-                    value = this.North[searchColumnIndex, northRowSearchIndex];
+                    int northYindex = this.North.YSize + yIndex;
+                    value = this.North[xIndex, northYindex];
                     if (this.North.IsNoData(value))
                     {
                         return false;
                     }
                 }
             }
-            else if (searchRowIndex >= this.Center.YSize)
+            else if (yIndex >= this.Center.YSize)
             {
-                int southRowSearchIndex = searchRowIndex - this.Center.YSize;
-                if (searchColumnIndex < 0)
+                int southYindex = yIndex - this.Center.YSize;
+                if (xIndex < 0)
                 {
                     if (this.Southwest == null)
                     {
                         return false;
                     }
-                    int westColumnSearchIndex = this.Southwest.XSize + searchColumnIndex;
-                    value = this.Southwest[westColumnSearchIndex, southRowSearchIndex];
+                    int westXindex = this.Southwest.XSize + xIndex;
+                    value = this.Southwest[westXindex, southYindex];
                     if (this.Southwest.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (searchColumnIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.XSize)
                 {
                     if (this.Southeast == null)
                     {
                         return false;
                     }
-                    int eastColumnSearchIndex = searchColumnIndex - this.Center.XSize;
-                    value = this.Southeast[eastColumnSearchIndex, southRowSearchIndex];
+                    int eastXindex = xIndex - this.Center.XSize;
+                    value = this.Southeast[eastXindex, southYindex];
                     if (this.Southeast.IsNoData(value))
                     {
                         return false;
@@ -102,7 +102,7 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         return false;
                     }
-                    value = this.South[searchColumnIndex, southRowSearchIndex];
+                    value = this.South[xIndex, southYindex];
                     if (this.South.IsNoData(value))
                     {
                         return false;
@@ -111,27 +111,27 @@ namespace Mars.Clouds.GdalExtensions
             }
             else
             {
-                if (searchColumnIndex < 0)
+                if (xIndex < 0)
                 {
                     if (this.West == null)
                     {
                         return false;
                     }
-                    int westColumnIndex = this.West.XSize + searchColumnIndex;
-                    value = this.West[westColumnIndex, searchRowIndex];
+                    int westXindex = this.West.XSize + xIndex;
+                    value = this.West[westXindex, yIndex];
                     if (this.West.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (searchColumnIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.XSize)
                 {
                     if (this.East == null)
                     {
                         return false;
                     }
-                    int eastColumnIndex = searchColumnIndex - this.Center.XSize;
-                    value = this.East[eastColumnIndex, searchRowIndex];
+                    int eastXindex = xIndex - this.Center.XSize;
+                    value = this.East[eastXindex, yIndex];
                     if (this.East.IsNoData(value))
                     {
                         return false;
@@ -140,7 +140,7 @@ namespace Mars.Clouds.GdalExtensions
                 else
                 {
                     // mainline case
-                    value = this.Center[searchColumnIndex, searchRowIndex];
+                    value = this.Center[xIndex, yIndex];
                     if (this.Center.IsNoData(value))
                     {
                         return false;

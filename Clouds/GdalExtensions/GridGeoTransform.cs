@@ -7,12 +7,22 @@ namespace Mars.Clouds.GdalExtensions
     public class GridGeoTransform
     {
         // https://gdal.org/tutorials/geotransforms_tut.html
-        public double CellHeight { get; init; } // north-south resolution, negative if north up
-        public double CellWidth { get; init; } // east-west resolution
+        public double CellHeight { get; set; } // north-south resolution, negative if north up
+        public double CellWidth { get; set; } // east-west resolution
         public double ColumnRotation { get; init; } // zero if north up 
-        public double OriginX { get; init; }
-        public double OriginY { get; init; }
+        public double OriginX { get; set; }
+        public double OriginY { get; set; }
         public double RowRotation { get; init; } // zero if north up
+
+        public GridGeoTransform()
+        {
+            this.CellHeight = Double.NaN;
+            this.CellWidth = Double.NaN;
+            this.ColumnRotation = 0.0;
+            this.OriginX = Double.NaN;
+            this.OriginY = Double.NaN;
+            this.RowRotation = 0.0;
+        }
 
         public GridGeoTransform(double originX, double originY, double cellWidth, double cellHeight)
             : this(originX, originY, cellWidth, cellHeight, 0.0, 0.0)
@@ -87,6 +97,17 @@ namespace Mars.Clouds.GdalExtensions
             this.ColumnRotation = other.ColumnRotation;
         }
 
+        public static bool Equals(GridGeoTransform transform, GridGeoTransform other)
+        {
+            // for now, require exact equality
+            return (transform.OriginX == other.OriginX) &&
+                   (transform.OriginY == other.OriginY) &&
+                   (transform.CellHeight == other.CellHeight) &&
+                   (transform.CellWidth == other.CellWidth) &&
+                   (transform.RowRotation == other.RowRotation) &&
+                   (transform.ColumnRotation == other.ColumnRotation);
+        }
+
         public double GetCellArea()
         {
             return this.CellWidth * Double.Abs(this.CellHeight);
@@ -104,11 +125,23 @@ namespace Mars.Clouds.GdalExtensions
             return (xMin, xMin + this.CellWidth, yMax + this.CellHeight, yMax);
         }
 
-        public (int xIndex, int yIndex) GetCellIndex(double x, double y)
+        public (int xIndex, int yIndex) GetCellIndices(double x, double y)
         {
-            double yIndex = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
-            double xIndex = (x - this.OriginX - yIndex * this.RowRotation) / this.CellWidth;
-            return ((int)xIndex, (int)yIndex);
+            double yIndexFractional = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
+            double xIndexFractional = (x - this.OriginX - yIndexFractional * this.RowRotation) / this.CellWidth;
+
+            int xIndex = (int)xIndexFractional;
+            int yIndex = (int)yIndexFractional;
+            // integer truncation truncates towards zero
+            if (xIndexFractional < 0.0) 
+            {
+                --xIndex;
+            }
+            if (yIndexFractional < 0.0)
+            {
+                --yIndex;
+            }
+            return (xIndex, yIndex);
         }
 
         public double GetCellSize()
@@ -136,17 +169,6 @@ namespace Mars.Clouds.GdalExtensions
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
             double y = this.OriginY + xIndexFractional * this.ColumnRotation + yIndexFractional * this.CellHeight;
             return (x, y);
-        }
-
-        public static bool Equals(GridGeoTransform transform, GridGeoTransform other)
-        {
-            // for now, require exact equality
-            return (transform.OriginX == other.OriginX) &&
-                   (transform.OriginY == other.OriginY) &&
-                   (transform.CellHeight == other.CellHeight) &&
-                   (transform.CellWidth == other.CellWidth) &&
-                   (transform.RowRotation == other.RowRotation) &&
-                   (transform.ColumnRotation == other.ColumnRotation);
         }
     }
 }

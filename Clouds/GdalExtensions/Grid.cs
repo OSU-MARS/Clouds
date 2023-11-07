@@ -6,7 +6,7 @@ namespace Mars.Clouds.GdalExtensions
 {
     public class Grid
     {
-        public SpatialReference Crs { get; private init; }
+        public SpatialReference Crs { get; protected set; }
         public GridGeoTransform Transform { get; private init; }
         public int XSize { get; protected set; }
         public int YSize { get; protected set; }
@@ -35,8 +35,8 @@ namespace Mars.Clouds.GdalExtensions
         public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(double xMin, double xMax, double yMin, double yMax)
         {
             Debug.Assert(this.Transform.CellHeight < 0.0);
-            (int xIndexMin, int yIndexMin) = this.Transform.GetCellIndex(xMin, yMax);
-            (int xIndexMaxInclusive, int yIndexMaxInclusive) = this.Transform.GetCellIndex(xMax, yMin);
+            (int xIndexMin, int yIndexMin) = this.Transform.GetCellIndices(xMin, yMax);
+            (int xIndexMaxInclusive, int yIndexMaxInclusive) = this.Transform.GetCellIndices(xMax, yMin);
             
             if ((xIndexMin >= this.XSize) || (xIndexMaxInclusive < 0) || (yIndexMin >= this.YSize) || (yIndexMaxInclusive < 0))
             {

@@ -240,7 +240,7 @@ namespace Mars.Clouds.Las
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndex(x, y);
+                (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndices(x, y);
                 if ((xIndex < 0) || (yIndex < 0) || (xIndex >= abaGrid.XSize) || (yIndex >= abaGrid.YSize))
                 {
                     // point lies outside of the ABA grid and is therefore not of interest

@@ -233,7 +233,7 @@ namespace Mars.Clouds.Cmdlets
 
             tileIndexProgress.StatusDescription = "Forming grid of point clouds...";
             tileIndexProgress.PercentComplete = 0;
-            tileIndexProgress.SecondsRemaining = 0;
+            tileIndexProgress.SecondsRemaining = -1;
             this.WriteProgress(tileIndexProgress);
 
             LasTileGrid lasGrid = LasTileGrid.Create(lasTiles, abaEpsg);

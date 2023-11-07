@@ -211,7 +211,7 @@ namespace Mars.Clouds.GdalExtensions
             };
         }
 
-        private static DataType GetGdalDataType()
+        public static DataType GetGdalDataType()
         {
             return Type.GetTypeCode(typeof(TBand)) switch
             {

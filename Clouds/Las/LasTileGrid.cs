@@ -17,7 +17,7 @@ namespace Mars.Clouds.Las
             {
                 LasTile tile = tiles[tileIndex];
                 (double xCentroid, double yCentroid) = tile.GridExtent.GetCentroid();
-                (int xIndex, int yIndex) = this.Transform.GetCellIndex(xCentroid, yCentroid);
+                (int xIndex, int yIndex) = this.Transform.GetCellIndices(xCentroid, yCentroid);
                 // if needed, expand tile's grid extent to match the grid assuming tiles are anchored at their min (x, y) corner
                 // This provides correction for tile sizes being slightly smaller than grid pitch. See LasTileGrid.Create().
                 // An alternative to maintianing a separate grid extent per tile would be editing the LAS header's extents. However, this

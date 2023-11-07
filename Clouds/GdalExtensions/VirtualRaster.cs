@@ -2,41 +2,43 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
+    // could derive from Grid but naming becomes confusing as differences between tiles and cells are obscured
+    // Also, indexing differs because tiles are sparse where grid is dense, so a grid index is not a tile index.
     internal class VirtualRaster<TBand> where TBand : INumber<TBand>
     {
         private SpatialReference? crs;
-        private Raster<TBand>?[,] tileGrid;
+        private Raster<TBand>?[,] tileGrid; // indexes are raster standard [y, x] so cells x - 1, x, x + 1 are contiguous in memory
         private int[] tileGridIndexX;
         private int[] tileGridIndexY;
         private readonly List<Raster<TBand>> tiles;
 
-        public double OrginX { get; private set; }
-        public double OrginY { get; private set; }
         public double TileCellSizeX { get; private set; }
         public double TileCellSizeY { get; private set; }
         public int TileSizeInCellsX { get; private set; }
         public int TileSizeInCellsY { get; private set; }
+        public GridGeoTransform TileTransform { get; private set; }
+
         public int VirtualRasterSizeInTilesX { get; private set; }
         public int VirtualRasterSizeInTilesY { get; private set; }
 
         public VirtualRaster()
         {
             this.crs = null;
-            this.tileGrid = new Raster<TBand>[0, 0];
+            this.tileGrid = new Raster<TBand>?[0, 0];
             this.tileGridIndexX = Array.Empty<int>();
             this.tileGridIndexY = Array.Empty<int>();
             this.tiles = new();
 
-            this.OrginX = Double.NaN;
-            this.OrginY = Double.NaN;
             this.TileCellSizeX = Double.NaN;
             this.TileCellSizeY = Double.NaN;
             this.TileSizeInCellsX = -1;
             this.TileSizeInCellsY = -1;
+            this.TileTransform = new();
         }
 
         public Raster<TBand> this[int index]
@@ -170,26 +172,36 @@ namespace Mars.Clouds.GdalExtensions
                 this.tileGridIndexY[tileIndex] = yIndex;
             }
 
-            this.OrginX = minimumOriginX;
-            this.OrginY = maximumOriginY;
+            this.TileTransform.CellHeight = tileSizeInTileUnitsY;
+            this.TileTransform.CellWidth = tileSizeInTileUnitsX;
+            this.TileTransform.OriginX = minimumOriginX;
+            this.TileTransform.OriginY = maximumOriginY;
         }
 
         public VirtualRasterNeighborhood8<TBand> GetNeighborhood8(int tileIndex, int bandIndex)
         {
-            int tileXindex = this.tileGridIndexX[tileIndex];
-            int tileYindex = this.tileGridIndexY[tileIndex];
+            return this.GetNeighborhood8(this.tileGridIndexX[tileIndex], this.tileGridIndexY[tileIndex], bandIndex);
+        }
 
-            int northIndex = tileYindex - 1;
-            int southIndex = tileYindex + 1;
-            int eastIndex = tileXindex + 1;
-            int westIndex = tileXindex - 1;
+        private VirtualRasterNeighborhood8<TBand> GetNeighborhood8(int tileGridIndexX, int tileGridIndexY, int bandIndex)
+        {
+            Raster<TBand>? center = this.tileGrid[tileGridIndexY, tileGridIndexX];
+            if (center == null)
+            {
+                throw new NotSupportedException("No tile is loaded at index (" + tileGridIndexX + ", " + tileGridIndexY + ").");
+            }
+
+            int northIndex = tileGridIndexY - 1;
+            int southIndex = tileGridIndexY + 1;
+            int eastIndex = tileGridIndexX + 1;
+            int westIndex = tileGridIndexX - 1;
 
             Raster<TBand>? north = null;
             Raster<TBand>? northeast = null;
             Raster<TBand>? northwest = null;
             if (northIndex >= 0)
             {
-                north = this.tileGrid[northIndex, tileXindex];
+                north = this.tileGrid[northIndex, tileGridIndexX];
                 if (eastIndex < this.VirtualRasterSizeInTilesX)
                 {
                     northeast = this.tileGrid[northIndex, eastIndex];
@@ -205,7 +217,7 @@ namespace Mars.Clouds.GdalExtensions
             Raster<TBand>? southwest = null;
             if (southIndex < this.VirtualRasterSizeInTilesY)
             {
-                south = this.tileGrid[southIndex, tileXindex];
+                south = this.tileGrid[southIndex, tileGridIndexX];
                 if (eastIndex < this.VirtualRasterSizeInTilesX)
                 {
                     southeast = this.tileGrid[southIndex, eastIndex];
@@ -219,16 +231,16 @@ namespace Mars.Clouds.GdalExtensions
             Raster<TBand>? east = null;
             if (eastIndex < this.VirtualRasterSizeInTilesX)
             {
-                east = this.tileGrid[tileYindex, eastIndex];
+                east = this.tileGrid[tileGridIndexY, eastIndex];
             }
 
             Raster<TBand>? west = null;
             if (westIndex >= 0)
             {
-                west = this.tileGrid[tileYindex, westIndex];
+                west = this.tileGrid[tileGridIndexY, westIndex];
             }
 
-            return new VirtualRasterNeighborhood8<TBand>(this.tiles[tileIndex].Bands[bandIndex])
+            return new VirtualRasterNeighborhood8<TBand>(center.Bands[bandIndex])
             {
                 North = north?.Bands[bandIndex],
                 Northeast = northeast?.Bands[bandIndex],
@@ -268,6 +280,22 @@ namespace Mars.Clouds.GdalExtensions
                 return false;
             }
 
+            return true;
+        }
+
+        public bool TryGetNeighborhood8(double x, double y, int bandIndex, [NotNullWhen(true)] out VirtualRasterNeighborhood8<TBand>? neighborhood)
+        {
+            (int gridXindex, int gridYindex) = this.TileTransform.GetCellIndices(x, y);
+            if ((gridXindex < 0) || (gridXindex >= this.VirtualRasterSizeInTilesX) ||
+                (gridYindex < 0) || (gridYindex >= this.VirtualRasterSizeInTilesY) ||
+                (this.tileGrid[gridYindex, gridXindex] == null))
+            {
+                // trivial cases: requested center tile location is off the grid or has no data
+                neighborhood = null;
+                return false;
+            }
+
+            neighborhood = this.GetNeighborhood8(gridXindex, gridYindex, bandIndex);
             return true;
         }
     }
