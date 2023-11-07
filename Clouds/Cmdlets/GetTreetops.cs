@@ -77,12 +77,12 @@ namespace Mars.Clouds.Cmdlets
             // this.Treetops is mandatory
         }
 
-        private static void AddToLayer(TreetopLayer treetopLayer, TileSearchState tileSearch, int treeID, double rowIndexFractional, double columnIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation)
+        private static void AddToLayer(TreetopLayer treetopLayer, TileSearchState tileSearch, int treeID, double yIndexFractional, double xIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation, double treeRadiusInCrsUnits)
         {
-            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.GetProjectedCoordinate(columnIndexFractional, rowIndexFractional);
+            (double centroidX, double centroidY) = tileSearch.Dsm.Transform.GetProjectedCoordinate(xIndexFractional, yIndexFractional);
             float treeHeightInCrsUnits = treetopElevation - groundElevationAtBaseOfTree;
             Debug.Assert((groundElevationAtBaseOfTree > -200.0F) && (groundElevationAtBaseOfTree < 30000.0F) && (treeHeightInCrsUnits < 400.0F));
-            treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits);
+            treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits, treeRadiusInCrsUnits);
         }
 
         protected override void ProcessRecord()
@@ -291,6 +291,7 @@ namespace Mars.Clouds.Cmdlets
             //}
             using DataSource? treetopFile = File.Exists(treetopFilePath) ? Ogr.Open(treetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(treetopFilePath, null);
             using TreetopLayer treetopLayer = new(treetopFile, tileSearch.Dsm.Crs);
+            double dsmCellSize = tileSearch.Dsm.Transform.GetCellSize();
             for (int dsmIndex = 0, dsmRowIndex = 0; dsmRowIndex < tileSearch.Dsm.YSize; ++dsmRowIndex) // y for north up rasters
             {
                 for (int dsmColumnIndex = 0; dsmColumnIndex < tileSearch.Dsm.XSize; ++dsmIndex, ++dsmColumnIndex) // x for north up rasters
@@ -320,20 +321,21 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     bool addTreetop;
+                    int radiusInCells;
                     if (this.Method == TreetopDetectionMethod.DsmRing)
                     {
-                        addTreetop = GetTreetops.RingSearch(dsmRowIndex, dsmColumnIndex, dsmZ, dtmElevation, (RingSearchState)tileSearch);
+                        (addTreetop, radiusInCells) = GetTreetops.RingSearch(dsmRowIndex, dsmColumnIndex, dsmZ, dtmElevation, (RingSearchState)tileSearch);
                     }
                     else
                     {
-                        addTreetop = this.RadiusSearch(dsmRowIndex, dsmColumnIndex, dsmZ, dtmElevation, tileSearch);
+                        (addTreetop, radiusInCells) = this.RadiusSearch(dsmRowIndex, dsmColumnIndex, dsmZ, dtmElevation, tileSearch);
                     }
 
                     // create point if this cell is a unique local maxima
                     if (addTreetop)
                     {
                         (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenter(dsmColumnIndex, dsmRowIndex);
-                        treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits);
+                        treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits, radiusInCells * dsmCellSize);
                     }
                 }
 
@@ -347,13 +349,14 @@ namespace Mars.Clouds.Cmdlets
                     for (int patchIndex = 0; patchIndex < tileSearch.TreetopEqualHeightPatches.Count; ++patchIndex)
                     {
                         SameHeightPatch<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
-                        (double centroidRowIndex, double centroidColumnIndex, float centroidElevation) = equalHeightPatch.GetCentroid();
-                        if (centroidRowIndex > maxPatchRowIndexToCommit)
+                        (double centroidXindex, double centroidYindex, float centroidElevation, float radiusInCells) = equalHeightPatch.GetCentroid();
+                        if (centroidYindex > maxPatchRowIndexToCommit)
                         {
                             break;
                         }
 
-                        GetTreetops.AddToLayer(treetopLayer, tileSearch, equalHeightPatch.ID, centroidRowIndex, centroidColumnIndex, centroidElevation, equalHeightPatch.Height);
+                        double radiusInCrsUnits = radiusInCells * dsmCellSize;
+                        GetTreetops.AddToLayer(treetopLayer, tileSearch, equalHeightPatch.ID, centroidYindex, centroidXindex, centroidElevation, equalHeightPatch.Height, radiusInCrsUnits);
                         maxPatchIndex = patchIndex;
                     }
 
@@ -368,9 +371,10 @@ namespace Mars.Clouds.Cmdlets
             for (int patchIndex = 0; patchIndex < tileSearch.TreetopEqualHeightPatches.Count; ++patchIndex)
             {
                 SameHeightPatch<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
-                (double centroidRowIndex, double centroidColumnIndex, float centroidElevation) = equalHeightPatch.GetCentroid();
+                (double centroidXindex, double centroidYindex, float centroidElevation, float radiusInCells) = equalHeightPatch.GetCentroid();
 
-                GetTreetops.AddToLayer(treetopLayer, tileSearch, equalHeightPatch.ID, centroidRowIndex, centroidColumnIndex, centroidElevation, equalHeightPatch.Height);
+                double radiusInCrsUnits = radiusInCells * dsmCellSize;
+                GetTreetops.AddToLayer(treetopLayer, tileSearch, equalHeightPatch.ID, centroidYindex, centroidXindex, centroidElevation, equalHeightPatch.Height, radiusInCrsUnits);
             }
 
             if ((this.Method == TreetopDetectionMethod.DsmRing) && (String.IsNullOrWhiteSpace(this.Diagnostics) == false))
@@ -395,7 +399,7 @@ namespace Mars.Clouds.Cmdlets
             return tileSearch.NextTreeID - 1;
         }
 
-        private bool RadiusSearch(int dsmRowIndex, int dsmColumnIndex, float dsmZ, float dtmElevation, TileSearchState searchState)
+        private (bool addTreetop, int radiusInCells) RadiusSearch(int dsmRowIndex, int dsmColumnIndex, float dsmZ, float dtmElevation, TileSearchState searchState)
         {
             float heightInCrsUnits = dsmZ - dtmElevation;
             float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
@@ -464,7 +468,7 @@ namespace Mars.Clouds.Cmdlets
                         // OnEqualHeightPatch() |= is therefore used with newEqualHeightPatchFound to avoid potentially creating both
                         // a patch and a treetop (or possibly multiple treetops, though that's unlikely).
                         dsmCellInEqualHeightPatch = true;
-                        newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmRowIndex, dsmColumnIndex, candidateZ, searchRowIndex, searchColumnIndex);
+                        newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmRowIndex, dsmColumnIndex, candidateZ, searchRowIndex, searchColumnIndex, rowSearchRadiusInCells);
                     }
                 }
 
@@ -476,7 +480,7 @@ namespace Mars.Clouds.Cmdlets
 
             if (higherCellFound)
             {
-                return false;
+                return (false, -1);
             }
             else if (dsmCellInEqualHeightPatch)
             {
@@ -486,15 +490,15 @@ namespace Mars.Clouds.Cmdlets
                     searchState.TreetopEqualHeightPatches.Add(searchState.MostRecentEqualHeightPatch);
                 }
 
-                return false;
+                return (false, -1);
             }
             else
             {
-                return true;
+                return (true, rowSearchRadiusInCells);
             }
         }
 
-        private static bool RingSearch(int dsmRowIndex, int dsmColumnIndex, float dsmZ, float dtmElevation, RingSearchState searchState)
+        private static (bool addTreetop, int radiusInCells) RingSearch(int dsmRowIndex, int dsmColumnIndex, float dsmZ, float dtmElevation, RingSearchState searchState)
         {
             float heightInCrsUnits = dsmZ - dtmElevation;
             float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
@@ -532,7 +536,7 @@ namespace Mars.Clouds.Cmdlets
                     else if ((searchZ == dsmZ) && (ringIndex == 0)) // first ring is eight neighboring cells
                     {
                         dsmCellInEqualHeightPatch = true;
-                        newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmRowIndex, dsmColumnIndex, dsmZ, searchRowIndex, searchColumnIndex);
+                        newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmRowIndex, dsmColumnIndex, dsmZ, searchRowIndex, searchColumnIndex, maxRingIndex);
                     }
 
                     if (searchZ < ringMinimumZ)
@@ -556,11 +560,13 @@ namespace Mars.Clouds.Cmdlets
 
             if (higherCellWithinInnerRings)
             {
-                return false;
+                return (false, -1);
             }
 
             float netProminence = 0.0F;
             float totalRange = 0.0F;
+            int maxTallerRingRadius = -1;
+            bool tallerRingRadiusFound = false;
             for (int ringIndex = 0; ringIndex < maxRingIndex; ++ringIndex)
             {
                 float ringProminence = dsmZ - maxRingHeight[ringIndex];
@@ -568,10 +574,18 @@ namespace Mars.Clouds.Cmdlets
 
                 netProminence += ringProminence;
                 totalRange += ringRange;
+                if ((tallerRingRadiusFound == false) && (ringProminence > 0.0F))
+                {
+                    maxTallerRingRadius = ringIndex;
+                }
+                else
+                {
+                    tallerRingRadiusFound = true;
+                }
             }
             if (netProminence >= Single.MaxValue)
             {
-                return false; // at least one ring (usually ring radius = 1) has no data
+                return (false, -1); // at least one ring (usually ring radius = 1) has no data
             }
             Debug.Assert((Single.IsNaN(netProminence) == false) && (netProminence > -100000.0F) && (netProminence < 10000.0F));
 
@@ -596,7 +610,7 @@ namespace Mars.Clouds.Cmdlets
 
             if (netProminenceNormalized <= 0.02F)
             {
-                return false;
+                return (false, -1);
             }
 
             if (dsmCellInEqualHeightPatch)
@@ -606,10 +620,10 @@ namespace Mars.Clouds.Cmdlets
                     searchState.AddMostRecentEqualHeightPatchAsTreetop();
                 }
 
-                return false;
+                return (false, -1);
             }
 
-            return true;
+            return (true, maxTallerRingRadius);
         }
 
         private class Ring
@@ -682,7 +696,7 @@ namespace Mars.Clouds.Cmdlets
                 this.TreetopEqualHeightPatches.Add(treetop);
             }
 
-            public bool OnEqualHeightPatch(int dsmRowIndex, int dsmColumnIndex, float candidateZ, int searchRowIndex, int searchColumnIndex)
+            public bool OnEqualHeightPatch(int dsmRowIndex, int dsmColumnIndex, float candidateZ, int searchRowIndex, int searchColumnIndex, int radiusInCells)
             {
                 // clear most recent patch if this is a different patch
                 if ((this.MostRecentEqualHeightPatch != null) && (this.MostRecentEqualHeightPatch.Height != candidateZ))
@@ -713,7 +727,7 @@ namespace Mars.Clouds.Cmdlets
                             this.TryGetDtmValueNoDataNan(searchRowIndex, searchColumnIndex, out float dtmSearchZ);
 
                             this.MostRecentEqualHeightPatch = candidatePatch;
-                            this.MostRecentEqualHeightPatch.Add(searchRowIndex, searchColumnIndex, dtmSearchZ);
+                            this.MostRecentEqualHeightPatch.Add(searchColumnIndex, searchRowIndex, dtmSearchZ);
                             break;
                         }
                     }
@@ -726,7 +740,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         this.TryGetDtmValueNoDataNan(searchRowIndex, searchColumnIndex, out float dtmSearchZ);
-                        this.MostRecentEqualHeightPatch = new(candidateZ, dsmRowIndex, dsmColumnIndex, dtmElevation, searchRowIndex, searchColumnIndex, dtmSearchZ);
+                        this.MostRecentEqualHeightPatch = new(candidateZ, dsmRowIndex, dsmColumnIndex, dtmElevation, searchRowIndex, searchColumnIndex, dtmSearchZ, radiusInCells);
 
                         newEqualHeightPatchFound = true;
                     }
@@ -734,7 +748,7 @@ namespace Mars.Clouds.Cmdlets
                 else
                 {
                     this.TryGetDtmValueNoDataNan(searchRowIndex, searchColumnIndex, out float dtmSearchZ);
-                    this.MostRecentEqualHeightPatch.Add(searchRowIndex, searchColumnIndex, dtmSearchZ);
+                    this.MostRecentEqualHeightPatch.Add(searchColumnIndex, searchRowIndex, dtmSearchZ);
                 }
 
                 return newEqualHeightPatchFound;

@@ -1,18 +1,21 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Mars.Clouds.Segmentation
 {
     internal class SameHeightPatch<TCell> where TCell : INumber<TCell>
     {
-        private readonly List<(int rowIndex, int columnIndex, TCell elevation)> cellsInPatch;
+        private readonly List<(int xIndex, int yIndex, TCell elevation)> cellsInPatch;
+        private readonly int radiusFromSingleCell;
 
         public int ID { get; set; }
         public TCell Height { get; private init; }
 
-        public SameHeightPatch(TCell height, int rowIndex1, int columnIndex1, TCell elevation1, int rowIndex2, int columnIndex2, TCell elevation2)
+        public SameHeightPatch(TCell height, int yIndex1, int xIndex1, TCell elevation1, int yIndex2, int xIndex2, TCell elevation2, int radiusInCells)
         {
-            this.cellsInPatch = new(2) { (rowIndex1, columnIndex1, elevation1), (rowIndex2, columnIndex2, elevation2) };
+            this.cellsInPatch = new(2) { (xIndex1, yIndex1, elevation1), (xIndex2, yIndex2, elevation2) };
+            this.radiusFromSingleCell = radiusInCells;
 
             this.ID = -1;
             this.Height = height;
@@ -23,9 +26,9 @@ namespace Mars.Clouds.Segmentation
             get { return this.cellsInPatch.Count; }
         }
 
-        public void Add(int rowIndex, int columnIndex, TCell elevation)
+        public void Add(int xIndex, int yIndex, TCell elevation)
         {
-            this.cellsInPatch.Add((rowIndex, columnIndex, elevation));
+            this.cellsInPatch.Add((xIndex, yIndex, elevation));
         }
 
         public bool Contains(int rowIndex, int columnIndex)
@@ -42,29 +45,53 @@ namespace Mars.Clouds.Segmentation
             return false;
         }
 
-        public (double rowIndexFractional, double columnIndexFractional, TCell elevation) GetCentroid()
+        public (double xIndexFractional, double yIndexFractional, TCell elevation, float radiusInCells) GetCentroid()
         {
             // assumes all cells are the same size
-            int columnIndexSum = 0;
-            int rowIndexSum = 0;
+            int xIndexSum = 0;
+            int yIndexSum = 0;
             TCell elevationSum = TCell.Zero;
             int cellsWithElevation = 0;
+            int minXindex = Int32.MaxValue;
+            int maxXindex = Int32.MinValue;
+            int minYindex = Int32.MaxValue;
+            int maxYindex = Int32.MinValue;
             for (int cellIndex = 0; cellIndex < this.cellsInPatch.Count; ++cellIndex)
             {
-                (int rowIndexInPatch, int columnIndexInPatch, TCell elevation) = this.cellsInPatch[cellIndex];
-                columnIndexSum += columnIndexInPatch;
-                rowIndexSum += rowIndexInPatch;
+                (int xIndexInPatch, int yIndexInPatch, TCell elevation) = this.cellsInPatch[cellIndex];
+                xIndexSum += xIndexInPatch;
+                yIndexSum += yIndexInPatch;
                 if (TCell.IsNaN(elevation) == false)
                 {
                     ++cellsWithElevation;
                     elevationSum += elevation;
                 }
+                if (xIndexInPatch < minXindex)
+                {
+                    minXindex = xIndexInPatch;
+                }
+                if (xIndexInPatch > maxXindex)
+                {
+                    maxXindex = xIndexInPatch;                    
+                }
+                if (yIndexInPatch < minYindex)
+                {
+                    minYindex = yIndexInPatch;
+                }
+                if (yIndexInPatch > maxYindex)
+                {
+                    maxYindex = yIndexInPatch;
+                }
             }
+
+            int xRangeInCells = maxXindex - minXindex;
+            int yRangeInCells = maxXindex - minXindex;
+            float radiusInCells = this.radiusFromSingleCell + 0.5F * Single.Sqrt(xRangeInCells * xRangeInCells + yRangeInCells * yRangeInCells);
 
             // xy location of centroid is the average cell index plus half of a cell
             // Since a centroid is in the middle of the cell its index is (cellRowIndex + 0.5, cellColumnIndex + 0.5).
             double cells = this.Count;
-            return (rowIndexSum / cells + 0.5F, columnIndexSum / cells + 0.5F, elevationSum / TCell.CreateChecked(cellsWithElevation));
+            return (xIndexSum / cells + 0.5F, yIndexSum / cells + 0.5F, elevationSum / TCell.CreateChecked(cellsWithElevation), radiusInCells);
         }
     }
 }

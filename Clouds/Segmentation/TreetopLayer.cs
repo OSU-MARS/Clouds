@@ -11,6 +11,7 @@ namespace Mars.Clouds.Segmentation
         private readonly int heightFieldIndex;
         private bool isDisposed;
         private readonly Layer layer;
+        private readonly int radiusFieldIndex;
         private readonly int treeIDfieldIndex;
         private readonly FeatureDefn treetopDefinition;
 
@@ -21,18 +22,22 @@ namespace Mars.Clouds.Segmentation
 
             int treeIDfieldCreationResult = this.layer.CreateField(new FieldDefn("treeID", FieldType.OFTInteger), approx_ok: 0);
             int heightFieldCreationResult = this.layer.CreateField(new FieldDefn("height", FieldType.OFTReal), approx_ok: 0);
-            if ((treeIDfieldCreationResult != OgrError.NONE) || (heightFieldCreationResult != OgrError.NONE))
+            int radiusFieldCreationResult = this.layer.CreateField(new FieldDefn("radius", FieldType.OFTReal), approx_ok: 0);
+            if ((treeIDfieldCreationResult != OgrError.NONE) || 
+                (heightFieldCreationResult != OgrError.NONE) ||
+                (radiusFieldCreationResult != OgrError.NONE))
             {
-                throw new InvalidOperationException("Failed to create tree ID or height field in treetop layer of '" + treetopFile + "' (tree ID OGR error code = " + treeIDfieldCreationResult + ", height field code = " + heightFieldCreationResult + ").");
+                throw new InvalidOperationException("Failed to create tree ID, height, or radius field in treetop layer of '" + treetopFile + "' (tree ID OGR error code = " + treeIDfieldCreationResult + ", height field code = " + heightFieldCreationResult + ").");
             }
 
             this.treeIDfieldIndex = this.layer.FindFieldIndex("treeID", bExactMatch: 1);
             this.heightFieldIndex = this.layer.FindFieldIndex("height", bExactMatch: 1);
-            Debug.Assert((this.treeIDfieldIndex >= 0) && (this.heightFieldIndex > this.treeIDfieldIndex));
+            this.radiusFieldIndex = this.layer.FindFieldIndex("radius", bExactMatch: 1);
+            Debug.Assert((this.treeIDfieldIndex >= 0) && (this.heightFieldIndex > this.treeIDfieldIndex) && (this.radiusFieldIndex > this.heightFieldIndex));
             this.treetopDefinition = this.layer.GetLayerDefn();
         }
 
-        public void Add(int id, double x, double y, double elevation, double height)
+        public void Add(int id, double x, double y, double elevation, double height, double radius)
         {
             Feature treetopCandidate = new(this.treetopDefinition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
@@ -40,6 +45,7 @@ namespace Mars.Clouds.Segmentation
             treetopCandidate.SetGeometry(treetopPosition);
             treetopCandidate.SetField(this.treeIDfieldIndex, id);
             treetopCandidate.SetField(this.heightFieldIndex, height);
+            treetopCandidate.SetField(this.radiusFieldIndex, radius);
             this.layer.CreateFeature(treetopCandidate);
         }
 

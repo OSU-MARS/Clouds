@@ -111,6 +111,11 @@ namespace Mars.Clouds.GdalExtensions
             return ((int)xIndex, (int)yIndex);
         }
 
+        public double GetCellSize()
+        {
+            return 0.5 * (this.CellWidth + Double.Abs(this.CellHeight));
+        }
+
         public double[] GetPadfTransform()
         {
             return new double[]
