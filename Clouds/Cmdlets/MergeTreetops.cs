@@ -8,10 +8,18 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
 {
+    /// <summary>
+    /// Merge treetop and taxa classification tiles into a single treetop file with class prevalence counts within each tree's nominal radius.
+    /// </summary>
+    /// <remarks>
+    /// IO bound as GDAL read speeds on both vector (.gpkg) and raster (.tif) tiles are low, as are write speeds (.gpkg, ~10 MB/s max but 
+    /// usually lower). Using 32 threads for tile loading instead of 16 has negligible effect.
+    /// </remarks>
     [Cmdlet(VerbsData.Merge, "Treetops")]
     public class MergeTreetops : GdalCmdlet
     {
@@ -198,25 +206,29 @@ namespace Mars.Clouds.Cmdlets
             (SortedList<string, Treetops> treetopsByTile, int tileFieldWidth, TimeSpan treetopLoadTime) = this.LoadTreetopTiles(treetopTilePaths, classificationTiles);
 
             // write merged and classified treetops
+            // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
             Stopwatch stopwatch = Stopwatch.StartNew();
             int totalTreetops = 0;
-            using DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, Array.Empty<string>());
+            DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, Array.Empty<string>());
             TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
             ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)
             {
-                float fractionComplete = (float)tileIndex / (float)treetopsByTile.Count;
-                progressRecord.StatusDescription = "Adding treetops to " + this.Merge + " (tile " + tileIndex + " of " + treetopsByTile.Count + ")...";
-                progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                this.WriteProgress(progressRecord);
+                if (tileIndex % 10 == 0)
+                {
+                    float fractionComplete = (float)tileIndex / (float)treetopsByTile.Count;
+                    progressRecord.StatusDescription = "Adding treetops to " + this.Merge + " (tile " + tileIndex + " of " + treetopsByTile.Count + ")...";
+                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
+                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                    this.WriteProgress(progressRecord);
+                }
 
                 Treetops treetops = treetopsByTile.Values[tileIndex];
                 mergedTreetopLayer.Add(treetopsByTile.Keys[tileIndex], treetops, this.ClassNames);
                 totalTreetops += treetops.Count;
             }
 
-            progressRecord.StatusDescription = "Writing " + totalTreetops.ToString("#,#,0") + " treetops...";
+            progressRecord.StatusDescription = "Completing write of " + totalTreetops.ToString("#,#,0") + " treetops to " + this.Merge + "...";
             progressRecord.PercentComplete = 0;
             progressRecord.SecondsRemaining = -1;
             this.WriteProgress(progressRecord);
@@ -225,7 +237,7 @@ namespace Mars.Clouds.Cmdlets
             // on the flush creates problems with reporting incomplete execution times and the cmdlet appearing to have exited while the
             // write is committing to disk.
             mergedTreetopLayer.Dispose();
-            mergedTreetopFile.FlushCache();
+            mergedTreetopFile.FlushCache(); // GDAL write speeds are only ~10 MB/s max
 
             stopwatch.Stop();
             TimeSpan writeTime = stopwatch.Elapsed;
