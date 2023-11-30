@@ -30,9 +30,9 @@ namespace Mars.Clouds.GdalExtensions
         {
             this.crs = null;
             this.tileGrid = new Raster<TBand>?[0, 0];
-            this.tileGridIndexX = Array.Empty<int>();
-            this.tileGridIndexY = Array.Empty<int>();
-            this.tiles = new();
+            this.tileGridIndexX = [];
+            this.tileGridIndexY = [];
+            this.tiles = [];
 
             this.TileCellSizeX = Double.NaN;
             this.TileCellSizeY = Double.NaN;

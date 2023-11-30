@@ -151,15 +151,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public double[] GetPadfTransform()
         {
-            return new double[]
-            {
-                this.OriginX,
-                this.CellWidth,
-                this.RowRotation,
-                this.OriginY,
-                this.ColumnRotation,
-                this.CellHeight
-            };
+            return [ this.OriginX, this.CellWidth, this.RowRotation, this.OriginY, this.ColumnRotation, this.CellHeight ];
         }
 
         public (double x, double y) GetProjectedCoordinate(double xIndexFractional, double yIndexFractional)

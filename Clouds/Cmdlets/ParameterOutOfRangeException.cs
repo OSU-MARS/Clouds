@@ -2,11 +2,7 @@
 
 namespace Mars.Clouds.Cmdlets
 {
-    internal class ParameterOutOfRangeException : ArgumentOutOfRangeException
+    internal class ParameterOutOfRangeException(string parameterName, string message) : ArgumentOutOfRangeException(parameterName, message)
     {
-        public ParameterOutOfRangeException(string parameterName, string message)
-            : base(parameterName, message) 
-        {
-        }
     }
 }

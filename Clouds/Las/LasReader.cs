@@ -335,10 +335,7 @@ namespace Mars.Clouds.Las
 
         private void ReadVariableLengthRecords(LasFile lasFile, bool readExtendedRecords)
         {
-            if (this.isDisposed)
-            {
-                throw new ObjectDisposedException(nameof(LasReader));
-            }
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
             Span<byte> vlrBytes = stackalloc byte[readExtendedRecords ? 60 : 54];
             for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)

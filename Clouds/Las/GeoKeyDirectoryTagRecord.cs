@@ -18,7 +18,7 @@ namespace Mars.Clouds.Las
         public GeoKeyDirectoryTagRecord(UInt16 reserved, UInt16 recordLengthAfterHeader, string description, ReadOnlySpan<byte> vlrBytes) 
             : base(reserved, LasFile.LasfProjection, GeoKeyDirectoryTagRecord.LasfProjectionRecordID, recordLengthAfterHeader, description)
         {
-            this.KeyEntries = new();
+            this.KeyEntries = [];
 
             this.KeyDirectoryVersion = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
             this.KeyRevision = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]);

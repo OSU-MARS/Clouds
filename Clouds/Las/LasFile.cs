@@ -21,7 +21,7 @@ namespace Mars.Clouds.Las
         public LasFile(LasReader reader)
         {
             this.Header = reader.ReadHeader();
-            this.VariableLengthRecords = new();
+            this.VariableLengthRecords = [];
 
             reader.ReadVariableLengthRecords(this);
         }

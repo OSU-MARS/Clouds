@@ -13,7 +13,7 @@ namespace Mars.Clouds.GdalExtensions
 
         protected Grid(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
         {
-            crs.ExportToWkt(out string wkt, Array.Empty<string>());
+            crs.ExportToWkt(out string wkt, []);
             this.Crs = new(wkt);
             this.Transform = new(transform);
             this.XSize = xSize;

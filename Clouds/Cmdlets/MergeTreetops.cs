@@ -41,7 +41,7 @@ namespace Mars.Clouds.Cmdlets
 
         public MergeTreetops() 
         { 
-            this.ClassNames = new string[] { "conifer", "nonForest", "hardwood", "unknown" };
+            this.ClassNames = [ "conifer", "nonForest", "hardwood", "unknown" ];
             this.Merge = "treetops.gpkg";
         }
 
@@ -118,7 +118,7 @@ namespace Mars.Clouds.Cmdlets
                     using DataSource? treetopTile = Ogr.Open(treetopTilePath, update: 0);
                     using TreetopLayer treetopLayer = TreetopLayer.Open(treetopTile);
                     SpatialReference tileCrs = treetopLayer.GetSpatialReference();
-                    if (tileCrs.IsSame(classificationTiles.Crs, Array.Empty<string>()) != 1)
+                    if (tileCrs.IsSame(classificationTiles.Crs, []) != 1)
                     {
                         throw new NotSupportedException("Tile '" + treetopTilePath + "' does not have the same coordinate system ('" + tileCrs.GetName() + "') as other tiles ('" + classificationTiles.Crs.GetName() + "').");
                     }
@@ -209,7 +209,7 @@ namespace Mars.Clouds.Cmdlets
             // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
             Stopwatch stopwatch = Stopwatch.StartNew();
             int totalTreetops = 0;
-            DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, Array.Empty<string>());
+            DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, []);
             TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
             ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)

@@ -85,7 +85,7 @@ namespace Mars.Clouds.Segmentation
 
         public static TreetopLayer CreateOrOverwrite(DataSource treetopFile, SpatialReference coordinateSystem, int tileFieldWidth, IList<string> classNames)
         {
-            Layer gdalLayer = treetopFile.CreateLayer(TreetopLayer.DefaultLayerName, coordinateSystem, wkbGeometryType.wkbPoint25D, new string[] { "OVERWRITE=YES" }); // https://gdal.org/drivers/vector/gpkg.html#vector-gpkg or equivalent for creation options
+            Layer gdalLayer = treetopFile.CreateLayer(TreetopLayer.DefaultLayerName, coordinateSystem, wkbGeometryType.wkbPoint25D, [ "OVERWRITE=YES" ]); // https://gdal.org/drivers/vector/gpkg.html#vector-gpkg or equivalent for creation options
             gdalLayer.StartTransaction();
 
             int tileFieldCreationResult = OgrError.NONE;

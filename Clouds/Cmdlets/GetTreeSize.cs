@@ -19,7 +19,7 @@ namespace Mars.Clouds.Cmdlets
 
         public GetTreeSize()
         {
-            this.directorySizes = new();
+            this.directorySizes = [];
 
             this.EnumerationOptions = new()
             {

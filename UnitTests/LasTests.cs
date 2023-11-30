@@ -134,7 +134,7 @@ namespace Mars.Clouds.UnitTests
 
             AbaGrid abaGrid = new(gridCellDefinitions, lasGrid);
 
-            Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, Array.Empty<string>()) == 1);
+            Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, []) == 1);
             Assert.IsTrue(GridGeoTransform.Equals(gridCellDefinitions.Transform, abaGrid.Transform));
             Assert.IsTrue(gridCellDefinitions.XSize == abaGrid.XSize);
             Assert.IsTrue(gridCellDefinitions.YSize == abaGrid.YSize);

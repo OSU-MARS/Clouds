@@ -97,7 +97,7 @@ namespace Mars.Clouds.Cmdlets
             if (dsmDirectoryPath == null)
             {
                 // single tile case
-                dsmTilePaths = new List<string>() { this.Dsm };
+                dsmTilePaths = [ this.Dsm ];
                 this.LoadTile(this.Dsm, this.Dtm);
                 this.dsmTiles.BuildGrid();
                 this.dtmTiles.BuildGrid();
@@ -200,7 +200,7 @@ namespace Mars.Clouds.Cmdlets
                     });
                 });
 
-                while (findTreetopsTask.Wait(progressInterval))
+                while (findTreetopsTask.Wait(progressInterval) == false)
                 {
                     float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Count;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
@@ -619,7 +619,7 @@ namespace Mars.Clouds.Cmdlets
 
                 this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsLinearUnits * this.DsmCellHeight));
                 this.MostRecentEqualHeightPatch = null;
-                this.TreetopEqualHeightPatches = new();
+                this.TreetopEqualHeightPatches = [];
             }
 
             public void AddMostRecentEqualHeightPatchAsTreetop()

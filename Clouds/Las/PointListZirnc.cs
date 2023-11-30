@@ -30,14 +30,14 @@ namespace Mars.Clouds.Las
             this.XIndex = xIndex;
             this.YIndex = yIndex;
 
-            this.Classification = new();
-            this.Intensity = new();
-            this.ReturnNumber = new();
+            this.Classification = [];
+            this.Intensity = [];
+            this.ReturnNumber = [];
             this.XMax = Double.MinValue;
             this.XMin = Double.MaxValue;
             this.YMax = Double.MinValue;
             this.YMin = Double.MaxValue;
-            this.Z = new();
+            this.Z = [];
         }
 
         public int Capacity

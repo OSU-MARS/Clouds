@@ -1,5 +1,5 @@
-$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net7.0"))
-#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net7.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
+#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
 $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native')
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
@@ -15,9 +15,11 @@ Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 #Get-Treetops -Method ChmRadius -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops CHM")) -Verbose
 
 # treetop identification across many tiles
-#Get-Treetops -Method ChmRadius -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops CHM")) -Verbose
-#Get-Treetops -Method DsmRadius -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM")) -Verbose
+Get-Treetops -Method DsmRing -Dsm "D:\Elliott\GIS\DOGAMI\2009 OLC South Coast\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2009 OLC South Coast\treetops DSM ring")) -Verbose
 #Get-Treetops -Method DsmRing -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM ring")) -Verbose
+
+#Get-Treetops -Method DsmRadius -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM")) -Verbose
+#Get-Treetops -Method ChmRadius -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\*.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops CHM")) -Verbose
 
 # merge treetop and taxa classification tiles into a single treetop file with class prevalence counts within each tree's nominal radius
 #Merge-Treetops -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM ring")) -Classification "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\species 10 m non-normalized" -Verbose

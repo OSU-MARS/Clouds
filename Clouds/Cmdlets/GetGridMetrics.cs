@@ -153,7 +153,7 @@ namespace Mars.Clouds.Cmdlets
             this.WriteProgress(gridMetricsProgress);
 
             TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(10.0);
-            Task[] gridMetricsTasks = new Task[] { readPoints, calculateMetrics };
+            Task[] gridMetricsTasks = [ readPoints, calculateMetrics ];
             while (Task.WaitAll(gridMetricsTasks, progressUpdateInterval) == false)
             {
                 // unlike Task.WaitAll(Task[]), Task.WaitAll(Task[], TimeSpan) does not unblock and throw the exception if any task faults
@@ -202,7 +202,7 @@ namespace Mars.Clouds.Cmdlets
             }
             else
             {
-                lasTilePaths = new string[] { this.Las };
+                lasTilePaths = [ this.Las ];
             }
 
             Stopwatch stopwatch = new();

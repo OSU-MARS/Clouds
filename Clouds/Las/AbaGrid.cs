@@ -105,7 +105,7 @@ namespace Mars.Clouds.Las
         {
             Debug.Assert((this.Transform.ColumnRotation == 0.0) && (this.Transform.RowRotation == 0.0));
 
-            List<PointListZirnc> completedCells = new();
+            List<PointListZirnc> completedCells = [];
             (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) = this.GetIntersectingCellIndices(completedTile.GridExtent);
             for (int yIndex = yIndexMin; yIndex <= yIndexMaxInclusive; ++yIndex)
             {

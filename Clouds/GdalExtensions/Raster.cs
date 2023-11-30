@@ -17,12 +17,7 @@ namespace Mars.Clouds.GdalExtensions
 
         static Raster()
         {
-            Raster.DefaultCompressionOptions = new string[]
-            {
-                "COMPRESS=DEFLATE", 
-                "PREDICTOR=2", 
-                "ZLEVEL=9"
-            };
+            Raster.DefaultCompressionOptions = [ "COMPRESS=DEFLATE", "PREDICTOR=2", "ZLEVEL=9" ];
         }
 
         protected Raster(Dataset rasterDataset, DataType cellDataType)
