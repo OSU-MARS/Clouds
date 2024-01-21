@@ -8,7 +8,7 @@ namespace Mars.Clouds.Las
 {
     public class AbaGrid : Grid<PointListZirnc>
     {
-        public AbaGrid(Raster<UInt16> abaCellDefinitions, LasTileGrid lasGrid)
+        public AbaGrid(Raster abaCellDefinitions, int abaCellDefinitionBandIndex, LasTileGrid lasGrid)
             : base(abaCellDefinitions.Crs, abaCellDefinitions.Transform, abaCellDefinitions.XSize, abaCellDefinitions.YSize)
         {
             if ((this.Transform.ColumnRotation != 0.0) || (this.Transform.RowRotation != 0.0))
@@ -19,23 +19,23 @@ namespace Mars.Clouds.Las
             {
                 throw new NotSupportedException("ABA grid cells are larger than point cloud tiles in at least one dimension. This is not currently supported by the simple calculations used to intersect ABA grid cells and LiDAR tiles.");
             }
-            if (abaCellDefinitions.Bands.Length != 1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(abaCellDefinitions));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(abaCellDefinitions.BandCount, abaCellDefinitionBandIndex, nameof(abaCellDefinitions));
 
             // ABA grid might extend beyond tile grid, in which areas ABA cells need not be created as no points are available
             Debug.Assert(this.Transform.CellHeight < 0.0);
             (double lasGridXmin, double lasGridXmax, double lasGridYmin, double lasGridYmax) = lasGrid.GetExtent();
             (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = this.GetIntersectingCellIndices(lasGridXmin, lasGridXmax, lasGridYmin, lasGridYmax);
 
-            RasterBand < UInt16> abaCellMask = abaCellDefinitions.Bands[0];
+            RasterBand abaCellMask = abaCellDefinitions.GetBand(abaCellDefinitionBandIndex);
             for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
             {
                 for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
                 {
-                    UInt16 maskValue = abaCellMask[abaXindex, abaYindex];
-                    if (abaCellMask.IsNoData(maskValue))
+                    // could possibly optimize for abaCellMask.HasNoData == false case but, for now, assume no data values are defined often
+                    // enough (even if unused) it's not worth trying to avoid the virtual function call here as it'll be branch predicted
+                    // ABA grid cells are typically large enough the number of checks needed is fairly low and typed access is difficult as
+                    // C# lacks support for generic constructor arguments.
+                    if (abaCellMask.IsNoData(abaXindex, abaYindex))
                     {
                         continue;
                     }

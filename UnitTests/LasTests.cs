@@ -132,7 +132,7 @@ namespace Mars.Clouds.UnitTests
             GridGeoTransform lasFileTransform = new(lasTile.GridExtent.XMin, lasTile.GridExtent.YMax, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
             LasTileGrid lasGrid = new(lasTile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
 
-            AbaGrid abaGrid = new(gridCellDefinitions, lasGrid);
+            AbaGrid abaGrid = new(gridCellDefinitions, 0, lasGrid);
 
             Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, []) == 1);
             Assert.IsTrue(GridGeoTransform.Equals(gridCellDefinitions.Transform, abaGrid.Transform));

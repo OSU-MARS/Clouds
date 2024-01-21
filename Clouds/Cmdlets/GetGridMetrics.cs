@@ -19,7 +19,11 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Raster defining grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the raster. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
+        [Parameter(HelpMessage = "Band number of -AbaCells to use in defining grid metrics cells. Ones based, default is the first band.")]
+        [ValidateRange(1, 1000)]
+        public int AbaCellBand { get; set; }
+
+        [Parameter(Mandatory = true, HelpMessage = "Raster with a band defining the grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the first band. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
         [ValidateNotNullOrEmpty]
         public string? AbaCells { get; set; }
 
@@ -35,6 +39,9 @@ namespace Mars.Clouds.Cmdlets
 
         public GetGridMetrics()
         {
+            this.AbaCellBand = 1;
+            // this.AbaCells is mandatory
+            // this.Las is mandatory
             this.MaxTiles = 25;
         }
 
@@ -43,11 +50,11 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert(String.IsNullOrEmpty(this.AbaCells) == false);
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.AbaCells, Access.GA_ReadOnly);
-            Raster<UInt16> abaCellDefinitions = new(gridCellDefinitionDataset);
+            Raster abaCellDefinitions = Raster.Create(gridCellDefinitionDataset);
             int abaEpsg = Int32.Parse(abaCellDefinitions.Crs.GetAuthorityCode("PROJCS"));
 
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(abaEpsg);
-            AbaGrid abaGrid = new(abaCellDefinitions, lasGrid);
+            AbaGrid abaGrid = new(abaCellDefinitions, this.AbaCellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
 
             StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
             BlockingCollection<List<PointListZirnc>> fullyPopulatedAbaCells = new(this.MaxTiles);

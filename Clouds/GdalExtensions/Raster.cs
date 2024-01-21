@@ -8,11 +8,13 @@ using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    public class Raster : Grid
+    public abstract class Raster : Grid
     {
         protected static readonly string[] DefaultCompressionOptions;
 
         protected DataType CellDataType { get; private init; }
+
+        public abstract int BandCount { get; }
         public string FilePath { get; set; }
 
         static Raster()
@@ -31,6 +33,36 @@ namespace Mars.Clouds.GdalExtensions
             this.CellDataType = cellDataType;
             this.FilePath = String.Empty;
         }
+
+        public static Raster Create(Dataset rasterDataset)
+        {
+            if (rasterDataset.RasterCount < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Dataset contains no raster bands.");
+            }
+            Band band1 = rasterDataset.GetRasterBand(1);
+            return band1.DataType switch
+            {
+                DataType.GDT_Byte => new Raster<byte>(rasterDataset),
+                DataType.GDT_Float32 => new Raster<float>(rasterDataset),
+                DataType.GDT_Float64 => new Raster<double>(rasterDataset),
+                DataType.GDT_Int8 => new Raster<sbyte>(rasterDataset),
+                DataType.GDT_Int16 => new Raster<Int16>(rasterDataset),
+                DataType.GDT_Int32 => new Raster<Int32>(rasterDataset),
+                DataType.GDT_Int64 => new Raster<Int64>(rasterDataset),
+                DataType.GDT_UInt16 => new Raster<Int64>(rasterDataset),
+                DataType.GDT_UInt32 => new Raster<Int64>(rasterDataset),
+                DataType.GDT_UInt64 => new Raster<Int64>(rasterDataset),
+                DataType.GDT_Unknown => throw new NotSupportedException("Raster data type is unknown (" + band1.DataType + ")."),
+                DataType.GDT_CFloat32 or
+                DataType.GDT_CFloat64 or
+                DataType.GDT_CInt16 or
+                DataType.GDT_CInt32 or
+                _ => throw new NotSupportedException("Unhandled raster data type " + band1.DataType + ".")
+            };
+        }
+
+        public abstract RasterBand GetBand(int bandIndex);
 
         public static (DataType dataType, long totalCells) GetBandProperties(Dataset rasterDataset)
         {
@@ -185,6 +217,16 @@ namespace Mars.Clouds.GdalExtensions
             {
                 this.Bands[bandIndex] = new(name: String.Empty, this.Crs, this.Transform, this.XSize, this.YSize, new(this.Data, bandOffset, cellsPerBand));
             }
+        }
+
+        public override int BandCount 
+        { 
+            get { return this.Bands.Length; } 
+        }
+
+        public override RasterBand GetBand(int bandIndex)
+        {
+            return this.Bands[bandIndex];
         }
 
         public static TBand GetDefaultNoDataValue()

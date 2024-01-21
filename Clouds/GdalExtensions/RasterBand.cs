@@ -5,13 +5,27 @@ using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    public class RasterBand<TBand> : Grid where TBand : INumber<TBand>
+    public abstract class RasterBand : Grid
     {
-        private bool noDataIsNaN;
+        protected bool NoDataIsNaN { get; set; }
 
-        public Memory<TBand> Data { get; private init; }
-        public bool HasNoDataValue { get; private set; }
+        public bool HasNoDataValue { get; protected set; }
         public string Name { get; set; }
+
+        protected RasterBand(string name, SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
+            : base(crs, transform, xSize, ySize)
+        {
+            this.HasNoDataValue = false;
+            this.NoDataIsNaN = false;
+            this.Name = name;
+        }
+
+        public abstract bool IsNoData(int xIndex, int yIndex);
+    }
+
+    public class RasterBand<TBand> : RasterBand where TBand : INumber<TBand>
+    {
+        public Memory<TBand> Data { get; private init; }
         public TBand NoDataValue { get; private set; }
 
         public RasterBand(Band band, SpatialReference crs, GridGeoTransform transform, Memory<TBand> data)
@@ -28,18 +42,14 @@ namespace Mars.Clouds.GdalExtensions
             {
                 this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
             }
-            this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
+            this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
         }
 
         public RasterBand(string name, SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, Memory<TBand> data)
-            : base(crs, transform, xSize, ySize)
+            : base(name, crs, transform, xSize, ySize)
         {
-            this.HasNoDataValue = false;
-            this.noDataIsNaN = false;
-            this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
-
             this.Data = data;
-            this.Name = name;
+            this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
         }
 
         public TBand this[int index]
@@ -58,7 +68,16 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.HasNoDataValue)
             {
-                return this.noDataIsNaN ? TBand.IsNaN(value) : this.NoDataValue == value; // have to test with IsNaN() since float.NaN == float.NaN = false
+                return this.NoDataIsNaN ? TBand.IsNaN(value) : this.NoDataValue == value; // have to test with IsNaN() since float.NaN == float.NaN = false
+            }
+            return false;
+        }
+
+        public override bool IsNoData(int xIndex, int yIndex)
+        {
+            if (this.HasNoDataValue)
+            {
+                return this.IsNoData(this[xIndex, yIndex]);
             }
             return false;
         }
@@ -66,7 +85,7 @@ namespace Mars.Clouds.GdalExtensions
         public void SetNoDataValue(TBand noDataValue)
         {
             this.HasNoDataValue = true;
-            this.noDataIsNaN = TBand.IsNaN(this.NoDataValue);
+            this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
         }
     }

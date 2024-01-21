@@ -21,6 +21,11 @@ $abaMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s03540w067
 #$abaMetrics = Get-GridMetrics -AbaCells $abaGridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Verbose
 #$abaMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metrics 10 m non-normalized.tif");
 
+# high resolution grid metrics bootstrapping from DSM (or CHM or DTM) grid
+# Just under 4 Mcells => 600 MB float32 .tif @ 57 standard metrics bands.
+#$dsmMetrics = Get-GridMetrics -AbaCells "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\s04020w06930.tif" -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\s04020w06930.las" -Verbose
+#$dsmMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s04020w06930 DSM resolution.tif");
+
 # read header from .las or .laz file
 $lasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))
 $lazFile = Get-LasInfo -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\pointz\s03780w06540.laz"
