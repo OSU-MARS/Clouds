@@ -68,13 +68,13 @@ namespace Mars.Clouds.Cmdlets
                 {
                     string treetopTilePath = treetopTilePaths[tileIndex];
                     string treetopTileBasename = Path.GetFileNameWithoutExtension(treetopTilePath);
-                    string classificationTilePath = Path.Combine(this.Classification, treetopTileBasename + ".tif");
+                    string classificationTilePath = Path.Combine(this.Classification, treetopTileBasename + Constant.File.GeoTiffExtension);
                     if (File.Exists(classificationTilePath) == false)
                     {
                         return; // treetop tile has no corresponding classification tile
                     }
 
-                    Raster<byte> classificationTile = GdalCmdlet.ReadRaster<byte>(classificationTilePath);
+                    Raster<byte> classificationTile = Raster<byte>.Read(classificationTilePath);
                     lock (classificationTiles)
                     {
                         classificationTiles.Add(classificationTile);

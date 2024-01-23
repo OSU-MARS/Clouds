@@ -23,7 +23,7 @@ namespace Mars.Clouds.Cmdlets
 
             this.EnumerationOptions = new()
             {
-                BufferSize = 256 * 1024,
+                BufferSize = 512 * 1024,
                 IgnoreInaccessible = true
             };
         }
@@ -52,7 +52,7 @@ namespace Mars.Clouds.Cmdlets
                     case ".ldr~1":
                         directorySize.Ldr += fileInfo.Length;
                         break;
-                    case ".tif":
+                    case Constant.File.GeoTiffExtension:
                     case ".tiff":
                         directorySize.Tiff += fileInfo.Length;
                         break;

@@ -11,7 +11,7 @@ namespace Mars.Clouds.GdalExtensions
             string fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
             string driverName = fileExtension switch
             {
-                ".tif" or ".tiff" => "GTiff",
+                Constant.File.GeoTiffExtension or ".tiff" => "GTiff",
                 _ => throw new NotSupportedException("Unknown file extension '" + fileExtension + "' in path '" + filePath + "'.")
             };
 

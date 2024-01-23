@@ -45,26 +45,5 @@ namespace Mars.Clouds.Cmdlets
 
             return (directoryPath,  searchPattern);
         }
-
-        protected static Raster<TBand> ReadRaster<TBand>(string rasterPath) where TBand : INumber<TBand>
-        {
-            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-            (DataType dataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
-
-            DataType expectedDataType = Raster<TBand>.GetGdalDataType();
-            if (dataType != expectedDataType)
-            {
-                throw new NotSupportedException("Raster '" + rasterPath + "' has data type " + dataType + " instead of " + expectedDataType + ".");
-            }
-            if (totalCells > Array.MaxLength)
-            {
-                throw new NotSupportedException("Raster '" + rasterPath + "' has " + totalCells + " cells, which exceeds the maximum supported size of " + Array.MaxLength + " cells.");
-            }
-
-            return new Raster<TBand>(rasterDataset)
-            {
-                FilePath = rasterPath
-            };
-        }
     }
 }

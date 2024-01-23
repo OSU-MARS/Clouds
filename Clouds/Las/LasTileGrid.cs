@@ -17,7 +17,7 @@ namespace Mars.Clouds.Las
             {
                 LasTile tile = tiles[tileIndex];
                 (double xCentroid, double yCentroid) = tile.GridExtent.GetCentroid();
-                (int xIndex, int yIndex) = this.Transform.GetCellIndices(xCentroid, yCentroid);
+                (int xIndex, int yIndex) = this.GetCellIndices(xCentroid, yCentroid);
                 // if needed, expand tile's grid extent to match the grid assuming tiles are anchored at their min (x, y) corner
                 // This provides correction for tile sizes being slightly smaller than grid pitch. See LasTileGrid.Create().
                 // An alternative to maintianing a separate grid extent per tile would be editing the LAS header's extents. However, this
@@ -33,7 +33,7 @@ namespace Mars.Clouds.Las
             this.NonNullCells = tiles.Count;
         }
 
-        public static LasTileGrid Create(IList<LasTile> tiles, int requiredEpsg)
+        public static LasTileGrid Create(IList<LasTile> tiles, bool snap, int? requiredEpsg)
         {
             if (tiles.Count < 1)
             {
@@ -43,7 +43,11 @@ namespace Mars.Clouds.Las
             LasTile tile = tiles[0];
             SpatialReference gridCrs = tile.GetSpatialReference();
             int tileEpsg = tile.GetProjectedCoordinateSystemEpsg();
-            if (tileEpsg != requiredEpsg)
+            if (requiredEpsg.HasValue == false)
+            {
+                requiredEpsg = tileEpsg;
+            }
+            else if (tileEpsg != requiredEpsg)
             {
                 throw new ArgumentOutOfRangeException(nameof(tiles), "Tile EPSG:" + tileEpsg + " does not match the tile grid's required EPSG of " + requiredEpsg + ".");
             }
@@ -122,6 +126,15 @@ namespace Mars.Clouds.Las
             double gridCellWidth = gridXsizeInCells > 1 ? (gridMaxMinX - gridMinX) / (gridXsizeInCells - 1) : gridTotalWidth;
             double gridCellHeight = gridYSizeInCells > 1 ? (gridMaxMinY - gridMinY) / (gridYSizeInCells - 1) : gridTotalHeight;
             double gridOriginY = gridYSizeInCells > 1 ? Double.Max(gridMaxMinY + gridCellHeight, gridMaxY) : gridMaxY;
+
+            if (snap)
+            {
+                gridCellWidth = Double.Ceiling(gridCellWidth);
+                gridCellHeight = gridCellHeight > 0.0 ? Double.Ceiling(gridCellHeight) : Double.Floor(gridCellHeight);
+                gridMinX = Double.Ceiling(gridMinX);
+                gridOriginY = Double.Ceiling(gridOriginY);
+            }
+
             GridGeoTransform gridTransform = new(gridMinX, gridOriginY, gridCellWidth, -gridCellHeight);
             return new LasTileGrid(gridCrs, gridTransform, gridXsizeInCells, gridYSizeInCells, tiles);
         }

@@ -24,6 +24,29 @@ namespace Mars.Clouds.GdalExtensions
             this.RowRotation = 0.0;
         }
 
+        public GridGeoTransform(Dataset rasterDataset)
+        {
+            // https://gdal.org/api/gdaldataset_cpp.html#classGDALDataset_1a5101119705f5fa2bc1344ab26f66fd1d
+            double[] padfTransform = new double[6];
+            rasterDataset.GetGeoTransform(padfTransform);
+            this.OriginX = padfTransform[0];
+            this.CellWidth = padfTransform[1];
+            this.RowRotation = padfTransform[2];
+            this.OriginY = padfTransform[3];
+            this.ColumnRotation = padfTransform[4];
+            this.CellHeight = padfTransform[5];
+
+            if ((Double.IsFinite(this.OriginX) == false) ||
+                (Double.IsFinite(this.OriginY) == false) ||
+                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
+                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
+                (Double.IsFinite(this.ColumnRotation) == false) ||
+                (Double.IsFinite(this.RowRotation) == false))
+            {
+                throw new ArgumentOutOfRangeException(nameof(rasterDataset));
+            }
+        }
+
         public GridGeoTransform(double originX, double originY, double cellWidth, double cellHeight)
             : this(originX, originY, cellWidth, cellHeight, 0.0, 0.0)
         { 
@@ -64,27 +87,9 @@ namespace Mars.Clouds.GdalExtensions
             this.ColumnRotation = columnRotation;
         }
 
-        public GridGeoTransform(Dataset rasterDataset)
+        public GridGeoTransform(Extent extent, double cellWidth, double cellHeight)
+            : this(extent.XMin, extent.YMax, cellWidth, cellHeight > 0.0 ? -cellHeight : cellHeight) // since y max is origin cell height must be negative
         {
-            // https://gdal.org/api/gdaldataset_cpp.html#classGDALDataset_1a5101119705f5fa2bc1344ab26f66fd1d
-            double[] padfTransform = new double[6];
-            rasterDataset.GetGeoTransform(padfTransform);
-            this.OriginX = padfTransform[0];
-            this.CellWidth = padfTransform[1];
-            this.RowRotation = padfTransform[2];
-            this.OriginY = padfTransform[3];
-            this.ColumnRotation = padfTransform[4];
-            this.CellHeight = padfTransform[5];
-
-            if ((Double.IsFinite(this.OriginX) == false) ||
-                (Double.IsFinite(this.OriginY) == false) ||
-                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
-                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
-                (Double.IsFinite(this.ColumnRotation) == false) ||
-                (Double.IsFinite(this.RowRotation) == false))
-            {
-                throw new ArgumentOutOfRangeException(nameof(rasterDataset));
-            }
         }
 
         public GridGeoTransform(GridGeoTransform other)
@@ -123,25 +128,6 @@ namespace Mars.Clouds.GdalExtensions
             Debug.Assert(this.CellHeight < 0.0);
             (double xMin, double yMax) = this.GetProjectedCoordinate(xIndex, yIndex);
             return (xMin, xMin + this.CellWidth, yMax + this.CellHeight, yMax);
-        }
-
-        public (int xIndex, int yIndex) GetCellIndices(double x, double y)
-        {
-            double yIndexFractional = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
-            double xIndexFractional = (x - this.OriginX - yIndexFractional * this.RowRotation) / this.CellWidth;
-
-            int xIndex = (int)xIndexFractional;
-            int yIndex = (int)yIndexFractional;
-            // integer truncation truncates towards zero
-            if (xIndexFractional < 0.0) 
-            {
-                --xIndex;
-            }
-            if (yIndexFractional < 0.0)
-            {
-                --yIndex;
-            }
-            return (xIndex, yIndex);
         }
 
         public double GetCellSize()

@@ -31,12 +31,12 @@ namespace Mars.Clouds.Segmentation
             this.cellsInPatch.Add((xIndex, yIndex, elevation));
         }
 
-        public bool Contains(int rowIndex, int columnIndex)
+        public bool Contains(int xIndex, int yIndex)
         {
             for (int cellIndex = 0; cellIndex < this.cellsInPatch.Count; ++cellIndex)
             {
-                (int rowIndexInPatch, int columnIndexInPatch, TCell _) = this.cellsInPatch[cellIndex];
-                if ((rowIndexInPatch == rowIndex) && (columnIndexInPatch == columnIndex))
+                (int xIndexInPatch, int yIndexInPatch, TCell _) = this.cellsInPatch[cellIndex];
+                if ((xIndexInPatch == xIndex) && (yIndexInPatch == yIndex))
                 {
                     return true;
                 }

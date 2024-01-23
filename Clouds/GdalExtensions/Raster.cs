@@ -267,6 +267,27 @@ namespace Mars.Clouds.GdalExtensions
             };
         }
 
+        public static Raster<TBand> Read(string rasterPath)
+        {
+            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
+            (DataType dataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
+
+            DataType expectedDataType = Raster<TBand>.GetGdalDataType();
+            if (dataType != expectedDataType)
+            {
+                throw new NotSupportedException("Raster '" + rasterPath + "' has data type " + dataType + " instead of " + expectedDataType + ".");
+            }
+            if (totalCells > Array.MaxLength)
+            {
+                throw new NotSupportedException("Raster '" + rasterPath + "' has " + totalCells + " cells, which exceeds the maximum supported size of " + Array.MaxLength + " cells.");
+            }
+
+            return new Raster<TBand>(rasterDataset)
+            {
+                FilePath = rasterPath
+            };
+        }
+
         public void Write(string rasterPath)
         {
             Driver rasterDriver = GdalExtensions.GetDriverByExtension(rasterPath);

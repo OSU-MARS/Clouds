@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Mars.Clouds.GdalExtensions;
-using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -37,6 +35,50 @@ namespace Mars.Clouds.Las
 
                 this.isDisposed = true;
             }
+        }
+
+        private void MoveToPoints(LasTile tile)
+        {
+            if (tile.IsPointFormatCompressed())
+            {
+                throw new ArgumentOutOfRangeException(nameof(tile), ".laz files are not currently supported.");
+            }
+
+            LasHeader10 lasHeader = tile.Header;
+            if (this.BaseStream.Position != lasHeader.OffsetToPointData)
+            {
+                this.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
+            }
+        }
+
+        /// <returns>false if point is classified as noise or is withdrawn</returns>
+        private static bool ReadClassification(ReadOnlySpan<byte> pointBytes, int pointFormat, out PointClassification classification)
+        {
+            if (pointFormat < 6)
+            {
+                // bits 0-4: classification, 5: synthetic, 6: key point, 7: withheld
+                byte classificationAndFlags = pointBytes[15];
+                classification = (PointClassification)(classificationAndFlags & 0x1f);
+                if ((classificationAndFlags & 0x80) != 0)
+                {
+                    return false; // withheld (LAS 1.4 R15 Table 8)
+                }
+            }
+            else
+            {
+                classification = (PointClassification)pointBytes[16];
+                byte classificationFlags = pointBytes[15]; // 0: synthetic, 1: key point, 2: withheld, 3: overlap, 4-5: scanner channel, 6: scan direction, 7: edge of flight line
+                if ((classificationFlags & 0x04) != 0)
+                {
+                    return false; // withheld (LAS 1.4 R15 Table 16)
+                }
+            }
+            if ((classification == PointClassification.HighNoise) || (classification == PointClassification.LowNoise))
+            {
+                return false; // exclude noise points from consideration
+            }
+
+            return true;
         }
 
         public LasHeader10 ReadHeader()
@@ -162,19 +204,13 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
-        public void ReadPointsToGridZirn(LasTile tile, Grid<PointListZirnc> abaGrid)
+        public void ReadPointsToGrid(LasTile tile, Grid<PointListZirnc> abaGrid)
         {
             LasHeader10 lasHeader = tile.Header;
-            if (tile.IsPointFormatCompressed())
-            {
-                throw new ArgumentOutOfRangeException(nameof(tile), ".laz files are not currently supported.");
-            }
-            if (this.BaseStream.Position != lasHeader.OffsetToPointData)
-            {
-                this.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
-            }
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(tile);
 
-            // cell capacity to a reasonable fraction of the tile's average density
+            // set cell capacity to a reasonable fraction of the tile's average density
             // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
             double cellArea = abaGrid.Transform.GetCellArea();
             double tileArea = tile.GridExtent.GetArea();
@@ -205,13 +241,8 @@ namespace Mars.Clouds.Las
             // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
             // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
             // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
-            byte pointFormat = lasHeader.PointDataRecordFormat;
-            if (pointFormat > 10)
-            {
-                throw new NotSupportedException("Unhandled point data record format " + pointFormat + ".");
-            }
-
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
             double xOffset = lasHeader.XOffset;
             double xScale = lasHeader.XScaleFactor;
             double yOffset = lasHeader.YOffset;
@@ -223,24 +254,14 @@ namespace Mars.Clouds.Las
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
-
-                PointClassification classification;
-                if (pointFormat < 6)
+                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
                 {
-                    classification = (PointClassification)(pointBytes[15] & 0x1f);
-                }
-                else
-                {
-                    classification = (PointClassification)pointBytes[16];
-                }
-                if ((classification == PointClassification.HighNoise) || (classification == PointClassification.LowNoise))
-                {
-                    continue; // exclude noise points from consideration
+                    continue;
                 }
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = abaGrid.Transform.GetCellIndices(x, y);
+                (int xIndex, int yIndex) = abaGrid.GetCellIndices(x, y);
                 if ((xIndex < 0) || (yIndex < 0) || (xIndex >= abaGrid.XSize) || (yIndex >= abaGrid.YSize))
                 {
                     // point lies outside of the ABA grid and is therefore not of interest
@@ -300,6 +321,47 @@ namespace Mars.Clouds.Las
                         //}
                     }
                 }
+            }
+        }
+
+        public void ReadUpperPointsToGrid(LasTile tile, PointGridZ dsmTilePoints)
+        {
+            LasHeader10 lasHeader = tile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(tile);
+
+            // read points
+            // See performance notes in ReadPointsToGrid().
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            double xOffset = lasHeader.XOffset;
+            double xScale = lasHeader.XScaleFactor;
+            double yOffset = lasHeader.YOffset;
+            double yScale = lasHeader.YScaleFactor;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
+            {
+                this.BaseStream.ReadExactly(pointBytes);
+                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
+                {
+                    continue;
+                }
+
+                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                (int xIndex, int yIndex) = dsmTilePoints.GetCellIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTilePoints.XSize) || (yIndex >= dsmTilePoints.YSize))
+                {
+                    // point lies outside of the DSM tile and is therefore not of interest
+                    // If the DSM tile's extents are equal to or larger than the .las tile in all directions reaching this case is an error.
+                    // For now DSM tiles with smaller extents than the .las tile aren't supported.
+                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTilePoints.GetExtentString() + " .");
+                }
+
+                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                dsmTilePoints.TryAddUpperPoint(xIndex, yIndex, z);
             }
         }
 
@@ -444,6 +506,15 @@ namespace Mars.Clouds.Las
                 {
                     this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
                 }
+            }
+        }
+
+        private static void ThrowOnUnsupportedPointFormat(LasHeader10 lasHeader)
+        {
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            if (pointFormat > 10)
+            {
+                throw new NotSupportedException("Unhandled point data record format " + pointFormat + ".");
             }
         }
     }
