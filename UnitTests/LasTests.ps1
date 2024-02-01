@@ -4,9 +4,6 @@ $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native') # f
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
-$tile = "s04230w06810" # "s04020w07050"
-Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile.tif" -Snap -Verbose
-
 # cmdlet execution with a .las tile and ABA (area based approach) grid cell definition
 # This script illustrates cmdlet use. Paths need to be changed to files available for area of interest.
 $abaGridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
@@ -25,10 +22,10 @@ $abaMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s03540w067
 #$abaMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metrics 10 m non-normalized.tif");
 
 # DSM generation, single tile
-$tile = "s04230w06810" # "s04020w07050"
+$tile = "s04200w06810" # "s04230w06810" # "s04020w07050"
 Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile.tif" -Snap -Verbose
-Get-Dsm -UpperPoints 1 -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile control.tif" -Verbose
-Get-Dsm -UpperPoints 10 -WriteUpperPoints -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile points.tif" -Verbose
+Get-Dsm -UpperPoints 1 -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile control.tif" -Snap -Verbose
+Get-Dsm -UpperPoints 10 -WriteUpperPoints -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile points.tif" -Snap -Verbose
 
 # high resolution grid metrics bootstrapping from DSM (or CHM or DTM) grid
 # Just under 4 Mcells => 600 MB float32 .tif @ 57 standard metrics bands.

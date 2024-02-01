@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Segmentation;
 using OSGeo.OGR;
 using OSGeo.OSR;
@@ -8,7 +9,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
         public MergeTreetops() 
         { 
             this.ClassNames = [ "conifer", "nonForest", "hardwood", "unknown" ];
-            this.Merge = "treetops.gpkg";
+            this.Merge = "treetops" + Constant.File.GeoPackageExtension;
         }
 
         private (VirtualRaster<byte> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(IList<string> treetopTilePaths)
@@ -67,8 +67,8 @@ namespace Mars.Clouds.Cmdlets
                 Parallel.For(0, treetopTilePaths.Count, parallelOptions, (int tileIndex) =>
                 {
                     string treetopTilePath = treetopTilePaths[tileIndex];
-                    string treetopTileBasename = Path.GetFileNameWithoutExtension(treetopTilePath);
-                    string classificationTilePath = Path.Combine(this.Classification, treetopTileBasename + Constant.File.GeoTiffExtension);
+                    string treetopTileName = Tile.GetName(treetopTilePath);
+                    string classificationTilePath = Path.Combine(this.Classification, treetopTileName + Constant.File.GeoTiffExtension);
                     if (File.Exists(classificationTilePath) == false)
                     {
                         return; // treetop tile has no corresponding classification tile
@@ -88,7 +88,7 @@ namespace Mars.Clouds.Cmdlets
             while (loadClassificationVrt.Wait(progressInterval) == false)
             {
                 float fractionComplete = (float)tilesLoaded / (float)treetopTilePaths.Count;
-                progressRecord.StatusDescription = "Loading classification tile " + Path.GetFileNameWithoutExtension(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
+                progressRecord.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
                 progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                 progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(progressRecord);
@@ -135,14 +135,14 @@ namespace Mars.Clouds.Cmdlets
                         treetops.GetClassCounts(neighborhood);
                     }
 
-                    string treetopTileBaseName = Path.GetFileNameWithoutExtension(treetopTilePath);
+                    string treetopTileName = Tile.GetName(treetopTilePath);
                     lock (treetopsByTile)
                     {
-                        treetopsByTile.Add(treetopTileBaseName, treetops);
+                        treetopsByTile.Add(treetopTileName, treetops);
 
-                        if (tileFieldWidth < treetopTileBaseName.Length)
+                        if (tileFieldWidth < treetopTileName.Length)
                         {
-                            tileFieldWidth = treetopTileBaseName.Length;
+                            tileFieldWidth = treetopTileName.Length;
                         }
 
                         ++tilesLoaded;
@@ -155,7 +155,7 @@ namespace Mars.Clouds.Cmdlets
             while (loadAndClassifyTreetops.Wait(progressInterval) == false)
             {
                 float fractionComplete = (float)tilesLoaded / (float)treetopTilePaths.Count;
-                progressRecord.StatusDescription = "Loading treetops and classifications in " + Path.GetFileNameWithoutExtension(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
+                progressRecord.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
                 progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                 progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(progressRecord);
@@ -169,7 +169,7 @@ namespace Mars.Clouds.Cmdlets
         {
             Debug.Assert((this.Classification != null) && (this.Treetops != null));
 
-            (string? treetopDirectoryPath, string? treetopTileSearchPattern) = GdalCmdlet.ExtractTileDirectoryPathAndSearchPattern(this.Treetops, "*.gpkg");
+            (string? treetopDirectoryPath, string? treetopTileSearchPattern) = GdalCmdlet.ExtractTileDirectoryPathAndSearchPattern(this.Treetops, "*" + Constant.File.GeoPackageExtension);
             if (treetopDirectoryPath == null)
             {
                 throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must indicate an existing directory where treetop files are located.");
@@ -209,7 +209,7 @@ namespace Mars.Clouds.Cmdlets
             // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
             Stopwatch stopwatch = Stopwatch.StartNew();
             int totalTreetops = 0;
-            DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, []);
+            using DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, []);
             TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
             ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)

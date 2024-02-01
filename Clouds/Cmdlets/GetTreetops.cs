@@ -51,8 +51,8 @@ namespace Mars.Clouds.Cmdlets
             (string? dsmDirectoryPath, string? dsmTileSearchPattern) = GdalCmdlet.ExtractTileDirectoryPathAndSearchPattern(this.Dsm, "*" + Constant.File.GeoTiffExtension);
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            TreetopSearch treetopLocator = TreetopSearch.Create(this.Method);
-            treetopLocator.DiagnosticsPath = this.Diagnostics;
+            TreetopSearch treetopSearch = TreetopSearch.Create(this.Method);
+            treetopSearch.DiagnosticsPath = this.Diagnostics;
 
             List<string> dsmTilePaths;
             int treetopCandidates = 0;
@@ -60,9 +60,9 @@ namespace Mars.Clouds.Cmdlets
             {
                 // single tile case
                 dsmTilePaths = [ this.Dsm ];
-                treetopLocator.AddTile(this.Dsm, this.Dtm);
-                treetopLocator.BuildGrids();
-                treetopCandidates += treetopLocator.FindTreetops(0, this.Treetops);
+                treetopSearch.AddTile(this.Dsm, this.Dtm);
+                treetopSearch.BuildGrids();
+                treetopCandidates += treetopSearch.FindTreetops(0, this.Treetops);
             }
             else
             {
@@ -101,11 +101,11 @@ namespace Mars.Clouds.Cmdlets
                     {
                         // find treetops in tile
                         string dsmTilePath = dsmTilePaths[tileIndex];
-                        string dsmTileName = Path.GetFileName(dsmTilePath);
-                        string dtmTilePath = Path.Combine(this.Dtm, dsmTileName);
-                        treetopLocator.AddTile(dsmTilePath, dtmTilePath);
+                        string dsmTileFileName = Path.GetFileName(dsmTilePath);
+                        string dtmTilePath = Path.Combine(this.Dtm, dsmTileFileName);
+                        treetopSearch.AddTile(dsmTilePath, dtmTilePath);
 
-                        mostRecentDsmTileName = Path.GetFileName(dsmTilePath);
+                        mostRecentDsmTileName = dsmTileFileName;
                         Interlocked.Increment(ref tilesLoaded);
                     });
                 });
@@ -121,24 +121,24 @@ namespace Mars.Clouds.Cmdlets
                     this.WriteProgress(progressRecord);
                 }
 
-                treetopLocator.BuildGrids();
+                treetopSearch.BuildGrids();
 
                 // find treetop candidates in all tiles
                 mostRecentDsmTileName = null;
                 int tilesCompleted = 0;
                 Task findTreetopsTask = Task.Run(() =>
                 {
-                    Parallel.For(0, treetopLocator.DsmTiles.TileCount, parallelOptions, (int tileIndex) =>
+                    Parallel.For(0, treetopSearch.DsmTiles.TileCount, parallelOptions, (int tileIndex) =>
                     {
-                        string dsmTilePath = treetopLocator.DsmTiles[tileIndex].FilePath;
+                        string dsmTilePath = treetopSearch.DsmTiles[tileIndex].FilePath;
                         Debug.Assert(String.IsNullOrWhiteSpace(dsmTilePath) == false);
 
                         string dsmFileName = Path.GetFileName(dsmTilePath);
                         string dsmFileNameWithoutExtension = Path.GetFileNameWithoutExtension(dsmFileName);
-                        string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + ".gpkg");
+                        string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + Constant.File.GeoPackageExtension);
                         mostRecentDsmTileName = dsmFileName;
 
-                        int treetopCandidatesInTile = treetopLocator.FindTreetops(tileIndex, treetopTilePath);
+                        int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndex, treetopTilePath);
                         Interlocked.Add(ref treetopCandidates, treetopCandidatesInTile);
                         Interlocked.Increment(ref tilesCompleted);
                     });

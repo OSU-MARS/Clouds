@@ -13,7 +13,7 @@ namespace Mars.Clouds.Segmentation
             this.SearchChm = false;
         }
 
-        protected override TreetopTileSearchState CreateSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
+        protected override TreetopTileSearchState CreateSearchState(string _, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
         {
             return new(dsmNeighborhood, dtmNeighborhood)
             {
@@ -118,11 +118,6 @@ namespace Mars.Clouds.Segmentation
             {
                 return (true, ySearchRadiusInCells);
             }
-        }
-
-        protected override void WriteDiagnostics(string tileName, TreetopTileSearchState tileState)
-        {
-            throw new NotSupportedException("Diagnostics path is set but diagnostics were not computed for radius search.");
         }
     }
 }

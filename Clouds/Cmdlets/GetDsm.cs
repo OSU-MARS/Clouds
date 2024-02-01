@@ -9,6 +9,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.IO;
 using System.Reflection.Metadata;
+using Mars.Clouds.Extensions;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -99,11 +100,6 @@ namespace Mars.Clouds.Cmdlets
                             {
                                 continue;
                             }
-                            string? tileName = Path.GetFileNameWithoutExtension(lasTile.FilePath);
-                            if (String.IsNullOrWhiteSpace(tileName))
-                            {
-                                throw new NotSupportedException("Tile name '" + tileName + "' is null or whitespace. Could not extract name of .las file from path '" + lasTile.FilePath + "'.");
-                            }
 
                             GridGeoTransform lasTileTransform = new(lasTile.GridExtent, this.CellSize, this.CellSize);
                             PointGridZ dsmTilePointZ = new(lasTile.GetSpatialReference(), lasTileTransform, dsmTileCellsX, dsmTileCellsY, this.UpperPoints);
@@ -119,6 +115,7 @@ namespace Mars.Clouds.Cmdlets
                                 break;
                             }
 
+                            string tileName = Tile.GetName(lasTile.FilePath);
                             loadedTiles.Add((tileName, dsmTilePointZ));
                             ++lasTilesLoaded;
 

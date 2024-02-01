@@ -6,8 +6,8 @@ Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 $dataPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County"
 
 # DSM ring-based treetop identification
-$tile = "s04230w06810"
-Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM with outlier rejection\$tile.tif" -Dtm "$dataPath\DTM\$tile.tif" -Diagnostics "$dataPath\DSM with outlier rejection\ring diagnostics" -Treetops "$dataPath\DSM with outlier rejection\$tile.gpkg" -Verbose
+$tile = "s04200w06810" # "s04230w06810"
+Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM with outlier rejection\$tile control.tif" -Dtm "$dataPath\DTM\$tile.tif" -Diagnostics "$dataPath\DSM with outlier rejection\ring diagnostics" -Treetops "$dataPath\DSM with outlier rejection\$tile.gpkg" -Verbose
 
 # DSM radius-based treetop identification
 #$tile = "s04020w06690"

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopTileSearchState
+    internal class TreetopTileSearchState : IDisposable
     {
         public float CrsLinearUnits { get; private init; }
         public RasterBand<float> Dsm { get; private init; }
@@ -50,6 +50,24 @@ namespace Mars.Clouds.Segmentation
             SameHeightPatch<float> treetop = this.MostRecentEqualHeightPatch;
             treetop.ID = this.NextTreeID++;
             this.TreetopEqualHeightPatches.Add(treetop);
+        }
+
+        public void Dispose()
+        {
+            this.Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Do nothing by default as there's nothing to dispose at the base class level.
+        /// </summary>
+        /// <remarks>
+        /// Disposability is necessary to derived classes which stream diagnostics data (e.g. <see cref="TreetopRingSearchState">) as,
+        /// if they're not explicitly disposed when tile processing finishes, Dispose() may never be called. In such situations pending
+        /// transactions on layers won't commit, leaving .gpkg or other files in an invalid state.
+        /// </remarks>
+        protected virtual void Dispose(bool disposing)
+        {
         }
 
         public bool OnEqualHeightPatch(int dsmXindex, int dsmYindex, float candidateZ, int searchXindex, int searchYindex, int radiusInCells)

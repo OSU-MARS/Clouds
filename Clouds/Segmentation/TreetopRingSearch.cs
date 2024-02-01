@@ -7,9 +7,14 @@ namespace Mars.Clouds.Segmentation
 {
     internal class TreetopRingSearch : TreetopSearch<TreetopRingSearchState>
     {
-        protected override TreetopRingSearchState CreateSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
+        protected override TreetopRingSearchState CreateSearchState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
         {
-            return new TreetopRingSearchState(dsmNeighborhood, dtmNeighborhood, String.IsNullOrWhiteSpace(this.DiagnosticsPath) == false)
+            string? ringDiagnosticsFilePath = null;
+            if (String.IsNullOrWhiteSpace(this.DiagnosticsPath) == false)
+            {
+                ringDiagnosticsFilePath = Path.Combine(this.DiagnosticsPath, tileName + Constant.File.GeoPackageExtension);
+            }
+            return new TreetopRingSearchState(dsmNeighborhood, dtmNeighborhood, ringDiagnosticsFilePath)
             {
                 MinimumCandidateHeight = this.MinimumHeight
             };
@@ -115,21 +120,10 @@ namespace Mars.Clouds.Segmentation
 
             float netProminenceNormalized = netProminence / heightInCrsUnits;
 
-            if (searchState.RingData != null)
+            if (searchState.RingDiagnostics != null)
             {
-                Debug.Assert((searchState.NetProminenceBand != null) && (searchState.RadiusBand != null) && (searchState.RangeProminenceRatioBand != null) && (searchState.TotalProminenceBand != null) && (searchState.TotalRangeBand != null));
-
-                searchState.NetProminenceBand[dsmXindex, dsmYindex] = netProminenceNormalized;
-                searchState.RadiusBand[dsmXindex, dsmYindex] = maxRingIndex;
-
-                float rangeProminenceRatioNormalized = totalRange / (maxRingIndex * heightInCrsUnits * netProminence);
-                searchState.RangeProminenceRatioBand[dsmXindex, dsmYindex] = rangeProminenceRatioNormalized;
-
-                float totalProminenceNormalized = netProminence / (maxRingIndex * heightInCrsUnits);
-                searchState.TotalProminenceBand[dsmXindex, dsmYindex] = totalProminenceNormalized;
-
-                float totalRangeNormalized = totalRange / (maxRingIndex * heightInCrsUnits);
-                searchState.TotalRangeBand[dsmXindex, dsmYindex] = totalRangeNormalized;
+                (double x, double y) = searchState.Dsm.Transform.GetCellCenter(dsmXindex, dsmYindex);
+                searchState.RingDiagnostics.Add(searchState.NextTreeID, x, y, dtmElevation, dsmZ, searchRadiusInCrsUnits, netProminenceNormalized, maxRingIndex, maxRingHeight, minRingHeight);
             }
 
             if (netProminenceNormalized <= 0.02F)
@@ -148,18 +142,6 @@ namespace Mars.Clouds.Segmentation
             }
 
             return (true, maxTallerRingRadius);
-        }
-
-        protected override void WriteDiagnostics(string tileName, TreetopRingSearchState ringSearch)
-        {
-            Debug.Assert(this.DiagnosticsPath != null);
-            if (ringSearch.RingData == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(ringSearch), "No diagnostic data is available from tile's ring search.");
-            }
-
-            string diagnosticsRasterPath = Path.Combine(this.DiagnosticsPath, tileName + Constant.File.GeoTiffExtension);
-            ringSearch.RingData.Write(diagnosticsRasterPath);
         }
     }
 }

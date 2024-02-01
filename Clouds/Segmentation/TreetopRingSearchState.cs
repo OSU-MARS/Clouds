@@ -1,43 +1,45 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
+using OSGeo.OGR;
 using System;
+using System.IO;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopRingSearchState : TreetopTileSearchState
+    internal class TreetopRingSearchState : TreetopTileSearchState, IDisposable
     {
-        public RasterBand<float>? NetProminenceBand { get; private init; }
-        public RasterBand<float>? RadiusBand { get; private init; }
-        public RasterBand<float>? RangeProminenceRatioBand { get; private init; }
-        public RasterBand<float>? TotalProminenceBand { get; private init; }
-        public RasterBand<float>? TotalRangeBand { get; private init; }
+        private bool isDisposed;
+        private readonly DataSource? ringLayer;
 
-        public Raster<float>? RingData { get; private init; }
+        public RingLayer? RingDiagnostics { get; private init; }
 
-        public TreetopRingSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood, bool diagnostics)
+        public TreetopRingSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood, string? ringFilePath)
             : base(dsmNeighborhood, dtmNeighborhood)
         {
-            if (diagnostics)
+            if (ringFilePath != null)
             {
-                this.RingData = new(this.Dsm.Crs, this.Dsm.Transform, this.Dsm.XSize, this.Dsm.YSize, 5, Single.NaN);
-                this.NetProminenceBand = this.RingData.Bands[0];
-                this.RangeProminenceRatioBand = this.RingData.Bands[1];
-                this.TotalProminenceBand = this.RingData.Bands[2];
-                this.TotalRangeBand = this.RingData.Bands[3];
-                this.RadiusBand = this.RingData.Bands[4];
-
-                this.NetProminenceBand.Name = "net prominence normalized";
-                this.RangeProminenceRatioBand.Name = "range-prominence normalized";
-                this.TotalProminenceBand.Name = "total prominence normalized";
-                this.TotalRangeBand.Name = "total range normalized";
-                this.RadiusBand.Name = "radius";
+                string tileName = Tile.GetName(ringFilePath);
+                this.ringLayer = File.Exists(ringFilePath) ? Ogr.Open(ringFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(ringFilePath, null);
+                this.RingDiagnostics = RingLayer.CreateOrOverwrite(this.ringLayer, dsmNeighborhood.Center.Crs, tileName);
             }
             else
             {
-                this.NetProminenceBand = null;
-                this.RangeProminenceRatioBand = null;
-                this.RingData = null;
-                this.TotalProminenceBand = null;
-                this.TotalRangeBand = null;
+                this.ringLayer = null;
+                this.RingDiagnostics = null;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!isDisposed)
+            {
+                if (disposing)
+                {
+                    this.RingDiagnostics?.Dispose();
+                    this.ringLayer?.Dispose();
+                }
+
+                this.isDisposed = true;
             }
         }
     }

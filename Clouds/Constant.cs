@@ -4,6 +4,7 @@
     {
         public static class File
         {
+            public const string GeoPackageExtension = ".gpkg";
             public const string GeoTiffExtension = ".tif";
         }
 

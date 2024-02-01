@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.Cmdlets;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using OSGeo.OGR;
 using System;
@@ -83,13 +84,13 @@ namespace Mars.Clouds.Segmentation
             treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits, treeRadiusInCrsUnits);
         }
 
-        protected abstract TSearchState CreateSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood);
+        protected abstract TSearchState CreateSearchState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood);
 
         public override int FindTreetops(int tileIndex, string treetopFilePath)
         {
             VirtualRasterNeighborhood8<float> dsmNeighborhood = this.DsmTiles.GetNeighborhood8(tileIndex, 0);
             VirtualRasterNeighborhood8<float> dtmNeighborhood = this.DtmTiles.GetNeighborhood8(tileIndex, 0);
-            TSearchState tileSearch = this.CreateSearchState(dsmNeighborhood, dtmNeighborhood);
+            using TSearchState tileSearch = this.CreateSearchState(Tile.GetName(this.DsmTiles[tileIndex].FilePath), dsmNeighborhood, dtmNeighborhood);
 
             // set default minimum height if one was not specified
             // Assumption here is that xy and z units match, which is not necessarily enforced.
@@ -185,14 +186,11 @@ namespace Mars.Clouds.Segmentation
                 {
                     throw new NotSupportedException("Treetop file path '" + treetopFilePath + " is not a path to a file.");
                 }
-                this.WriteDiagnostics(treetopFileNameWithoutExtension, tileSearch);
             }
 
             return tileSearch.NextTreeID - 1;
         }
 
         protected abstract (bool addTreetop, int radiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TSearchState searchState);
-
-        protected abstract void WriteDiagnostics(string tileName, TSearchState tileState);
     }
 }
