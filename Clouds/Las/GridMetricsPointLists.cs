@@ -6,41 +6,42 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
-    public class AbaGrid : Grid<PointListZirnc>
+    public class GridMetricsPointLists : Grid<PointListZirnc>
     {
-        public AbaGrid(Raster abaCellDefinitions, int abaCellDefinitionBandIndex, LasTileGrid lasGrid)
-            : base(abaCellDefinitions.Crs, abaCellDefinitions.Transform, abaCellDefinitions.XSize, abaCellDefinitions.YSize)
+        public GridMetricsPointLists(Raster cellDefinitions, int cellDefinitionBandIndex, LasTileGrid lasGrid)
+            : base(cellDefinitions.Crs, cellDefinitions.Transform, cellDefinitions.XSize, cellDefinitions.YSize)
         {
             if ((this.Transform.ColumnRotation != 0.0) || (this.Transform.RowRotation != 0.0))
             {
-                throw new NotSupportedException("Grid is rotated with respect to its coordinate system. This is not currently supported by the simple calculations used to intersect ABA grid cells and point cloud tiles.");
+                throw new NotSupportedException("Grid is rotated with respect to its coordinate system. This is not currently supported by the simple calculations used to intersect grid cells and point cloud tiles.");
             }
             if ((this.Transform.CellWidth > lasGrid.Transform.CellWidth) || (Double.Abs(this.Transform.CellHeight) > Double.Abs(lasGrid.Transform.CellHeight)))
             {
-                throw new NotSupportedException("ABA grid cells are larger than point cloud tiles in at least one dimension. This is not currently supported by the simple calculations used to intersect ABA grid cells and LiDAR tiles.");
+                throw new NotSupportedException("Grid cells are larger than point cloud tiles in at least one dimension. This is not currently supported by the simple calculations used to intersect grid cells and LiDAR tiles.");
             }
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(abaCellDefinitions.BandCount, abaCellDefinitionBandIndex, nameof(abaCellDefinitions));
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cellDefinitions.BandCount, cellDefinitionBandIndex, nameof(cellDefinitions));
 
-            // ABA grid might extend beyond tile grid, in which areas ABA cells need not be created as no points are available
+            // metrics grid might extend beyond tile grid, in which areas metrics cells need not be created as no points are available
             Debug.Assert(this.Transform.CellHeight < 0.0);
             (double lasGridXmin, double lasGridXmax, double lasGridYmin, double lasGridYmax) = lasGrid.GetExtent();
-            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = this.GetIntersectingCellIndices(lasGridXmin, lasGridXmax, lasGridYmin, lasGridYmax);
+            (int metricsXindexMin, int metricsXindexMaxInclusive, int metricsYindexMin, int metricsYindexMaxInclusive) = this.GetIntersectingCellIndices(lasGridXmin, lasGridXmax, lasGridYmin, lasGridYmax);
 
-            RasterBand abaCellMask = abaCellDefinitions.GetBand(abaCellDefinitionBandIndex);
-            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            RasterBand cellMask = cellDefinitions.GetBand(cellDefinitionBandIndex);
+            for (int metricsYindex = metricsYindexMin; metricsYindex <= metricsYindexMaxInclusive; ++metricsYindex)
             {
-                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                for (int metricsXindex = metricsXindexMin; metricsXindex <= metricsXindexMaxInclusive; ++metricsXindex)
                 {
-                    // could possibly optimize for abaCellMask.HasNoData == false case but, for now, assume no data values are defined often
+                    // could possibly optimize for cellMask.HasNoData == false case but, for now, assume no data values are defined often
                     // enough (even if unused) it's not worth trying to avoid the virtual function call here as it'll be branch predicted
-                    // ABA grid cells are typically large enough the number of checks needed is fairly low and typed access is difficult as
+                    // Grid cells are typically large enough the number of checks needed is fairly low and typed access is difficult as
                     // C# lacks support for generic constructor arguments.
-                    if (abaCellMask.IsNoData(abaXindex, abaYindex))
+                    if (cellMask.IsNoData(metricsXindex, metricsYindex))
                     {
                         continue;
                     }
 
-                    // four intersection possibilities given ABA cells and LiDAR/SfM tiles at the same rotation with cells being smaller than tiles
+                    // four intersection possibilities given metrics cells and LiDAR/SfM tiles at the same rotation with cells being smaller
+                    // than tiles
                     // Intersection testing is done by checking which tile each of the cell's corners is in. Assuming a conventional east-west,
                     // north-south aligned coordinate system,
                     //
@@ -49,10 +50,10 @@ namespace Mars.Clouds.Las
                     // cell crosses two tiles north-south: x min and max indices are the same, y min and max corner indices differ by 1
                     // cell overlaps four tiles: both x and y min and max indices differ
                     // 
-                    // Given a fully populated tile grid there is no case where an ABA cell intersects with only three tiles. However, ABA cells
-                    // may project past the range of LiDAR/SfM data availability.
-                    (double abaCellXmin, double abaCellXmax, double abaCellYmin, double abaCellYmax) = this.Transform.GetCellExtent(abaXindex, abaYindex);
-                    (int tileXindexMin, int tileXindexMaxInclusive, int tileYindexMin, int tileYindexMaxInclusive) = lasGrid.GetIntersectingCellIndices(abaCellXmin, abaCellXmax, abaCellYmin, abaCellYmax);
+                    // Given a fully populated tile grid there is no case where a metrics cell intersects with only three tiles. However,
+                    // metrics cells may project past the range of LiDAR/SfM data availability.
+                    (double metricsCellXmin, double metricsCellXmax, double metricsCellYmin, double metricsCellYmax) = this.Transform.GetCellExtent(metricsXindex, metricsYindex);
+                    (int tileXindexMin, int tileXindexMaxInclusive, int tileYindexMin, int tileYindexMaxInclusive) = lasGrid.GetIntersectingCellIndices(metricsCellXmin, metricsCellXmax, metricsCellYmin, metricsCellYmax);
 
                     LasTile? tileXminYmin = lasGrid[tileXindexMin, tileYindexMin];
                     int tilesIntersected = tileXminYmin == null ? 0 : 1;
@@ -76,8 +77,8 @@ namespace Mars.Clouds.Las
                         }
                     }
 
-                    int cellIndex = this.ToCellIndex(abaXindex, abaYindex);
-                    this.Cells[cellIndex] = new(abaXindex, abaYindex, tilesIntersected);
+                    int cellIndex = this.ToCellIndex(metricsXindex, metricsYindex);
+                    this.Cells[cellIndex] = new(metricsXindex, metricsYindex, tilesIntersected);
                     ++this.NonNullCells;
                 }
             }
@@ -101,7 +102,7 @@ namespace Mars.Clouds.Las
             return false;
         }
 
-        public void QueueCompletedCells(LasTile completedTile, BlockingCollection<List<PointListZirnc>> abaFullyPopulatedCellQueue)
+        public void QueueCompletedCells(LasTile completedTile, BlockingCollection<List<PointListZirnc>> fullyPopulatedCellQueue)
         {
             Debug.Assert((this.Transform.ColumnRotation == 0.0) && (this.Transform.RowRotation == 0.0));
 
@@ -131,7 +132,7 @@ namespace Mars.Clouds.Las
 
             if (completedCells.Count > 0)
             {
-                abaFullyPopulatedCellQueue.Add(completedCells);
+                fullyPopulatedCellQueue.Add(completedCells);
             }
         }
     }

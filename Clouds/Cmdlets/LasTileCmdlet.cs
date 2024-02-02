@@ -9,7 +9,7 @@ namespace Mars.Clouds.Cmdlets
 {
     public class LasTileCmdlet : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used. .las files must be in the same CRS as the grid specified by -AbaCells.")]
+        [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
         [ValidateNotNullOrEmpty]
         public string? Las { get; set; }
 

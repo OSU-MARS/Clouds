@@ -13,38 +13,47 @@ using System.Threading.Tasks;
 namespace Mars.Clouds.Cmdlets
 {
     /// <summary>
-    /// Caclculate standard ABA (area based approach) point cloud metrics using a set of point cloud tiles and a raster defining ABA cells.
+    /// Caclculate gridded point cloud metrics (for area based approaches) using a set of point cloud tiles and a raster defining the grid cells.
     /// </summary>
+    /// <remarks>
+    /// Primarily intended for the 20–40 m grid sizes commonly used with LiDAR or photogrammetric area based approaches to forest inventory. The
+    /// code is cell size agnostic, however, and can also be used to get point cloud informatics at submeter resolutions or at larger scales.
+    /// </remarks>
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : LasTileCmdlet
     {
-        [Parameter(HelpMessage = "Band number of -AbaCells to use in defining grid metrics cells. Ones based, default is the first band.")]
+        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid metrics cells. Ones based, default is the first band.")]
         [ValidateRange(1, 1000)]
-        public int AbaCellBand { get; set; }
+        public int CellBand { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Raster with a band defining the grid over which ABA (area based approach) point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the first band. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
+        [Parameter(Mandatory = true, HelpMessage = "Raster with a band defining the grid over which point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the first band. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
         [ValidateNotNullOrEmpty]
-        public string? AbaCells { get; set; }
+        public string? Cells { get; set; }
+
+        [Parameter(HelpMessage = "Settings controlling which grid metrics the output rasters contain.")]
+        [ValidateNotNull]
+        public GridMetricsSettings Settings { get; set; }
 
         public GetGridMetrics()
         {
-            this.AbaCellBand = 1;
-            // this.AbaCells is mandatory
+            this.CellBand = 1;
+            // this.Cells is mandatory
+            this.Settings = new();
         }
 
         protected override void ProcessRecord()
         {
-            Debug.Assert(String.IsNullOrEmpty(this.AbaCells) == false);
+            Debug.Assert(String.IsNullOrEmpty(this.Cells) == false);
 
-            using Dataset gridCellDefinitionDataset = Gdal.Open(this.AbaCells, Access.GA_ReadOnly);
-            Raster abaCellDefinitions = Raster.Create(gridCellDefinitionDataset);
-            int abaEpsg = abaCellDefinitions.Crs.ParseEpsg();
+            using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
+            Raster cellDefinitions = Raster.Create(gridCellDefinitionDataset);
+            int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(abaEpsg);
-            AbaGrid abaGrid = new(abaCellDefinitions, this.AbaCellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(gridEpsg);
+            GridMetricsPointLists metricsGrid = new(cellDefinitions, this.CellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
 
-            StandardMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize);
-            BlockingCollection<List<PointListZirnc>> fullyPopulatedAbaCells = new(this.MaxTiles);
+            GridMetricsRaster metricsRaster = new(metricsGrid.Crs, metricsGrid.Transform, metricsGrid.XSize, metricsGrid.YSize, this.Settings);
+            BlockingCollection<List<PointListZirnc>> fullyPopulatedCells = new(this.MaxTiles);
 
             Stopwatch stopwatch = new();
             stopwatch.Start();
@@ -60,13 +69,13 @@ namespace Mars.Clouds.Cmdlets
                         for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
                         {
                             LasTile? tile = lasGrid[tileXindex, tileYindex];
-                            if ((tile == null) || (abaGrid.HasCellsInTile(tile) == false))
+                            if ((tile == null) || (metricsGrid.HasCellsInTile(tile) == false))
                             {
                                 continue;
                             }
 
                             using LasReader pointReader = tile.CreatePointReader();
-                            pointReader.ReadPointsToGrid(tile, abaGrid);
+                            pointReader.ReadPointsToGrid(tile, metricsGrid);
 
                             // check for cancellation before queing tile for metrics calculation
                             // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
@@ -77,7 +86,7 @@ namespace Mars.Clouds.Cmdlets
                                 break;
                             }
 
-                            abaGrid.QueueCompletedCells(tile, fullyPopulatedAbaCells);
+                            metricsGrid.QueueCompletedCells(tile, fullyPopulatedCells);
                             ++tilesLoaded;
 
                             //FileInfo fileInfo = new(this.Las);
@@ -99,35 +108,35 @@ namespace Mars.Clouds.Cmdlets
                 finally
                 {
                     // ensure metrics calculation doesn't block indefinitely waiting for more data if an exception occurs during tile loading
-                    fullyPopulatedAbaCells.CompleteAdding();
+                    fullyPopulatedCells.CompleteAdding();
                 }
             }, cancellationTokenSource.Token);
 
-            int abaCellsCompleted = 0;
+            int cellsCompleted = 0;
             Task calculateMetrics = Task.Run(() => 
             {
                 SpatialReference crs = new(null);
-                crs.ImportFromEPSG(abaEpsg);
+                crs.ImportFromEPSG(gridEpsg);
                 float crsLinearUnits = (float)crs.GetLinearUnits();
                 float oneMeterHeightClass = 1.0F / crsLinearUnits;
                 float twoMeterHeightThreshold = 2.0F / crsLinearUnits; // applied relative to mean ground height in each cell if ground points are classified, used as is if points aren't classified
 
-                foreach (List<PointListZirnc> populatedAbaCellBatch in fullyPopulatedAbaCells.GetConsumingEnumerable())
+                foreach (List<PointListZirnc> populatedCellBatch in fullyPopulatedCells.GetConsumingEnumerable())
                 {
-                    for (int batchIndex = 0; batchIndex < populatedAbaCellBatch.Count; ++batchIndex)
+                    for (int batchIndex = 0; batchIndex < populatedCellBatch.Count; ++batchIndex)
                     {
-                        PointListZirnc abaCell = populatedAbaCellBatch[batchIndex];
+                        PointListZirnc gridCell = populatedCellBatch[batchIndex];
                         try
                         {
-                            abaCell.GetStandardMetrics(abaMetrics, oneMeterHeightClass, twoMeterHeightThreshold);
+                            metricsRaster.SetMetrics(gridCell, oneMeterHeightClass, twoMeterHeightThreshold);
                             // cell's lists are no longer needed; release them so the memory can be used for continuing tile loading
                             // Since ClearAndRelease() zeros TilesLoaded it's called for consistency even if a cell contains no points.
-                            abaCell.ClearAndRelease();
-                            ++abaCellsCompleted;
+                            gridCell.ClearAndRelease();
+                            ++cellsCompleted;
                         }
                         catch (Exception exception)
                         {
-                            throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + abaCell.XMin + ", " + abaCell.XMax + ", " + abaCell.YMin + ", " + abaCell.YMax + ") at grid position (" + abaCell.XIndex + ", " + abaCell.YIndex + ").", exception, cancellationTokenSource.Token);
+                            throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + gridCell.XMin + ", " + gridCell.XMax + ", " + gridCell.YMin + ", " + gridCell.YMax + ") at grid position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, cancellationTokenSource.Token);
                         }
 
                         if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
@@ -143,7 +152,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, cancellationTokenSource.Token);
 
-            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
+            ProgressRecord gridMetricsProgress = new(0, "Get-GridMetrics", "Calculating metrics: " + cellsCompleted.ToString("#,#,0") + " of " + metricsGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
             this.WriteProgress(gridMetricsProgress);
 
             TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(10.0);
@@ -160,18 +169,18 @@ namespace Mars.Clouds.Cmdlets
                     cancellationTokenSource.Cancel();
                 }
 
-                float fractionComplete = (float)abaCellsCompleted / (float)abaGrid.NonNullCells;
-                gridMetricsProgress.StatusDescription = "Calculating metrics: " + abaCellsCompleted.ToString("#,#,0") + " of " + abaGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
+                float fractionComplete = (float)cellsCompleted / (float)metricsGrid.NonNullCells;
+                gridMetricsProgress.StatusDescription = "Calculating metrics: " + cellsCompleted.ToString("#,#,0") + " of " + metricsGrid.NonNullCells.ToString("#,0") + " cells (" + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
                 gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(gridMetricsProgress);
             }
 
-            this.WriteObject(abaMetrics);
+            this.WriteObject(metricsRaster);
             stopwatch.Stop();
 
             string elapsedTimeFormat = stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + abaCellsCompleted.ToString("#,#,0") + " cells from " + tilesLoaded + " tiles in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (abaCellsCompleted / stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + cellsCompleted.ToString("#,#,0") + " cells from " + tilesLoaded + " tiles in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (cellsCompleted / stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
     }
