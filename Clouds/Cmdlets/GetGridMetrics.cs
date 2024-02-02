@@ -20,15 +20,11 @@ namespace Mars.Clouds.Cmdlets
     /// code is cell size agnostic, however, and can also be used to get point cloud informatics at submeter resolutions or at larger scales.
     /// </remarks>
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
-    public class GetGridMetrics : LasTileCmdlet
+    public class GetGridMetrics : LasTileGridCmdlet
     {
-        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid metrics cells. Ones based, default is the first band.")]
+        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid cells. Ones based, default is the first band.")]
         [ValidateRange(1, 1000)]
         public int CellBand { get; set; }
-
-        [Parameter(Mandatory = true, HelpMessage = "Raster with a band defining the grid over which point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the first band. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
-        [ValidateNotNullOrEmpty]
-        public string? Cells { get; set; }
 
         [Parameter(HelpMessage = "Settings controlling which grid metrics the output rasters contain.")]
         [ValidateNotNull]
@@ -37,7 +33,6 @@ namespace Mars.Clouds.Cmdlets
         public GetGridMetrics()
         {
             this.CellBand = 1;
-            // this.Cells is mandatory
             this.Settings = new();
         }
 

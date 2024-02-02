@@ -68,14 +68,46 @@ namespace Mars.Clouds.Las
             {
                 classification = (PointClassification)pointBytes[16];
                 byte classificationFlags = pointBytes[15]; // 0: synthetic, 1: key point, 2: withheld, 3: overlap, 4-5: scanner channel, 6: scan direction, 7: edge of flight line
-                if ((classificationFlags & 0x04) != 0)
+                if ((classificationFlags & (byte)PointClassificationFlags.Withheld) != 0)
                 {
-                    return false; // withheld (LAS 1.4 R15 Table 16)
+                    return false;
                 }
             }
             if ((classification == PointClassification.HighNoise) || (classification == PointClassification.LowNoise))
             {
                 return false; // exclude noise points from consideration
+            }
+
+            return true;
+        }
+
+        /// <returns>false if point is classified as noise or is withdrawn</returns>
+        private static bool ReadFlags(ReadOnlySpan<byte> pointBytes, int pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags)
+        {
+            PointClassification classification;
+            if (pointFormat < 6)
+            {
+                // bits 0-4: classification, 5: synthetic, 6: key point, 7: withheld
+                byte classificationAndFlags = pointBytes[15];
+                classification = (PointClassification)(classificationAndFlags & 0x1f);
+                classificationFlags = (PointClassificationFlags)((classificationAndFlags & 0xe0) >> 5);
+                scanFlags = (ScanFlags)((pointBytes[14] & 0xc0) >> 6);
+            }
+            else
+            {
+                classification = (PointClassification)pointBytes[16];
+                byte flags = pointBytes[15];
+                classificationFlags = (PointClassificationFlags)(flags & 0x0f); // 0: synthetic, 1: key point, 2: withheld, 3: overlap, 4-5: scanner channel, 6: scan direction, 7: edge of flight line
+                scanFlags = (ScanFlags)((flags & 0xc0) >> 6);
+            }
+
+            if ((classificationFlags & PointClassificationFlags.Withheld) != 0)
+            {
+                return false;
+            }
+            if ((classification == PointClassification.HighNoise) || (classification == PointClassification.LowNoise))
+            {
+                return false;
             }
 
             return true;
@@ -204,7 +236,98 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
-        public void ReadPointsToGrid(LasTile tile, Grid<PointListZirnc> abaGrid)
+        public void ReadPointsToGrid(LasTile tile, ScanMetricsRaster scanMetrics)
+        {
+            LasHeader10 lasHeader = tile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(tile);
+
+            // read points
+            // See performance notes in ReadPointsToGrid().
+            int gpstimeOffset = lasHeader.GetGpstimePointOffset();
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            double xOffset = lasHeader.XOffset;
+            double xScale = lasHeader.XScaleFactor;
+            double yOffset = lasHeader.YOffset;
+            double yScale = lasHeader.YScaleFactor;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
+            {
+                this.BaseStream.ReadExactly(pointBytes);
+                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                (int xIndex, int yIndex) = scanMetrics.GetCellIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= scanMetrics.XSize) || (yIndex >= scanMetrics.YSize))
+                {
+                    // point lies outside of the assigned metrics grid and is therefore not of interest
+                    continue;
+                }
+
+                int cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
+                scanMetrics.N[cellIndex] += 1.0F;
+
+                bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
+                if (notNoiseOrWithheld)
+                {
+                    float scanAngle;
+                    if (tile.Header.PointDataRecordFormat < 6)
+                    {
+                        scanAngle = (sbyte)pointBytes[16];
+                    }
+                    else
+                    {
+                        scanAngle = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
+                    }
+
+                    scanMetrics.ScanAngleMean[cellIndex] += scanAngle;
+                    if (scanMetrics.ScanAngleMin[cellIndex] > scanAngle)
+                    {
+                        scanMetrics.ScanAngleMin[cellIndex] = scanAngle;
+                    }
+                    if (scanMetrics.ScanAngleMax[cellIndex] < scanAngle)
+                    {
+                        scanMetrics.ScanAngleMax[cellIndex] = scanAngle;
+                    }
+
+                    // scanMetrics.NoiseOrWithheld[cellIndex] += 0.0F; // nothing to do
+                    if ((scanFlags & ScanFlags.ScanDirection) != 0)
+                    {
+                        scanMetrics.ScanDirection[cellIndex] += 1.0F;
+                    }
+                    if ((scanFlags & ScanFlags.EdgeOfFlightLine) != 0)
+                    {
+                        scanMetrics.EdgeOfFlightLine[cellIndex] += 1.0F;
+                    }
+                    if ((scanFlags & ScanFlags.Overlap) != 0)
+                    {
+                        scanMetrics.Overlap[cellIndex] += 1.0F;
+                    }
+
+                    if (gpstimeOffset >= 0)
+                    {
+                        float gpstime = (float)BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[gpstimeOffset..]);
+                        scanMetrics.GpstimeMean[cellIndex] += gpstime;
+                        if (scanMetrics.GpstimeMin[cellIndex] > gpstime)
+                        {
+                            scanMetrics.GpstimeMin[cellIndex] = gpstime;
+                        }
+                        if (scanMetrics.GpstimeMax[cellIndex] < gpstime)
+                        {
+                            scanMetrics.GpstimeMax[cellIndex] = gpstime;
+                        }
+                    }
+                }
+                else
+                {
+                    scanMetrics.NoiseOrWithheld[cellIndex] += 1.0F;
+                }
+            }
+        }
+
+        public void ReadPointsToGrid(LasTile tile, Grid<PointListZirnc> metricsGrid)
         {
             LasHeader10 lasHeader = tile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
@@ -212,17 +335,17 @@ namespace Mars.Clouds.Las
 
             // set cell capacity to a reasonable fraction of the tile's average density
             // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
-            double cellArea = abaGrid.Transform.GetCellArea();
+            double cellArea = metricsGrid.Transform.GetCellArea();
             double tileArea = tile.GridExtent.GetArea();
             UInt64 tilePoints = lasHeader.GetNumberOfPoints();
             double nominalMeanPointsPerCell = tilePoints * cellArea / tileArea;
             int cellInitialPointCapacity = Int32.Min((int)(0.35 * nominalMeanPointsPerCell), (int)tilePoints); // edge case: guard against overallocation when tile is smaller than cell
-            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = abaGrid.GetIntersectingCellIndices(tile.GridExtent);
+            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = metricsGrid.GetIntersectingCellIndices(tile.GridExtent);
             for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
             {
                 for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
                 {
-                    PointListZirnc? abaCell = abaGrid[abaXindex, abaYindex];
+                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
                     if (abaCell != null)
                     {
                         if (abaCell.Capacity == 0) // if cell already has some allocation, assume it's overlapped by another tile and do nothing
@@ -261,14 +384,14 @@ namespace Mars.Clouds.Las
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = abaGrid.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= abaGrid.XSize) || (yIndex >= abaGrid.YSize))
+                (int xIndex, int yIndex) = metricsGrid.GetCellIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= metricsGrid.XSize) || (yIndex >= metricsGrid.YSize))
                 {
                     // point lies outside of the ABA grid and is therefore not of interest
                     // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
                     continue;
                 }
-                PointListZirnc? abaCell = abaGrid[xIndex, yIndex];
+                PointListZirnc? abaCell = metricsGrid[xIndex, yIndex];
                 if (abaCell == null)
                 {
                     // point lies within ABA grid but is not within a cell of interest
@@ -310,7 +433,7 @@ namespace Mars.Clouds.Las
             {
                 for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
                 {
-                    PointListZirnc? abaCell = abaGrid[abaXindex, abaYindex];
+                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
                     if (abaCell != null)
                     {
                         ++abaCell.TilesLoaded;

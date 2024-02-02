@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -164,6 +163,27 @@ namespace Mars.Clouds.Las
             this.LegacyNumberOfPointsByReturn = new UInt32[5];
         }
 
+        public int GetGpstimePointOffset()
+        {
+            return this.PointDataRecordFormat switch
+            {
+                0 or 2 or 4 => -1,
+                1 or 3 or 5 => 20,
+                6 or 7 or 8 or 9 or 10 => 22,
+                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
+            };
+        }
+
+        public int GetNearInfraredOffset()
+        {
+            return this.PointDataRecordFormat switch
+            {
+                0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 => -1,
+                8 or 10 => 36,
+                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
+            };
+        }
+
         public virtual UInt64 GetNumberOfPoints()
         {
             return this.LegacyNumberOfPointRecords;
@@ -181,6 +201,17 @@ namespace Mars.Clouds.Las
             }
 
             throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".");
+        }
+
+        public int GetRgbOffset()
+        {
+            return this.PointDataRecordFormat switch
+            {
+                0 or 1 or 4 or 6 or 9 => -1,
+                2 or 3 or 5 => 28,
+                7 or 8 or 10 => 30,
+                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
+            };
         }
 
         public virtual void Validate()

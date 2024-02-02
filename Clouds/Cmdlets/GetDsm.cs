@@ -169,7 +169,7 @@ namespace Mars.Clouds.Cmdlets
                         string dsmTilePath = dsmPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
                         dsmTile.Write(dsmTilePath);
 
-                        dsmCellsWritten += dsmTile.XSize * dsmTile.YSize;
+                        dsmCellsWritten += dsmTile.CellsPerBand;
                         ++dsmTilesWritten;
                     }
                     catch (Exception exception)

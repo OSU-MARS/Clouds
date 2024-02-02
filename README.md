@@ -11,6 +11,7 @@ file formats are supported, though GDAL testing is limited to GeoPackage and Geo
 ### Utility cmdlets
 Supporting tools are currently
 
+- Get-ScanMetrics: similar to Get-GridMetrics but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
 - Get-LasInfo: read a .las or .laz file's header
 - Get-TreeSize: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 

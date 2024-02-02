@@ -10,13 +10,13 @@ $gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EP
 $gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\s03540w067?0.las" -Verbose
 $gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s03540w067n0.tif");
 
-# 3x3 tile, 19,044 cell perf benchmark
+# grid metrics over 3x3 tile area, 19,044 cell perf benchmark
 # case           runtime   cells/s   disk transfer rate, MB/s
 # baseline       1m:52s    168.9     ~260
 # tiles cached   50s       380.7      0 (~586 implied)
 #$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\s037?0w070?0.las" -Verbose
 
-# full run example: 663 LiDAR tiles (1.92 TB of .las files), 1.03 M ABA cells -> 187 MB raster
+# full grid metrics run example: 663 LiDAR tiles (1.92 TB of .las files), 1.03 M ABA cells -> 190 MB raster @ 20 m resolution
 #$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\*.las" -Verbose
 #$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Verbose
 #$gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metrics 10 m non-normalized.tif");
@@ -32,6 +32,17 @@ Get-Dsm -UpperPoints 10 -WriteUpperPoints -Las "E:\Elliott\GIS\DOGAMI\2021 OLC C
 $tile = "s04200w06810"
 $dsmMetrics = Get-GridMetrics -Cells "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM\$tile.tif" -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Verbose
 $dsmMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\$tile DSM resolution.tif");
+
+# scan metrics, single tile
+$gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
+$tile = "s04200w06810"
+$scanMetrics = Get-ScanMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\$tile.las" -Verbose
+$scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics $tile 10 m.tif");
+
+# scan metrics, all tiles
+#$gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
+#$scanMetrics = Get-ScanMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\*.las" -Verbose
+#$scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics 10 m.tif");
 
 # read header from .las or .laz file
 $lasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))

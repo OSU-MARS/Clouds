@@ -1,12 +1,11 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 
 namespace Mars.Clouds.Las
 {
     public class LasHeader12 : LasHeader11
     {
         /// <summary>
-        /// 
+        /// Only low bit (GPS time type) defined in LAS 1.2. LAS 1.3 adds waveform packets and synthetic returns, LAS 1.4 wkt.
         /// </summary>
         public GlobalEncoding GlobalEncoding { get; set; }
 
