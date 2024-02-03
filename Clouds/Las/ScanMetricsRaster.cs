@@ -7,7 +7,7 @@ namespace Mars.Clouds.Las
     // If needed a double accumulator class can be implemented with downcoversion to float when writing to disk.
     public class ScanMetricsRaster : Raster<double>
     {
-        public RasterBand<double> N { get; private init; }
+        public RasterBand<double> Points { get; private init; }
         public RasterBand<double> ScanAngleMean { get; private init; }
         public RasterBand<double> ScanDirection { get; private init; }
         public RasterBand<double> ScanAngleMin { get; private init; }
@@ -24,7 +24,7 @@ namespace Mars.Clouds.Las
         {
             int bandIndex = 0;
 
-            this.N = this.Bands[bandIndex++];
+            this.Points = this.Bands[bandIndex++];
             this.ScanAngleMean = this.Bands[bandIndex++];
             this.ScanDirection = this.Bands[bandIndex++];
             this.ScanAngleMin = this.Bands[bandIndex++];
@@ -36,7 +36,7 @@ namespace Mars.Clouds.Las
             this.GpstimeMean = this.Bands[bandIndex++];
             this.GpstimeMax = this.Bands[bandIndex++];
 
-            this.N.Name = "n";
+            this.Points.Name = "points";
             this.ScanAngleMean.Name = "scanAngleMean";
             this.ScanDirection.Name = "scanDirection";
             this.ScanAngleMin.Name = "scanAngleMin";
@@ -74,7 +74,7 @@ namespace Mars.Clouds.Las
 
             for (int index = 0; index < this.CellsPerBand; ++index)
             {
-                double nPointsInCell = this.N[index];
+                double nPointsInCell = this.Points[index];
                 if (nPointsInCell != 0.0F)
                 {
                     this.ScanAngleMean[index] /= nPointsInCell;

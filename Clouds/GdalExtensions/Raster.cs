@@ -178,8 +178,7 @@ namespace Mars.Clouds.GdalExtensions
                 case DataType.GDT_Int32:
                     rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int32[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
                     break;
-                // no ReadRaster() overloads for Int8, Int64, UInt16, UInt32, UInt64 as of MaxRev.Gdal 3.7.0: use closest type of same size instead
-                // https://github.com/MaxRev-Dev/gdal.netcore/issues/111
+                // no ReadRaster() overloads for Int8, Int64, UInt16, UInt32, UInt64 as of MaxRev.Gdal 3.8.3: use closest type of same size instead
                 case DataType.GDT_Int8:
                     rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<byte[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
                     break;
@@ -340,23 +339,22 @@ namespace Mars.Clouds.GdalExtensions
                 case DataType.GDT_Float64:
                     rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
                     break;
-                // no ReadRaster() overloads for Int8, Int64, UInt16, UInt32, UInt64 as of MaxRev.Gdal 3.7.0: use closest type of same size instead
-                // https://github.com/MaxRev-Dev/gdal.netcore/issues/111
-                case DataType.GDT_Int8:
-                    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<byte[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                    break;
-                case DataType.GDT_Int64:
-                    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                    break;
-                case DataType.GDT_UInt16:
-                    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int16[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                    break;
-                case DataType.GDT_UInt32:
-                    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int32[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                    break;
-                case DataType.GDT_UInt64:
-                    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<double[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                    break;
+                // no WriteRaster() overloads for Int8, Int64, UInt16, UInt32, UInt64 as of MaxRev.Gdal 3.8.3
+                //case DataType.GDT_Int8:
+                //    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<sbyte[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                //    break;
+                //case DataType.GDT_Int64:
+                //    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<Int64[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                //    break;
+                //case DataType.GDT_UInt16:
+                //    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<UInt16[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                //    break;
+                //case DataType.GDT_UInt32:
+                //    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<UInt32[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                //    break;
+                //case DataType.GDT_UInt64:
+                //    rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, Unsafe.As<UInt64[]>(this.Data), buf_xSize: this.XSize, buf_ySize: this.YSize, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                //    break;
                 default:
                     throw new NotSupportedException("Unhandled cell data type " + this.CellDataType + ".");
             }

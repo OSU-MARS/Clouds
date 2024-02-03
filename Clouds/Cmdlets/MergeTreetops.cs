@@ -178,8 +178,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.Treetops), "If -" + nameof(this.Treetops) + " does not indicate a directory it must include a file name pattern to match.");
             }
-            FileAttributes classificationPathAttributes = File.GetAttributes(this.Classification);
-            if (classificationPathAttributes.HasFlag(FileAttributes.Directory) == false)
+            if (Directory.Exists(this.Classification) == false)
             {
                 throw new ParameterOutOfRangeException(nameof(this.Classification), "-" + nameof(this.Classification) + " must be an existing directory containing classification rasters.");
             }

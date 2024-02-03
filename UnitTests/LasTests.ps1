@@ -1,5 +1,5 @@
 ﻿$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
-#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
 $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native') # for GDAL
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
@@ -26,6 +26,13 @@ $tile = "s04200w06810" # "s04230w06810" # "s04020w07050"
 Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile.tif" -Snap -Verbose
 Get-Dsm -UpperPoints 1 -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile control.tif" -Snap -Verbose
 Get-Dsm -UpperPoints 10 -WriteUpperPoints -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile points.tif" -Snap -Verbose
+
+# orthoimage generation, single tile
+$tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"
+Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2\$tile.tif" -Snap -Verbose
+
+# orthoimage generation, all tiles
+#Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose
 
 # high resolution grid metrics bootstrapping from DSM (or CHM or DTM) grid
 # Just under 4 Mcells => 600 MB float32 .tif @ 57 standard metrics bands.

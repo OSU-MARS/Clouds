@@ -270,7 +270,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ90 != null);
             Assert.IsTrue(abaMetrics.IntensityTotal != null);
 
-            Assert.IsTrue(abaMetrics.N[8, 14] == 162764);
+            Assert.IsTrue(abaMetrics.Points[8, 14] == 162764);
             Assert.IsTrue(abaMetrics.ZMax[8, 14] == 928.6306F);
             Assert.IsTrue(abaMetrics.ZMean[8, 14] == 923.698242F);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 14])); // points not classified
@@ -331,7 +331,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround[8, 14] == 0.0F); // points not classified
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
 
-            Assert.IsTrue(abaMetrics.N[9, 14] == 44853.0F);
+            Assert.IsTrue(abaMetrics.Points[9, 14] == 44853.0F);
             Assert.IsTrue(abaMetrics.ZMax[9, 14] == 926.576538F);
             Assert.IsTrue(abaMetrics.ZMean[9, 14] == 922.74585F);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[9, 14]));
@@ -392,7 +392,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[9, 14] == 3.70189786F);
 
-            Assert.IsTrue(abaMetrics.N[8, 15] == 0);
+            Assert.IsTrue(abaMetrics.Points[8, 15] == 0);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 15]));
@@ -453,10 +453,10 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
 
-            Assert.IsTrue(abaMetrics.N[9, 15] == 0);
+            Assert.IsTrue(abaMetrics.Points[9, 15] == 0);
             // for now, remaining bands aren't checked for NaN as coverage of previous cell should suffice
 
-            Assert.IsTrue(abaMetrics.N.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.Points.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMax.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMean.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZGroundMean.HasNoDataValue);
@@ -517,7 +517,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround.HasNoDataValue);
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
 
-            Assert.IsTrue(Single.IsNaN(abaMetrics.N.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.Points.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean.NoDataValue));
@@ -580,11 +580,69 @@ namespace Mars.Clouds.UnitTests
         }
 
         [TestMethod]
-        public void ReadLasScanMetrics()
+        public void ReadLasImage()
         {
             Debug.Assert(this.unitTestPath != null);
             LasTile lasTile = this.ReadLasTile();
 
+            double imageCellSize = 0.5;
+            int imageXsize = (int)(lasTile.GridExtent.Width / imageCellSize) + 1; // 3.6 x 4.2 m -> 4.0 x 4.5 m
+            int imageYsize = (int)(lasTile.GridExtent.Height / imageCellSize) + 1;
+            GridGeoTransform imageTransform = new(lasTile.GridExtent, imageCellSize, imageCellSize);
+
+            ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, UInt64.MaxValue);
+            using LasReader imageReader = lasTile.CreatePointReader();
+            imageReader.ReadPointsToImage(lasTile, image);
+
+            image.OnPointAdditionComplete();
+            ImageRaster<Int16> image16 = image.AsInt16(Int16.MinValue);
+            ImageRaster<Int32> image32 = image.AsInt32(Int32.MinValue);
+
+            Assert.IsTrue(image.BandCount == 8);
+            Assert.IsTrue(image.CellsPerBand == 72);
+            Assert.IsTrue(image.XSize == imageXsize);
+            Assert.IsTrue(image.YSize == imageYsize);
+
+            for (int yIndex = 0; yIndex < image.YSize; ++yIndex)
+            {
+                for (int xIndex = 0; xIndex < image.XSize; ++xIndex)
+                {
+                    // test data uses point format 6: no RGB or NIR, only intensity 
+                    // Since all pixels have points, data values get set to zero even though there's no data. Intensity is ignored
+                    // as the test .las isn't LAS 1.4 compliant, having return numbers all set to zero.
+                    Assert.IsTrue(image.Red[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.Green[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.Blue[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.NearInfrared[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.Intensity[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.IntensitySecondReturn[xIndex, yIndex] == UInt64.MaxValue);
+                    Assert.IsTrue(image.FirstReturns[xIndex, yIndex] == 0);
+                    Assert.IsTrue(image.SecondReturns[xIndex, yIndex] == 0);
+
+                    Assert.IsTrue(image32.Red[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.Green[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.Blue[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.NearInfrared[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.Intensity[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.FirstReturns[xIndex, yIndex] == 0);
+                    Assert.IsTrue(image32.SecondReturns[xIndex, yIndex] == 0);
+
+                    Assert.IsTrue(image16.Red[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.Green[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.Blue[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.NearInfrared[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.Intensity[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.FirstReturns[xIndex, yIndex] == 0);
+                    Assert.IsTrue(image16.SecondReturns[xIndex, yIndex] == 0);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ReadLasScanMetrics()
+        {
+            Debug.Assert(this.unitTestPath != null);
+            LasTile lasTile = this.ReadLasTile();
 
             Raster<UInt16> gridCellDefinitions = this.SnapLasTileToGridCells(lasTile);
             ScanMetricsRaster scanMetrics = new(gridCellDefinitions);
@@ -605,7 +663,7 @@ namespace Mars.Clouds.UnitTests
                     {
                         if (xIndex == 8)
                         {
-                            Assert.IsTrue(scanMetrics.N[xIndex, yIndex] == 162764.0);
+                            Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 162764.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == 0.0); // fields not populated in test data
                             Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == 0.0);
@@ -621,7 +679,7 @@ namespace Mars.Clouds.UnitTests
                         }
                         else if (xIndex == 9)
                         {
-                            Assert.IsTrue(scanMetrics.N[xIndex, yIndex] == 44853.0);
+                            Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 44853.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == 0.0);
@@ -637,7 +695,7 @@ namespace Mars.Clouds.UnitTests
                         }
                     }
 
-                    Assert.IsTrue(scanMetrics.N[xIndex, yIndex] == 0.0);
+                    Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 0.0);
                     Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == Double.MinValue);
                     Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
                     Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == Double.MinValue);

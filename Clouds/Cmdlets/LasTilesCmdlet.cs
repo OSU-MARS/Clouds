@@ -7,8 +7,10 @@ using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class LasTileCmdlet : GdalCmdlet
+    public class LasTilesCmdlet : GdalCmdlet
     {
+        protected static TimeSpan ProgressUpdateInterval { get; private set; }
+
         [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
         [ValidateNotNullOrEmpty]
         public string? Las { get; set; }
@@ -22,7 +24,12 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether to snap tile origin and extent to next largest integer in CRS units. This can be a useful correction in cases where .las file extents are slightly smaller than the actual tile size and, because a 2x2 or larger grid of tiles is not being processed, either a tile's true x extent, y extent, or both cannot be inferred from tile to tile spacing.")]
         public SwitchParameter Snap { get; set; }
 
-        protected LasTileCmdlet() 
+        static LasTilesCmdlet()
+        {
+            LasTilesCmdlet.ProgressUpdateInterval = TimeSpan.FromSeconds(10.0);
+        }
+
+        protected LasTilesCmdlet() 
         {
             // this.Las is mandatory
             this.MaxTiles = 25;

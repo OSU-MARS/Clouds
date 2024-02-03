@@ -23,22 +23,21 @@ namespace Mars.Clouds.Cmdlets
             this.MaxThreads = Environment.ProcessorCount / 2;
         }
 
-        protected static (string? directoryPath, string? searchPattern) ExtractTileDirectoryPathAndSearchPattern(string cmdletTileParameter, string defaultSearchPattern)
+        protected static (string? directoryPath, string? searchPattern) ExtractTileDirectoryPathAndSearchPattern(string cmdletTilePath, string defaultSearchPattern)
         {
             string? directoryPath = null;
             string? searchPattern = null;
-            bool expandDsmWildcards = cmdletTileParameter.Contains('*', StringComparison.Ordinal) || cmdletTileParameter.Contains('?', StringComparison.Ordinal);
+            bool expandDsmWildcards = cmdletTilePath.Contains('*', StringComparison.Ordinal) || cmdletTilePath.Contains('?', StringComparison.Ordinal);
             if (expandDsmWildcards)
             {
-                directoryPath = Path.GetDirectoryName(cmdletTileParameter);
-                searchPattern = Path.GetFileName(cmdletTileParameter);
+                directoryPath = Path.GetDirectoryName(cmdletTilePath);
+                searchPattern = Path.GetFileName(cmdletTilePath);
             }
             else
             {
-                FileAttributes dsmPathAttributes = File.GetAttributes(cmdletTileParameter);
-                if (dsmPathAttributes.HasFlag(FileAttributes.Directory))
+                if (Directory.Exists(cmdletTilePath))
                 {
-                    directoryPath = cmdletTileParameter;
+                    directoryPath = cmdletTilePath;
                     searchPattern = defaultSearchPattern;
                 }
             }

@@ -11,7 +11,7 @@ namespace Mars.Clouds.Las
     public class GridMetricsRaster : Raster<float>
     {
         // always on bands
-        public RasterBand<float> N { get; private init; }
+        public RasterBand<float> Points { get; private init; }
         public RasterBand<float> ZMax { get; private init; }
         public RasterBand<float> ZMean { get; private init; }
         public RasterBand<float> ZGroundMean { get; private init; }
@@ -80,7 +80,7 @@ namespace Mars.Clouds.Las
             int bandIndex = 0;
 
             // always present bands
-            this.N = this.Bands[bandIndex++];
+            this.Points = this.Bands[bandIndex++];
             this.ZMax = this.Bands[bandIndex++];
             this.ZMean = this.Bands[bandIndex++];
             this.ZGroundMean = this.Bands[bandIndex++];
@@ -134,7 +134,7 @@ namespace Mars.Clouds.Las
             this.PFifthReturn = this.Bands[bandIndex++];
             this.PGround = this.Bands[bandIndex++];
 
-            this.N.Name = "n";
+            this.Points.Name = "points";
             this.ZGroundMean.Name = "zGroundMean";
             this.ZMax.Name = "zMax";
             this.ZMean.Name = "zMean";
@@ -237,8 +237,8 @@ namespace Mars.Clouds.Las
         public void SetMetrics(PointListZirnc cell, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
         {
             int pointCount = cell.Count;
-            int cellIndex = this.N.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing
-            this.N[cellIndex] = pointCount;
+            int cellIndex = this.Points.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing
+            this.Points[cellIndex] = pointCount;
 
             if (pointCount < 1)
             {

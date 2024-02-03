@@ -76,13 +76,11 @@ namespace Mars.Clouds.Cmdlets
                     return;
                 }
 
-                FileAttributes dtmPathAttributes = File.GetAttributes(this.Dtm);
-                if (dtmPathAttributes.HasFlag(FileAttributes.Directory) == false)
+                if (Directory.Exists(this.Dtm) == false)
                 {
                     throw new ParameterOutOfRangeException(nameof(this.Dtm), "-" + nameof(this.Dtm) + " must be an existing directory when " + nameof(this.Dsm) + " indicates multiple files.");
                 }
-                FileAttributes treetopPathAttributes = File.GetAttributes(this.Treetops);
-                if (treetopPathAttributes.HasFlag(FileAttributes.Directory) == false)
+                if (Directory.Exists(this.Treetops) == false)
                 {
                     throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when " + nameof(this.Dsm) + " indicates multiple files.");
                 }

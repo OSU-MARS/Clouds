@@ -5,14 +5,18 @@ using System;
 using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading.Tasks;
-using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "ScanMetrics")]
-    public class GetScanMetrics : LasTileGridCmdlet
+    public class GetScanMetrics : LasTilesToRasterCmdlet
     {
         // TODO: LasTileCmdlet.MaxTiles is unused
+
+        public GetScanMetrics()
+        {
+            this.MaxThreads = 1;
+        }
 
         protected override void ProcessRecord()
         {
@@ -23,68 +27,65 @@ namespace Mars.Clouds.Cmdlets
 
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(gridEpsg);
-            Stopwatch stopwatch = new();
-            stopwatch.Start();
 
-            CancellationTokenSource cancellationTokenSource = new();
+            TileRead tileRead = new();
             ScanMetricsRaster scanMetrics = new(cellDefinitions);
-            Extent scanMetricsExtent = new(scanMetrics);
-            int tilesLoaded = 0;
-            Task readPoints = Task.Run(() =>
-            {
-                for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
-                {
-                    for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
-                    {
-                        LasTile? tile = lasGrid[tileXindex, tileYindex];
-                        if ((tile == null) || (scanMetricsExtent.Intersects(tile.GridExtent) == false))
-                        {
-                            continue;
-                        }
+            Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, scanMetrics, tileRead), tileRead.CancellationTokenSource.Token);
 
-                        using LasReader pointReader = tile.CreatePointReader();
-                        pointReader.ReadPointsToGrid(tile, scanMetrics);
-
-                        // check for cancellation before queing tile for metrics calculation
-                        // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
-                        // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
-                        // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                        if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
-                        {
-                            break;
-                        }
-
-                        ++tilesLoaded;
-                    }
-
-                    if (this.Stopping || cancellationTokenSource.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                }
-            }, cancellationTokenSource.Token);
-
-            ProgressRecord gridMetricsProgress = new(0, "Get-ScanMetrics", "Loaded " + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
+            ProgressRecord gridMetricsProgress = new(0, "Get-ScanMetrics", "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
             this.WriteProgress(gridMetricsProgress);
 
-            TimeSpan progressUpdateInterval = TimeSpan.FromSeconds(10.0);
-            while (readPoints.Wait(progressUpdateInterval) == false)
+            while (readPoints.Wait(LasTilesCmdlet.ProgressUpdateInterval) == false)
             {
-                float fractionComplete = (float)tilesLoaded / (float)lasGrid.NonNullCells;
-                gridMetricsProgress.StatusDescription = "Loaded " + tilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...";
+                float fractionComplete = (float)tileRead.TilesLoaded / (float)lasGrid.NonNullCells;
+                gridMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...";
                 gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
-                gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileRead.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(gridMetricsProgress);
             }
 
-
             scanMetrics.OnPointAdditionComplete();
             this.WriteObject(scanMetrics);
-            stopwatch.Stop();
+            tileRead.Stopwatch.Stop();
 
-            string elapsedTimeFormat = stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + tilesLoaded + " tiles in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            string elapsedTimeFormat = tileRead.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
+            this.WriteVerbose("Calculated metrics for " + tileRead.TilesLoaded + " tiles in " + tileRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
             base.ProcessRecord();
+        }
+
+        private void ReadTiles(LasTileGrid lasGrid, ScanMetricsRaster scanMetrics, TileRead tileRead)
+        {
+            Extent scanMetricsExtent = new(scanMetrics);
+            for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
+            {
+                for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
+                {
+                    LasTile? tile = lasGrid[tileXindex, tileYindex];
+                    if ((tile == null) || (scanMetricsExtent.Intersects(tile.GridExtent) == false))
+                    {
+                        continue;
+                    }
+
+                    using LasReader pointReader = tile.CreatePointReader();
+                    pointReader.ReadPointsToGrid(tile, scanMetrics);
+
+                    // check for cancellation before queing tile for metrics calculation
+                    // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
+                    // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
+                    // entirely, but currently seems unnecessary as this appears to be an edge case.)
+                    if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    ++tileRead.TilesLoaded;
+                }
+
+                if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
         }
     }
 }
