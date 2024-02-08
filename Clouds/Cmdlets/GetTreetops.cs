@@ -48,18 +48,16 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             Debug.Assert((this.Dsm != null) && (this.Dtm != null) && (this.Treetops != null));
-            (string? dsmDirectoryPath, string? dsmTileSearchPattern) = GdalCmdlet.ExtractTileDirectoryPathAndSearchPattern(this.Dsm, "*" + Constant.File.GeoTiffExtension);
 
             Stopwatch stopwatch = Stopwatch.StartNew();
             TreetopSearch treetopSearch = TreetopSearch.Create(this.Method);
             treetopSearch.DiagnosticsPath = this.Diagnostics;
 
-            List<string> dsmTilePaths;
+            string[] dsmTilePaths = GdalCmdlet.GetExistingTilePaths(this.Dsm, Constant.File.GeoTiffExtension);
             int treetopCandidates = 0;
-            if (dsmDirectoryPath == null)
+            if (dsmTilePaths.Length == 0)
             {
                 // single tile case
-                dsmTilePaths = [ this.Dsm ];
                 treetopSearch.AddTile(this.Dsm, this.Dtm);
                 treetopSearch.BuildGrids();
                 treetopCandidates += treetopSearch.FindTreetops(0, this.Treetops);
@@ -67,15 +65,6 @@ namespace Mars.Clouds.Cmdlets
             else
             {
                 // multi-tile case
-                Debug.Assert(dsmTileSearchPattern != null);
-                dsmTilePaths = Directory.EnumerateFiles(dsmDirectoryPath, dsmTileSearchPattern, SearchOption.TopDirectoryOnly).ToList();
-                if (dsmTilePaths.Count < 1)
-                {
-                    // nothing to do
-                    this.WriteVerbose("Exiting without performing any processing. Path '" + Path.Combine(dsmDirectoryPath, dsmTileSearchPattern) + "' does not match any DSM tiles.");
-                    return;
-                }
-
                 if (Directory.Exists(this.Dtm) == false)
                 {
                     throw new ParameterOutOfRangeException(nameof(this.Dtm), "-" + nameof(this.Dtm) + " must be an existing directory when " + nameof(this.Dsm) + " indicates multiple files.");
@@ -86,16 +75,18 @@ namespace Mars.Clouds.Cmdlets
                 }
 
                 // load all tiles
+                // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
+                // locality advantage.
                 ParallelOptions parallelOptions = new()
                 {
-                    MaxDegreeOfParallelism = this.MaxThreads
+                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, dsmTilePaths.Length)
                 };
 
                 string? mostRecentDsmTileName = null;
                 int tilesLoaded = 0;
                 Task loadTilesTask = Task.Run(() =>
                 {
-                    Parallel.For(0, dsmTilePaths.Count, parallelOptions, (int tileIndex) =>
+                    Parallel.For(0, dsmTilePaths.Length, parallelOptions, (int tileIndex) =>
                     {
                         // find treetops in tile
                         string dsmTilePath = dsmTilePaths[tileIndex];
@@ -112,7 +103,7 @@ namespace Mars.Clouds.Cmdlets
                 ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
                 while (loadTilesTask.Wait(progressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Count;
+                    float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Length;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
                     progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                     progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
@@ -144,7 +135,7 @@ namespace Mars.Clouds.Cmdlets
 
                 while (findTreetopsTask.Wait(progressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Count;
+                    float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Length;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
                     progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                     progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
@@ -154,8 +145,8 @@ namespace Mars.Clouds.Cmdlets
 
             stopwatch.Stop();
             string elapsedTimeFormat = stopwatch.Elapsed.TotalHours >= 1.0 ? "hh\\:mm\\:ss" : "mm\\:ss";
-            string tileOrTiles = dsmTilePaths.Count > 1 ? "tiles" : "tile";
-            this.WriteVerbose(dsmTilePaths.Count + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            string tileOrTiles = dsmTilePaths.Length > 1 ? "tiles" : "tile";
+            this.WriteVerbose(dsmTilePaths.Length + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
         }
     }
 }

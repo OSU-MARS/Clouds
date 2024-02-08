@@ -6,8 +6,14 @@ A research codebase with an ad hoc collection of PowerShell cmdlets for working 
 - Get-Orthoimages: get 32 bit RGB+NIR orthoimages with LiDAR intensity bands from point clouds
 - Get-TreeTops: find treetop candidates in a canopy height or digital surface model
 
-Currently, [LAS](https://www.asprs.org/divisions-committees/lidar-division/laser-las-file-format-exchange-activities) and [GDAL](https://gdal.org/)
-file formats are supported, though GDAL testing is limited to GeoPackage and GeoTIFF.
+The cmdlets are multithreaded but, currently, it's assumed 1) point cloud datasets are large enough to be stored on 3.5 inch drives and 
+don't in memory while 2) DSMs and DTMs (digital surface and terrain models) are stored on faster drives (NVMe, SSD). Thread counts and
+IO capabilities scale accordingly. [LAS](https://www.asprs.org/divisions-committees/lidar-division/laser-las-file-format-exchange-activities) 
+and [GDAL](https://gdal.org/) file formats are supported, though GDAL testing is limited to GeoPackage and GeoTIFF. In cases where 
+directories are searched for data tiles GeoTIFF is the default extension.
+
+Code is provided as is. In general, the head commit should compile and pass unit tests but this isn't absolutely guaranteed. APIs are
+likely volatile.
 
 ### Supporting cmdlets
 Supporting tools are
@@ -22,10 +28,8 @@ nuget package and the system's PowerShell Core installation, creating a requirem
 the nuget's. If Visual Studio Code is used for PowerShell Core execution then corresponding updates to Visual Studio Code and its PowerShell 
 extension are required.
 
-Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, including GDAL forcing single threaded 
-write transactions on large GeoPackages and being slow operations with 32 bit integer raster images due to lack of C# bindings for 16 bit
-unsigned GeoTIFFs. A workaround for the latter is to transcode rasters from 32 bit down to 16 bit with `terra::rast()` and `writeRast()` (in 
-R), `gdal_translate`, or similar tools.
+Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, mainly where GDAL forces single threaded 
+write transactions on large GeoPackages.
 
 Clouds is developed using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/) 
 edition. Clouds is only tested on Windows 10 but should run on any .NET supported platform.

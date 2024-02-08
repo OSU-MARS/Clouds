@@ -7,19 +7,13 @@ Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 # cmdlet execution with a .las tile and ABA (area based approach) grid cell definition
 # This script illustrates cmdlet use. Paths need to be changed to files available for area of interest.
 $gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
-$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\s03540w067?0.las" -Verbose
-$gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s03540w067n0.tif");
+$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\s03660w06750.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM\s036?0w067?0.tif" -Verbose
+$gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\s03660w06750 10 m non-normaized.tif");
 
-# grid metrics over 3x3 tile area, 19,044 cell perf benchmark
-# case           runtime   cells/s   disk transfer rate, MB/s
-# baseline       1m:52s    168.9     ~260
-# tiles cached   50s       380.7      0 (~586 implied)
-#$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\s037?0w070?0.las" -Verbose
-
-# full grid metrics run example: 663 LiDAR tiles (1.92 TB of .las files), 1.03 M ABA cells -> 190 MB raster @ 20 m resolution
-#$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points normalized\*.las" -Verbose
-#$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Verbose
-#$gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metrics 10 m non-normalized.tif");
+# full grid metrics run example: 663 LiDAR tiles (1.92 TB of .las files), 1.03 M ABA cells -> 190 MB raster @ 20 m resolution and 56 bands
+$gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
+$gridMetrics = Get-GridMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Verbose
+$gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metrics 10 m non-normalized v2.tif");
 
 # DSM generation, single tile
 $tile = "s04200w06810" # "s04230w06810" # "s04020w07050"
@@ -29,7 +23,7 @@ Get-Dsm -UpperPoints 10 -WriteUpperPoints -Las "E:\Elliott\GIS\DOGAMI\2021 OLC C
 
 # orthoimage generation, single tile
 $tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"
-Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2\$tile.tif" -Snap -Verbose
+Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2 16\$tile.tif" -Snap -Verbose
 
 # orthoimage generation, all tiles
 #Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\points\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose

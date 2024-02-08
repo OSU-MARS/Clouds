@@ -24,10 +24,10 @@ namespace Mars.Clouds.Cmdlets
     {
         public BlockingCollection<(string, TTile)> LoadedTiles { get; private init; }
 
-        public TileReadWrite(int maxTiles, int tileSizeX, int tileSizeY, bool outputPathIsDirectory)
+        public TileReadWrite(int maxSimultaneouslyLoadedTiles, int tileSizeX, int tileSizeY, bool outputPathIsDirectory)
             : base(tileSizeX, tileSizeY, outputPathIsDirectory)
         {
-            this.LoadedTiles = new(maxTiles);
+            this.LoadedTiles = new(maxSimultaneouslyLoadedTiles);
         }
     }
 }

@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
                     case ".jpg":
                         directorySize.Jpeg += fileInfo.Length;
                         break;
-                    case ".las":
+                    case Constant.File.LasExtension:
                         directorySize.Las += fileInfo.Length;
                         break;
                     case ".laz":

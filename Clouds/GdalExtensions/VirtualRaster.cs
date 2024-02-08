@@ -9,7 +9,7 @@ namespace Mars.Clouds.GdalExtensions
 {
     // could derive from Grid but naming becomes confusing as differences between tiles and cells are obscured
     // Also, indexing differs because tiles are sparse where grid is dense, so a grid index is not a tile index.
-    internal class VirtualRaster<TBand> where TBand : INumber<TBand>
+    public class VirtualRaster<TBand> where TBand : INumber<TBand>
     {
         private SpatialReference? crs;
         private Grid<Raster<TBand>?>? tileGrid;
@@ -283,7 +283,10 @@ namespace Mars.Clouds.GdalExtensions
 
         public bool TryGetNeighborhood8(double x, double y, int bandIndex, [NotNullWhen(true)] out VirtualRasterNeighborhood8<TBand>? neighborhood)
         {
-            Debug.Assert(this.tileGrid != null);
+            if (this.tileGrid == null)
+            {
+                throw new InvalidOperationException("Call " + nameof(this.BuildGrid) + "() before calling " + nameof(this.TryGetNeighborhood8) + "().");
+            }
 
             (int gridXindex, int gridYindex) = this.tileGrid.GetCellIndices(x, y);
             if ((gridXindex < 0) || (gridXindex >= this.VirtualRasterSizeInTilesX) ||

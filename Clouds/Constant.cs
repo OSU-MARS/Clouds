@@ -6,6 +6,7 @@
         {
             public const string GeoPackageExtension = ".gpkg";
             public const string GeoTiffExtension = ".tif";
+            public const string LasExtension = ".las";
         }
 
         public static class Las

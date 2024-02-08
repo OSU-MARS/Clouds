@@ -11,17 +11,21 @@ namespace Mars.Clouds.Las
     {
         public int TilesLoaded { get; set; }
         public int TilesIntersected { get; private init; }
+        // x and y indices in destination grid metrics raster
         public int XIndex { get; private init; }
         public int YIndex { get; private init; }
 
+        // values of points in cell
         public List<PointClassification> Classification { get; set; }
         public List<UInt16> Intensity { get; private init; }
         public List<byte> ReturnNumber { get; private init; }
-        public double XMax { get; set; }
-        public double XMin { get; set; }
-        public double YMax { get; set; }
-        public double YMin { get; set; }
         public List<float> Z { get; private init; }
+
+        // range of points within the cell
+        public double PointXMax { get; set; }
+        public double PointXMin { get; set; }
+        public double PointYMax { get; set; }
+        public double PointYMin { get; set; }
 
         public PointListZirnc(int xIndex, int yIndex, int tilesIntersected)
         {
@@ -33,10 +37,10 @@ namespace Mars.Clouds.Las
             this.Classification = [];
             this.Intensity = [];
             this.ReturnNumber = [];
-            this.XMax = Double.MinValue;
-            this.XMin = Double.MaxValue;
-            this.YMax = Double.MinValue;
-            this.YMin = Double.MaxValue;
+            this.PointXMax = Double.MinValue;
+            this.PointXMin = Double.MaxValue;
+            this.PointYMax = Double.MinValue;
+            this.PointYMin = Double.MaxValue;
             this.Z = [];
         }
 

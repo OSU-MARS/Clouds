@@ -5,12 +5,12 @@
 
 using System.Diagnostics.CodeAnalysis;
 
+[assembly: SuppressMessage("Style", "IDE0074:Use compound assignment", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GdalCmdlet.GetExistingTilePaths(System.String,System.String)~System.String[]")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.LasTilesCmdlet.ReadLasHeadersAndFormGrid(System.Nullable{System.Int32})~Mars.Clouds.Las.LasTileGrid")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.GdalExtensions.GetDriverByExtension(System.String)~OSGeo.GDAL.Driver")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.VirtualRaster`1.GetNeighborhood8(System.Int32,System.Int32,System.Int32)~Mars.Clouds.GdalExtensions.VirtualRasterNeighborhood8{`0}")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Segmentation.TreetopRingSearchState.#ctor(Mars.Clouds.GdalExtensions.VirtualRasterNeighborhood8{System.Single},Mars.Clouds.GdalExtensions.VirtualRasterNeighborhood8{System.Single},System.String)")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Segmentation.TreetopSearch`1.FindTreetops(System.Int32,System.String)~System.Int32")]
-[assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetGridMetrics.MetricsTileRead.#ctor(System.Int32,System.Int32,System.Int32)")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetTreeSize.DirectorySize.#ctor(System.String)")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.LasTilesToRasterCmdlet.TileReadToRaster.#ctor(System.Int32)")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.Grid`1.#ctor(OSGeo.OSR.SpatialReference,Mars.Clouds.GdalExtensions.GridGeoTransform,System.Int32,System.Int32)")]
@@ -28,4 +28,3 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Las.VariableLengthRecord.#ctor(System.UInt16,System.String,System.UInt16,System.UInt16,System.String,System.Byte[])")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Segmentation.Treetops.#ctor(System.Int32,System.Int32)")]
 [assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.LasTilesToTilesCmdlet.ReadLasHeadersAndCellSize(System.String,System.Boolean)~System.ValueTuple{Mars.Clouds.Las.LasTileGrid,System.Int32,System.Int32}")]
-

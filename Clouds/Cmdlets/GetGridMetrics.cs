@@ -21,9 +21,17 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : LasTilesToRasterCmdlet
     {
-        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid cells. Ones based, default is the first band.")]
-        [ValidateRange(1, 1000)]
+        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid cells. Ones based, default is 1 (the first band).")]
+        [ValidateRange(1, 500)] // arbitrary upper bound
         public int CellBand { get; set; }
+
+        [Parameter(Mandatory = true, HelpMessage = "1) path to a single digital terrain model (DTM) raster to estimate DSM height above ground from or 2,3) path to a directory containing DTM tiles whose file names match the DSM tiles. Each DSM must be a  single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
+        [ValidateNotNullOrEmpty]
+        public string? Dtm { get; set; }
+
+        [Parameter(HelpMessage = "Number of DTM band to use in calculating mean ground elevations. Default is 1 (the first band).")]
+        [ValidateRange(1, 500)] // arbitrary upper bound
+        public int DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Settings controlling which grid metrics the output rasters contain.")]
         [ValidateNotNull]
@@ -32,14 +40,15 @@ namespace Mars.Clouds.Cmdlets
         public GetGridMetrics()
         {
             this.CellBand = 1;
-            this.MaxThreads = 2;
+            // this.Dtm is mandatory
+            this.DtmBand = 1;
+            // leave this.MaxThreads at default for DTM read
             this.Settings = new();
         }
 
         protected override void ProcessRecord()
         {
-            Debug.Assert(String.IsNullOrEmpty(this.Cells) == false);
-
+            Debug.Assert((String.IsNullOrEmpty(this.Cells) == false) && (String.IsNullOrEmpty(this.Dtm) == false));
             if (this.MaxThreads < 2)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
@@ -50,13 +59,17 @@ namespace Mars.Clouds.Cmdlets
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(gridEpsg);
-            GridMetricsPointLists metricsGrid = new(cellDefinitions, this.CellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
+            VirtualRaster<float> dtm = this.ReadVirtualRaster("Get-GridMetrics", this.Dtm);
+            if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
+            {
+                throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
+            }
 
+            GridMetricsPointLists metricsGrid = new(cellDefinitions, this.CellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
             GridMetricsRaster metricsRaster = new(metricsGrid.Crs, metricsGrid.Transform, metricsGrid.XSize, metricsGrid.YSize, this.Settings);
 
-            MetricsTileRead metricsRead = new(gridEpsg, metricsGrid.NonNullCells, this.MaxTiles);
-            
-            Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, metricsGrid, metricsRead), metricsRead.CancellationTokenSource.Token);
+            MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxTiles);
+            Task readPoints = Task.Run(() => this.ReadLasTiles(lasGrid, metricsGrid, metricsRead), metricsRead.CancellationTokenSource.Token);
             Task calculateMetrics = Task.Run(() => this.WriteTiles(metricsRaster, metricsRead), metricsRead.CancellationTokenSource.Token);
 
             Task[] gridMetricsTasks = [ readPoints, calculateMetrics ];
@@ -69,7 +82,7 @@ namespace Mars.Clouds.Cmdlets
             base.ProcessRecord();
         }
 
-        private void ReadTiles(LasTileGrid lasGrid, GridMetricsPointLists metricsGrid, MetricsTileRead tileRead)
+        private void ReadLasTiles(LasTileGrid lasGrid, GridMetricsPointLists metricsGrid, MetricsTileRead tileRead)
         {
             try
             {
@@ -120,6 +133,7 @@ namespace Mars.Clouds.Cmdlets
                 tileRead.FullyPopulatedCells.CompleteAdding();
             }
         }
+
         private void WriteTiles(GridMetricsRaster metricsRaster, MetricsTileRead tileRead)
         {
             float crsLinearUnits = (float)tileRead.Crs.GetLinearUnits();
@@ -131,17 +145,22 @@ namespace Mars.Clouds.Cmdlets
                 for (int batchIndex = 0; batchIndex < populatedCellBatch.Count; ++batchIndex)
                 {
                     PointListZirnc gridCell = populatedCellBatch[batchIndex];
+                    (double cellCenterX, double cellCenterY) = metricsRaster.Transform.GetCellCenter(gridCell.XIndex, gridCell.YIndex);
+                    if (tileRead.DtmTiles.TryGetNeighborhood8(cellCenterX, cellCenterY, bandIndex: this.DtmBand - 1, out VirtualRasterNeighborhood8<float>? dtmNeighborhood) == false)
+                    {
+                        throw new InvalidOperationException("Could not find DTM tile for metrics grid cell at (" + cellCenterX + ", " + cellCenterY + ") (metrics grid indices " + gridCell.XIndex + ", " + gridCell.YIndex + ") in DTM band " + this.DtmBand + ".");
+                    }
                     try
                     {
-                        metricsRaster.SetMetrics(gridCell, oneMeterHeightClass, twoMeterHeightThreshold);
+                        metricsRaster.SetMetrics(gridCell, dtmNeighborhood, oneMeterHeightClass, twoMeterHeightThreshold);
                         // cell's lists are no longer needed; release them so the memory can be used for continuing tile loading
                         // Since ClearAndRelease() zeros TilesLoaded it's called for consistency even if a cell contains no points.
-                        gridCell.ClearAndRelease();
+                        gridCell.ClearAndRelease(); // could use a PointListZirnc object pool
                         ++tileRead.RasterCellsCompleted;
                     }
                     catch (Exception exception)
                     {
-                        throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + gridCell.XMin + ", " + gridCell.XMax + ", " + gridCell.YMin + ", " + gridCell.YMax + ") at grid position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, tileRead.CancellationTokenSource.Token);
+                        throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + gridCell.PointXMin + ", " + gridCell.PointXMax + ", " + gridCell.PointYMin + ", " + gridCell.PointYMax + ") at grid position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, tileRead.CancellationTokenSource.Token);
                     }
 
                     if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
@@ -160,14 +179,16 @@ namespace Mars.Clouds.Cmdlets
         private class MetricsTileRead : TileReadToRaster
         {
             public SpatialReference Crs { get; private init; }
+            public VirtualRaster<float> DtmTiles { get; private init; }
             public BlockingCollection<List<PointListZirnc>> FullyPopulatedCells { get; private init; }
 
-            public MetricsTileRead(int gridEpsg, int metricsCells, int maxTiles) 
+            public MetricsTileRead(VirtualRaster<float> dtmTiles, int gridEpsg, int metricsCells, int maxSimultaneouslyLoadedTiles) 
                 : base(metricsCells)
             {
                 this.Crs = new(null);
                 this.Crs.ImportFromEPSG(gridEpsg);
-                this.FullyPopulatedCells = new(maxTiles);
+                this.DtmTiles = dtmTiles;
+                this.FullyPopulatedCells = new(maxSimultaneouslyLoadedTiles);
             }
         }
     }

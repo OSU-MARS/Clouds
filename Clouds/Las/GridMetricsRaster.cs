@@ -17,7 +17,6 @@ namespace Mars.Clouds.Las
         public RasterBand<float> ZGroundMean { get; private init; }
         public RasterBand<float> ZStandardDeviation { get; private init; }
         public RasterBand<float> ZSkew { get; private init; }
-        public RasterBand<float> ZKurtosis { get; private init; }
         public RasterBand<float> ZNormalizedEntropy { get; private init; }
         public RasterBand<float> PZAboveZMean { get; private init; }
         public RasterBand<float> PZAboveThreshold { get; private init; }
@@ -40,24 +39,23 @@ namespace Mars.Clouds.Las
         public RasterBand<float> ZQuantile85 { get; private init; }
         public RasterBand<float> ZQuantile90 { get; private init; }
         public RasterBand<float> ZQuantile95 { get; private init; }
-        public RasterBand<float> ZPCumulative10 { get; private init; }
-        public RasterBand<float> ZPCumulative20 { get; private init; }
-        public RasterBand<float> ZPCumulative30 { get; private init; }
-        public RasterBand<float> ZPCumulative40 { get; private init; }
-        public RasterBand<float> ZPCumulative50 { get; private init; }
-        public RasterBand<float> ZPCumulative60 { get; private init; }
-        public RasterBand<float> ZPCumulative70 { get; private init; }
-        public RasterBand<float> ZPCumulative80 { get; private init; }
-        public RasterBand<float> ZPCumulative90 { get; private init; }
-        public RasterBand<float> IntensityFirstReturn { get; private init; } // Alonzo et al. 2014 http://dx.doi.org/10.1016/j.rse.2014.03.018
+        public RasterBand<float> IntensityFirstReturn { get; private init; } // Alonzo et al. 2014 http://dx.doi.org/10.1016/j.rse.2014.03.018, Shi et al. 2018 https://doi.org/10.1016/j.isprsjprs.2018.02.002
         public RasterBand<float> IntensityMean { get; private init; }
         public RasterBand<float> IntensityMeanAboveMedianZ { get; private init; } // Alonzo et al.
         public RasterBand<float> IntensityMeanBelowMedianZ { get; private init; } // Alonzo et al.
         public RasterBand<float> IntensityMax { get; private init; }
         public RasterBand<float> IntensityStandardDeviation { get; private init; }
         public RasterBand<float> IntensitySkew { get; private init; }
-        public RasterBand<float> IntensityKurtosis { get; private init; }
         public RasterBand<float> IntensityPGround { get; private init; }
+        public RasterBand<float> IntensityQuantile10 { get; private init; }
+        public RasterBand<float> IntensityQuantile20 { get; private init; }
+        public RasterBand<float> IntensityQuantile30 { get; private init; }
+        public RasterBand<float> IntensityQuantile40 { get; private init; }
+        public RasterBand<float> IntensityQuantile50 { get; private init; }
+        public RasterBand<float> IntensityQuantile60 { get; private init; }
+        public RasterBand<float> IntensityQuantile70 { get; private init; }
+        public RasterBand<float> IntensityQuantile80 { get; private init; }
+        public RasterBand<float> IntensityQuantile90 { get; private init; }
         public RasterBand<float> PFirstReturn { get; private init; }
         public RasterBand<float> PSecondReturn { get; private init; }
         public RasterBand<float> PThirdReturn { get; private init; }
@@ -66,13 +64,24 @@ namespace Mars.Clouds.Las
         public RasterBand<float> PGround { get; private init; }
 
         // optional bands
+        public RasterBand<float>? AreaOfPointBoundingBox { get; private init; }
+        public RasterBand<float>? IntensityKurtosis { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ10 { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ30 { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ50 { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ70 { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ90 { get; private init; }
         public RasterBand<float>? IntensityTotal { get; private init; }
-        public RasterBand<float>? AreaOfPointBoundingBox { get; private init; }
+        public RasterBand<float>? ZKurtosis { get; private init; }
+        public RasterBand<float>? ZPCumulative10 { get; private init; }
+        public RasterBand<float>? ZPCumulative20 { get; private init; }
+        public RasterBand<float>? ZPCumulative30 { get; private init; }
+        public RasterBand<float>? ZPCumulative40 { get; private init; }
+        public RasterBand<float>? ZPCumulative50 { get; private init; }
+        public RasterBand<float>? ZPCumulative60 { get; private init; }
+        public RasterBand<float>? ZPCumulative70 { get; private init; }
+        public RasterBand<float>? ZPCumulative80 { get; private init; }
+        public RasterBand<float>? ZPCumulative90 { get; private init; }
 
         public GridMetricsRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, GridMetricsSettings settings)
             : base(crs, transform, xSize, ySize, GridMetricsRaster.GetBandCount(settings), Single.NaN)
@@ -86,7 +95,6 @@ namespace Mars.Clouds.Las
             this.ZGroundMean = this.Bands[bandIndex++];
             this.ZStandardDeviation = this.Bands[bandIndex++];
             this.ZSkew = this.Bands[bandIndex++];
-            this.ZKurtosis = this.Bands[bandIndex++];
             this.ZNormalizedEntropy = this.Bands[bandIndex++];
             this.PZAboveZMean = this.Bands[bandIndex++];
             this.PZAboveThreshold = this.Bands[bandIndex++];
@@ -109,15 +117,6 @@ namespace Mars.Clouds.Las
             this.ZQuantile85 = this.Bands[bandIndex++];
             this.ZQuantile90 = this.Bands[bandIndex++];
             this.ZQuantile95 = this.Bands[bandIndex++];
-            this.ZPCumulative10 = this.Bands[bandIndex++];
-            this.ZPCumulative20 = this.Bands[bandIndex++];
-            this.ZPCumulative30 = this.Bands[bandIndex++];
-            this.ZPCumulative40 = this.Bands[bandIndex++];
-            this.ZPCumulative50 = this.Bands[bandIndex++];
-            this.ZPCumulative60 = this.Bands[bandIndex++];
-            this.ZPCumulative70 = this.Bands[bandIndex++];
-            this.ZPCumulative80 = this.Bands[bandIndex++];
-            this.ZPCumulative90 = this.Bands[bandIndex++];
             this.IntensityFirstReturn = this.Bands[bandIndex++]; // Alonzo et al. 2014 http://dx.doi.org/10.1016/j.rse.2014.03.018
             this.IntensityMean = this.Bands[bandIndex++];
             this.IntensityMeanAboveMedianZ = this.Bands[bandIndex++]; // Alonzo et al.
@@ -125,8 +124,16 @@ namespace Mars.Clouds.Las
             this.IntensityMax = this.Bands[bandIndex++];
             this.IntensityStandardDeviation = this.Bands[bandIndex++];
             this.IntensitySkew = this.Bands[bandIndex++];
-            this.IntensityKurtosis = this.Bands[bandIndex++];
             this.IntensityPGround = this.Bands[bandIndex++];
+            this.IntensityQuantile10 = this.Bands[bandIndex++];
+            this.IntensityQuantile20 = this.Bands[bandIndex++];
+            this.IntensityQuantile30 = this.Bands[bandIndex++];
+            this.IntensityQuantile40 = this.Bands[bandIndex++];
+            this.IntensityQuantile50 = this.Bands[bandIndex++];
+            this.IntensityQuantile60 = this.Bands[bandIndex++];
+            this.IntensityQuantile70 = this.Bands[bandIndex++];
+            this.IntensityQuantile80 = this.Bands[bandIndex++];
+            this.IntensityQuantile90 = this.Bands[bandIndex++];
             this.PFirstReturn = this.Bands[bandIndex++];
             this.PSecondReturn = this.Bands[bandIndex++];
             this.PThirdReturn = this.Bands[bandIndex++];
@@ -140,7 +147,6 @@ namespace Mars.Clouds.Las
             this.ZMean.Name = "zMean";
             this.ZStandardDeviation.Name = "zStdDev";
             this.ZSkew.Name = "zSkew";
-            this.ZKurtosis.Name = "zKurtosis";
             this.ZNormalizedEntropy.Name = "zNormalizedEntropy";
             this.PZAboveZMean.Name = "pZaboveZmean";
             this.PZAboveThreshold.Name = "pZaboveThreshold";
@@ -163,15 +169,6 @@ namespace Mars.Clouds.Las
             this.ZQuantile85.Name = "zQ85";
             this.ZQuantile90.Name = "zQ90";
             this.ZQuantile95.Name = "zQ95";
-            this.ZPCumulative10.Name = "zPcumulative10";
-            this.ZPCumulative20.Name = "zPcumulative20";
-            this.ZPCumulative30.Name = "zPcumulative30";
-            this.ZPCumulative40.Name = "zPcumulative40";
-            this.ZPCumulative50.Name = "zPcumulative50";
-            this.ZPCumulative60.Name = "zPcumulative60";
-            this.ZPCumulative70.Name = "zPcumulative70";
-            this.ZPCumulative80.Name = "zPcumulative80";
-            this.ZPCumulative90.Name = "zPcumulative90";
             this.IntensityFirstReturn.Name = "intensityFirstReturn";
             this.IntensityMean.Name = "intensityMean";
             this.IntensityMeanAboveMedianZ.Name = "intensityMeanAboveMedianZ";
@@ -179,8 +176,16 @@ namespace Mars.Clouds.Las
             this.IntensityMax.Name = "intensityMax";
             this.IntensityStandardDeviation.Name = "intensityStdDev";
             this.IntensitySkew.Name = "intensitySkew";
-            this.IntensityKurtosis.Name = "intensityKurtosis";
             this.IntensityPGround.Name = "intensityPground";
+            this.IntensityQuantile10.Name = "intensityQ10";
+            this.IntensityQuantile20.Name = "intensityQ20";
+            this.IntensityQuantile30.Name = "intensityQ30";
+            this.IntensityQuantile40.Name = "intensityQ40";
+            this.IntensityQuantile50.Name = "intensityQ50";
+            this.IntensityQuantile60.Name = "intensityQ60";
+            this.IntensityQuantile70.Name = "intensityQ70";
+            this.IntensityQuantile80.Name = "intensityQ80";
+            this.IntensityQuantile90.Name = "intensityQ90";
             this.PFirstReturn.Name = "pFirstReturn";
             this.PSecondReturn.Name = "pSecondReturn";
             this.PThirdReturn.Name = "pThirdReturn";
@@ -216,29 +221,98 @@ namespace Mars.Clouds.Las
                 this.IntensityTotal = this.Bands[bandIndex++];
                 this.IntensityTotal.Name = "intensityTotal";
             }
+            if (settings.Kurtosis)
+            {
+                this.IntensityKurtosis = this.Bands[bandIndex++];
+                this.IntensityKurtosis.Name = "intensityKurtosis";
+                this.ZKurtosis = this.Bands[bandIndex++];
+                this.ZKurtosis.Name = "zKurtosis";
+            }
             if (settings.PointBoundingArea)
             {
                 this.AreaOfPointBoundingBox = this.Bands[bandIndex++];
                 this.AreaOfPointBoundingBox.Name = "areaOfPointBoundingBox";
             }
+            if (settings.ZPCumulative)
+            {
+                this.ZPCumulative10 = this.Bands[bandIndex++];
+                this.ZPCumulative20 = this.Bands[bandIndex++];
+                this.ZPCumulative30 = this.Bands[bandIndex++];
+                this.ZPCumulative40 = this.Bands[bandIndex++];
+                this.ZPCumulative50 = this.Bands[bandIndex++];
+                this.ZPCumulative60 = this.Bands[bandIndex++];
+                this.ZPCumulative70 = this.Bands[bandIndex++];
+                this.ZPCumulative80 = this.Bands[bandIndex++];
+                this.ZPCumulative90 = this.Bands[bandIndex++];
+
+                this.ZPCumulative10.Name = "zPcumulative10";
+                this.ZPCumulative20.Name = "zPcumulative20";
+                this.ZPCumulative30.Name = "zPcumulative30";
+                this.ZPCumulative40.Name = "zPcumulative40";
+                this.ZPCumulative50.Name = "zPcumulative50";
+                this.ZPCumulative60.Name = "zPcumulative60";
+                this.ZPCumulative70.Name = "zPcumulative70";
+                this.ZPCumulative80.Name = "zPcumulative80";
+                this.ZPCumulative90.Name = "zPcumulative90";
+            }
         }
 
         private static int GetBandCount(GridMetricsSettings settings)
         {
-            int bands = 59;
+            // points + 6 z stats + 2 pZabove + 19 zQ + 8 intensity stats + 9 intensity quantiles + 6 return probabilities
+            int bands = 1 + 6 + 2 + 19 + 8 + 9 + 6; // 51 always on bands
+            if (settings.IntensityPCumulativeZQ)
+            {
+                bands += 5;
+            }
+            if (settings.IntensityTotal)
+            {
+                ++bands;
+            }
+            if (settings.Kurtosis)
+            {
+                bands += 2;
+            }
             if (settings.PointBoundingArea)
             {
                 ++bands;
+            }
+            if (settings.ZPCumulative)
+            {
+                bands += 9;
             }
 
             return bands;
         }
 
-        public void SetMetrics(PointListZirnc cell, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
+        public void SetMetrics(PointListZirnc cell, VirtualRasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
         {
             int pointCount = cell.Count;
-            int cellIndex = this.Points.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing
+            int cellIndex = this.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing
             this.Points[cellIndex] = pointCount;
+
+            (double cellXmin, double cellXmax, double cellYmin, double cellYmax) = this.Transform.GetCellExtent(cell.XIndex, cell.YIndex);
+            (int dtmXindexMin, int dtmXindexMax, int dtmYindexMin, int dtmYindexMax) = dtmNeighborhood.Center.GetIntersectingCellIndices(cellXmin, cellXmax, cellYmin, cellYmax);
+            Debug.Assert((dtmXindexMax > dtmXindexMin) && (dtmYindexMax > dtmYindexMin), "Expected at least one DTM cell to match grid metrics cell.");
+            float zGroundSum = 0.0F;
+            int dtmCells = 0;
+            for (int dtmYindex = dtmYindexMin; dtmYindex < dtmYindexMax; ++dtmYindex)
+            {
+                for (int dtmXindex = dtmXindexMin; dtmXindex < dtmXindexMax; ++dtmXindex)
+                {
+                    if (dtmNeighborhood.TryGetValue(dtmXindex, dtmYindex, out float dtmZ) == false)
+                    {
+                        continue;
+                    }
+
+                    zGroundSum += dtmZ;
+                    ++dtmCells;
+                }
+            }
+            if (dtmCells > 0)
+            {
+                this.ZGroundMean[cellIndex] = zGroundSum / dtmCells;
+            }
 
             if (pointCount < 1)
             {
@@ -252,6 +326,7 @@ namespace Mars.Clouds.Las
             cell.Z.CopyTo(sortedZ);
             Array.Sort(sortedZ);
 
+            int zQuantile50index;
             float zQuantile10;
             float zQuantile30;
             float zQuantile50;
@@ -272,7 +347,8 @@ namespace Mars.Clouds.Las
                 this.ZQuantile35[cellIndex] = sortedZ[Int32.Max((int)(7.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile40[cellIndex] = sortedZ[Int32.Max((int)(8.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile45[cellIndex] = sortedZ[Int32.Max((int)(9.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                zQuantile50 = sortedZ[Int32.Max((int)(10.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
+                zQuantile50index = Int32.Max((int)(10.0F * pointCount / 20.0F + 0.5F) - 1, 0);
+                zQuantile50 = sortedZ[zQuantile50index];
                 this.ZQuantile50[cellIndex] = zQuantile50;
                 this.ZQuantile55[cellIndex] = sortedZ[Int32.Max((int)(11.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile60[cellIndex] = sortedZ[Int32.Max((int)(12.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
@@ -299,7 +375,8 @@ namespace Mars.Clouds.Las
                 this.ZQuantile35[cellIndex] = sortedZ[7 * pointCount / 20 - 1];
                 this.ZQuantile40[cellIndex] = sortedZ[8 * pointCount / 20 - 1];
                 this.ZQuantile45[cellIndex] = sortedZ[9 * pointCount / 20 - 1];
-                zQuantile50 = sortedZ[10 * pointCount / 20 - 1];
+                zQuantile50index = 10 * pointCount / 20 - 1;
+                zQuantile50 = sortedZ[zQuantile50index];
                 this.ZQuantile50[cellIndex] = zQuantile50;
                 this.ZQuantile55[cellIndex] = sortedZ[11 * pointCount / 20 - 1];
                 this.ZQuantile60[cellIndex] = sortedZ[12 * pointCount / 20 - 1];
@@ -322,7 +399,7 @@ namespace Mars.Clouds.Las
             // probability point z is above z threshold
             // intensity by z
             float zMin = sortedZ[0];
-            double zGroundSum = 0.0;
+            // double zGroundSum = 0.0; // calculation of mean ground elevation in cell disabled due to use of DTM
             double zSum = 0.0;
             double zSumSquared = 0.0;
             double zSumCubed = 0.0;
@@ -481,13 +558,13 @@ namespace Mars.Clouds.Las
                 if (classification == PointClassification.Ground)
                 {
                     intensityGroundSum += intensity;
-                    zGroundSum += z;
+                    // zGroundSum += z;
                     ++groundPoints;
                 }
             }
 
-            float zGroundMean = groundPoints > 0 ? (float)(zGroundSum / groundPoints) : Single.NaN;
-            this.ZGroundMean[cellIndex] = zGroundMean;
+            //float zGroundMean = groundPoints > 0 ? (float)(zGroundSum / groundPoints) : Single.NaN;
+            //this.ZGroundMean[cellIndex] = zGroundSum;
 
             double pointCountAsDouble = (double)pointCount;
             double zMean = zSum / pointCountAsDouble;
@@ -497,29 +574,38 @@ namespace Mars.Clouds.Las
             this.ZStandardDeviation[cellIndex] = (float)zStandardDeviation;
             double zSkew = (zSumCubed - 3.0 * zSumSquared * zMean + 3.0 * zSum * zMean * zMean - pointCountAsDouble * zMean * zMean * zMean) / (zVariance * zStandardDeviation) * pointCountAsDouble / (pointCountAsDouble - 1.0) / (pointCountAsDouble - 2.0);
             this.ZSkew[cellIndex] = (float)zSkew;
-            // kurtosis is subject to numerical precision effects when calculated at double precision
-            // Can be changed to Int128 if needed.
-            double zKurtosis = (zSumFourthPower - 4.0 * zSumCubed * zMean + 6.0 * zSumSquared * zMean * zMean - 4.0 * zSum * zMean * zMean * zMean + pointCountAsDouble * zMean * zMean * zMean * zMean) / (zVariance * zVariance) * pointCountAsDouble * (pointCountAsDouble + 1.0) / ((pointCountAsDouble - 1.0) * (pointCountAsDouble - 2.0) * (pointCountAsDouble - 3.0));
-            this.ZKurtosis[cellIndex] = (float)zKurtosis;
 
-            int pointsBelowZLevel = pointsFromZ00to10;
-            this.ZPCumulative10[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ10to20;
-            this.ZPCumulative20[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ20to30;
-            this.ZPCumulative30[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ30to40;
-            this.ZPCumulative40[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ40to50;
-            this.ZPCumulative50[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ50to60;
-            this.ZPCumulative60[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ60to70;
-            this.ZPCumulative70[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ70to80;
-            this.ZPCumulative80[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
-            pointsBelowZLevel += pointsFromZ80to90;
-            this.ZPCumulative90[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+            if (this.ZKurtosis != null)
+            {
+                // kurtosis is subject to numerical precision effects when calculated at double precision
+                // Can be changed to Int128 if needed.
+                double zKurtosis = (zSumFourthPower - 4.0 * zSumCubed * zMean + 6.0 * zSumSquared * zMean * zMean - 4.0 * zSum * zMean * zMean * zMean + pointCountAsDouble * zMean * zMean * zMean * zMean) / (zVariance * zVariance) * pointCountAsDouble * (pointCountAsDouble + 1.0) / ((pointCountAsDouble - 1.0) * (pointCountAsDouble - 2.0) * (pointCountAsDouble - 3.0));
+                this.ZKurtosis[cellIndex] = (float)zKurtosis;
+            }
+
+            if (this.ZPCumulative10 != null)
+            {
+                Debug.Assert((this.ZPCumulative20 != null) && (this.ZPCumulative30 != null) && (this.ZPCumulative40 != null) && (this.ZPCumulative50 != null) && (this.ZPCumulative60 != null) && (this.ZPCumulative70 != null) && (this.ZPCumulative80 != null) && (this.ZPCumulative90 != null));
+
+                int pointsBelowZLevel = pointsFromZ00to10;
+                this.ZPCumulative10[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ10to20;
+                this.ZPCumulative20[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ20to30;
+                this.ZPCumulative30[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ30to40;
+                this.ZPCumulative40[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ40to50;
+                this.ZPCumulative50[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ50to60;
+                this.ZPCumulative60[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ60to70;
+                this.ZPCumulative70[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ70to80;
+                this.ZPCumulative80[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+                pointsBelowZLevel += pointsFromZ80to90;
+                this.ZPCumulative90[cellIndex] = (float)(pointsBelowZLevel / pointCountAsDouble);
+            }
 
             // entropy is of debatable value: sensitive to bin width and edge positioning
             // Entropy is also not well defined if there are no points or if there's only a single height class.
@@ -544,16 +630,19 @@ namespace Mars.Clouds.Las
             this.IntensityStandardDeviation[cellIndex] = (float)intensityStandardDeviation;
             double intensitySkew = (intensitySumCubed - 3.0 * intensitySumSquared * intensityMean + 3.0 * intensitySum * intensityMean * intensityMean - pointCountAsDouble * intensityMean * intensityMean * intensityMean) / (intensityVariance * intensityStandardDeviation) * pointCountAsDouble / (pointCountAsDouble - 1.0) / (pointCountAsDouble - 2.0);
             this.IntensitySkew[cellIndex] = (float)intensitySkew;
-            double intensityKurtosis = (intensitySumFourthPower - 4.0 * intensitySumCubed * intensityMean + 6.0 * intensitySumSquared * intensityMean * intensityMean - 4.0 * intensitySum * intensityMean * intensityMean * intensityMean + pointCountAsDouble * intensityMean * intensityMean * intensityMean * intensityMean) / (intensityVariance * intensityVariance) * pointCountAsDouble * (pointCountAsDouble + 1.0) / ((pointCountAsDouble - 1.0) * (pointCountAsDouble - 2.0) * (pointCountAsDouble - 3.0));
-            this.IntensityKurtosis[cellIndex] = (float)intensityKurtosis;
+            if (this.IntensityKurtosis != null)
+            {
+                double intensityKurtosis = (intensitySumFourthPower - 4.0 * intensitySumCubed * intensityMean + 6.0 * intensitySumSquared * intensityMean * intensityMean - 4.0 * intensitySum * intensityMean * intensityMean * intensityMean + pointCountAsDouble * intensityMean * intensityMean * intensityMean * intensityMean) / (intensityVariance * intensityVariance) * pointCountAsDouble * (pointCountAsDouble + 1.0) / ((pointCountAsDouble - 1.0) * (pointCountAsDouble - 2.0) * (pointCountAsDouble - 3.0));
+                this.IntensityKurtosis[cellIndex] = (float)intensityKurtosis;
+            }
 
             if (this.IntensityTotal != null)
             {
                 this.IntensityTotal[cellIndex] = (float)intensitySum;
             }
 
-            int pointsBelowMedian = pointsFromZ00to10 + pointsFromZ10to20 + pointsFromZ20to30 + pointsFromZ30to40 + pointsFromZ40to50;
-            int pointsAboveMedian = pointCount - pointsBelowMedian; // no pointsFromZ90to100
+            int pointsBelowMedian = zQuantile50index;
+            int pointsAboveMedian = pointCount - pointsBelowMedian;
             this.IntensityFirstReturn[cellIndex] = (float)intensityFirstReturnSum / (float)pointsByReturnNumber[1]; // NaN due to divide by zero if no first returns
             this.IntensityMeanAboveMedianZ[cellIndex] = (float)intensityAboveMedianSum / (float)pointsAboveMedian;
             this.IntensityMeanBelowMedianZ[cellIndex] = (float)intensityBelowMedianSum / (float)pointsBelowMedian;
@@ -579,9 +668,9 @@ namespace Mars.Clouds.Las
             int pointsAboveZMean = 0;
             int pointsAboveZThreshold = 0;
             float zCountThreshold = zThresholdInCrsUnits;
-            if (Single.IsNaN(zGroundMean) == false)
+            if (dtmCells > 0)
             {
-                zCountThreshold += zGroundMean; // if ground points have been classified, make threshold relative to ground
+                zCountThreshold += this.ZGroundMean[cellIndex]; // make threshold relative to DTM
             }
             for (int pointIndex = 0; pointIndex < pointCount; ++pointIndex)
             {
@@ -605,9 +694,44 @@ namespace Mars.Clouds.Las
             this.PFifthReturn[cellIndex] = (float)(pointsByReturnNumber[5] / pointCountAsDouble);
             this.PGround[cellIndex] = (float)(groundPoints / pointCountAsDouble);
 
+            // intensity quantiles
+            if (this.IntensityQuantile10 != null)
+            {
+                UInt16[] sortedIntensity = new UInt16[pointCount];
+                cell.Intensity.CopyTo(sortedIntensity);
+                Array.Sort(sortedIntensity);
+
+                if (pointCount < 10)
+                {
+                    // if cell has less than 20 points then n * pointCount / 20 will be zero at least some of the time
+                    // Negative indices result in this case due to the subtraction of 1.
+                    this.IntensityQuantile10[cellIndex] = sortedIntensity[Int32.Max((int)(1.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile20[cellIndex] = sortedIntensity[Int32.Max((int)(2.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile30[cellIndex] = sortedIntensity[Int32.Max((int)(3.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile40[cellIndex] = sortedIntensity[Int32.Max((int)(4.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile50[cellIndex] = sortedIntensity[Int32.Max((int)(5.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile60[cellIndex] = sortedIntensity[Int32.Max((int)(6.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile70[cellIndex] = sortedIntensity[Int32.Max((int)(7.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile80[cellIndex] = sortedIntensity[Int32.Max((int)(8.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                    this.IntensityQuantile90[cellIndex] = sortedIntensity[Int32.Max((int)(9.0F * pointCount / 10.0F + 0.5F) - 1, 0)];
+                }
+                else
+                {
+                    this.IntensityQuantile10[cellIndex] = sortedIntensity[1 * pointCount / 10 - 1];
+                    this.IntensityQuantile20[cellIndex] = sortedIntensity[2 * pointCount / 10 - 1];
+                    this.IntensityQuantile30[cellIndex] = sortedIntensity[3 * pointCount / 10 - 1];
+                    this.IntensityQuantile40[cellIndex] = sortedIntensity[4 * pointCount / 10 - 1];
+                    this.IntensityQuantile50[cellIndex] = sortedIntensity[5 * pointCount / 10 - 1];
+                    this.IntensityQuantile60[cellIndex] = sortedIntensity[6 * pointCount / 10 - 1];
+                    this.IntensityQuantile70[cellIndex] = sortedIntensity[7 * pointCount / 10 - 1];
+                    this.IntensityQuantile80[cellIndex] = sortedIntensity[8 * pointCount / 10 - 1];
+                    this.IntensityQuantile90[cellIndex] = sortedIntensity[9 * pointCount / 10 - 1];
+                }
+            }
+
             if (this.AreaOfPointBoundingBox != null)
             {
-                this.AreaOfPointBoundingBox[cellIndex] = (float)((cell.XMax - cell.XMin) * (cell.YMax - cell.YMin));
+                this.AreaOfPointBoundingBox[cellIndex] = (float)((cell.PointXMax - cell.PointXMin) * (cell.PointYMax - cell.PointYMin));
             }
         }
     }

@@ -11,8 +11,8 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Orthoimages")]
     public class GetOrthoimages : LasTilesToTilesCmdlet
     {
-        [Parameter(HelpMessage = "Number of bits per channel in output tiles. Can be 16 or 32, signed, default is 32 (unsigned and 64 bit are not currently supported by GDAL's C# interface).")]
-        [ValidateRange(16, 32)] // could also use [ValidateSet] but string conversion is required
+        [Parameter(HelpMessage = "Number of unsigned bits per channel in output tiles. Can be 16, 32, or 64. Default is 16, which is likely to occasionally result in points' RGB, NIR, and possibly intensity values of 65535 being reduced to 65534 to disambiguate them from no data values.")]
+        [ValidateRange(16, 64)] // could also use [ValidateSet] but string conversion is required
         public int BitDepth { get; set; }
 
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to write image to as a GeoTIFF or 2,3) path to a directory to write image tiles to.")]
@@ -21,15 +21,15 @@ namespace Mars.Clouds.Cmdlets
 
         public GetOrthoimages() 
         {
-            this.BitDepth = 32;
+            this.BitDepth = 16;
             this.MaxThreads = 8; // for now, default to a single read thread and seven write threads
         }
 
         protected override void ProcessRecord() 
         {
-            if ((this.BitDepth != 16) && (this.BitDepth != 32))
+            if ((this.BitDepth != 16) && (this.BitDepth != 32) && (this.BitDepth != 64))
             {
-                throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16 or 32 bits per channel.");
+                throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per channel.");
             }
             Debug.Assert(this.Image != null);
             if (this.MaxThreads < 8)
@@ -91,11 +91,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 case 16:
                     // will likely fail since source data is UInt16; divide by two to avoid Int16 overflows?
-                    ImageRaster<Int16> imageTile16 = imageTile.AsInt16(Int16.MinValue);
+                    ImageRaster<UInt16> imageTile16 = imageTile.AsUInt16();
                     imageTile16.Write(imageTilePath);
                     break;
                 case 32:
-                    ImageRaster<Int32> imageTile32 = imageTile.AsInt32(Int32.MinValue);
+                    ImageRaster<UInt32> imageTile32 = imageTile.AsUInt32();
                     imageTile32.Write(imageTilePath); // 32 bit integer deflate compression appears to be somewhat expensive
                     break;
                 default:

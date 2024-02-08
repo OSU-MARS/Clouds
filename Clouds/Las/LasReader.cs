@@ -475,21 +475,21 @@ namespace Mars.Clouds.Las
                     continue;
                 }
 
-                if (x < abaCell.XMin)
+                if (x < abaCell.PointXMin)
                 {
-                    abaCell.XMin = x;
+                    abaCell.PointXMin = x;
                 }
-                if (x > abaCell.XMax)
+                if (x > abaCell.PointXMax)
                 {
-                    abaCell.XMax = x;
+                    abaCell.PointXMax = x;
                 }
-                if (y < abaCell.YMin)
+                if (y < abaCell.PointYMin)
                 {
-                    abaCell.YMin = y;
+                    abaCell.PointYMin = y;
                 }
-                if (y > abaCell.YMax)
+                if (y > abaCell.PointYMax)
                 {
-                    abaCell.YMax = y;
+                    abaCell.PointYMax = y;
                 }
 
                 float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);

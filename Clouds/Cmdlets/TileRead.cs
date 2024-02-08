@@ -12,10 +12,8 @@ namespace Mars.Clouds.Cmdlets
         public TileRead()
         {
             this.CancellationTokenSource = new();
-            this.Stopwatch = new();
+            this.Stopwatch = Stopwatch.StartNew();
             this.TilesLoaded = 0;
-
-            this.Stopwatch.Start();
         }
     }
 }

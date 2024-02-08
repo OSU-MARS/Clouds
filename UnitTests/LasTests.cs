@@ -94,6 +94,10 @@ namespace Mars.Clouds.UnitTests
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
 
+            VirtualRaster<float> dtm = new();
+            dtm.Add(Raster<float>.Read(Path.Combine(this.unitTestPath, TestConstant.DtmFileName)));
+            dtm.BuildGrid();
+
             LasHeader14 lasHeader14 = (LasHeader14)lasTile.Header;
             Assert.IsTrue(String.Equals(lasHeader14.FileSignature, LasFile.Signature, StringComparison.Ordinal));
             Assert.IsTrue(lasHeader14.GlobalEncoding == GlobalEncoding.WellKnownText);
@@ -249,37 +253,47 @@ namespace Mars.Clouds.UnitTests
             {
                 IntensityPCumulativeZQ = true,
                 IntensityTotal = true,
-                PointBoundingArea = true
+                Kurtosis = true,
+                PointBoundingArea = true,
+                ZPCumulative = true
             };
             SpatialReference lasSpatialReference = lasTile.GetSpatialReference();
             float crsLinearUnits = (float)lasSpatialReference.GetLinearUnits();
             float oneMeterHeightClass = 1.0F / crsLinearUnits;
-            float twoMeterHeightThreshold = 920.52F + 2.0F / crsLinearUnits;
+            float twoMeterHeightThreshold = 2.0F / crsLinearUnits;
 
             GridMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize, abaMetricsSettings);
-            abaMetrics.SetMetrics(psmeCell1, oneMeterHeightClass, twoMeterHeightThreshold);
-            abaMetrics.SetMetrics(psmeCell2, oneMeterHeightClass, twoMeterHeightThreshold);
-            abaMetrics.SetMetrics(adjacentCell1, oneMeterHeightClass, twoMeterHeightThreshold);
-            abaMetrics.SetMetrics(adjacentCell2, oneMeterHeightClass, twoMeterHeightThreshold);
+
+            (double psmeCell1X, double psmeCell1Y) = abaMetrics.Transform.GetCellCenter(psmeCell1.XIndex, psmeCell1.YIndex);
+            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell1X, psmeCell1Y, bandIndex: 0, out VirtualRasterNeighborhood8<float>? psmeDtmNeighborhood1));
+            (double psmeCell2X, double psmeCell2Y) = abaMetrics.Transform.GetCellCenter(psmeCell2.XIndex, psmeCell2.YIndex);
+            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell2X, psmeCell2Y, bandIndex: 0, out VirtualRasterNeighborhood8<float>? psmeDtmNeighborhood2));
+            (double adjacentCell1X, double adjacentCell1Y) = abaMetrics.Transform.GetCellCenter(adjacentCell1.XIndex, adjacentCell1.YIndex);
+            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell1X, adjacentCell1Y, bandIndex: 0, out VirtualRasterNeighborhood8<float>? adjacentCellNeighborhood1));
+            (double adjacentCell2X, double adjacentCell2Y) = abaMetrics.Transform.GetCellCenter(adjacentCell2.XIndex, adjacentCell2.YIndex);
+            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell2X, adjacentCell2Y, bandIndex: 0, out VirtualRasterNeighborhood8<float>? adjacentCellNeighborhood2));
+
+            abaMetrics.SetMetrics(psmeCell1, psmeDtmNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
+            abaMetrics.SetMetrics(psmeCell2, psmeDtmNeighborhood2, oneMeterHeightClass, twoMeterHeightThreshold);
+            abaMetrics.SetMetrics(adjacentCell1, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
+            abaMetrics.SetMetrics(adjacentCell2, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
 
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox != null);
-            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ10 != null);
-            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ30 != null);
-            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ50 != null);
-            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ70 != null);
-            Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ90 != null);
+            Assert.IsTrue((abaMetrics.IntensityKurtosis != null) && (abaMetrics.ZKurtosis != null));
+            Assert.IsTrue((abaMetrics.IntensityPCumulativeZQ10 != null) && (abaMetrics.IntensityPCumulativeZQ30 != null) && (abaMetrics.IntensityPCumulativeZQ50 != null) && (abaMetrics.IntensityPCumulativeZQ70 != null) && (abaMetrics.IntensityPCumulativeZQ90 != null));
             Assert.IsTrue(abaMetrics.IntensityTotal != null);
+            Assert.IsTrue((abaMetrics.ZPCumulative10 != null) && (abaMetrics.ZPCumulative20 != null) && (abaMetrics.ZPCumulative30 != null) && (abaMetrics.ZPCumulative40 != null) && (abaMetrics.ZPCumulative50 != null) && (abaMetrics.ZPCumulative60 != null) && (abaMetrics.ZPCumulative70 != null) && (abaMetrics.ZPCumulative80 != null) && (abaMetrics.ZPCumulative90 != null));
 
             Assert.IsTrue(abaMetrics.Points[8, 14] == 162764);
             Assert.IsTrue(abaMetrics.ZMax[8, 14] == 928.6306F);
             Assert.IsTrue(abaMetrics.ZMean[8, 14] == 923.698242F);
-            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 14])); // points not classified
+            Assert.IsTrue(abaMetrics.ZGroundMean[8, 14] == 920.8271F);
             Assert.IsTrue(abaMetrics.ZStandardDeviation[8, 14] == 1.69425166F);
             Assert.IsTrue(abaMetrics.ZSkew[8, 14] == 0.3093502F);
             Assert.IsTrue(abaMetrics.ZKurtosis[8, 14] == 2.619736F);
             Assert.IsTrue(abaMetrics.ZNormalizedEntropy[8, 14] == 0.83192575F);
             Assert.IsTrue(abaMetrics.PZAboveZMean[8, 14] == 0.4679106F);
-            Assert.IsTrue(abaMetrics.PZAboveThreshold[8, 14] == 0.740716636F);
+            Assert.IsTrue(abaMetrics.PZAboveThreshold[8, 14] == 0.666455746F);
             Assert.IsTrue(abaMetrics.ZQuantile05[8, 14] == 920.903137F);
             Assert.IsTrue(abaMetrics.ZQuantile10[8, 14] == 921.4857F);
             Assert.IsTrue(abaMetrics.ZQuantile15[8, 14] == 921.985352F);
@@ -310,14 +324,23 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZPCumulative90[8, 14] == 0.9956993F);
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityFirstReturn[8, 14]));
             Assert.IsTrue(abaMetrics.IntensityMean[8, 14] == 5679.68066F);
-            Assert.IsTrue(abaMetrics.IntensityMeanAboveMedianZ[8, 14] == 10718.9775F);
-            Assert.IsTrue(abaMetrics.IntensityMeanBelowMedianZ[8, 14] == 3603.43115F);
+            Assert.IsTrue(abaMetrics.IntensityMeanAboveMedianZ[8, 14] == 6255.316F);
+            Assert.IsTrue(abaMetrics.IntensityMeanBelowMedianZ[8, 14] == 5104.03027F);
             Assert.IsTrue(abaMetrics.IntensityMax[8, 14] == 29812.0F);
             Assert.IsTrue(abaMetrics.IntensityStandardDeviation[8, 14] == 3675.354F);
             Assert.IsTrue(abaMetrics.IntensitySkew[8, 14] == 0.610383332F);
             Assert.IsTrue(abaMetrics.IntensityKurtosis[8, 14] == 2.95583248F);
             Assert.IsTrue(abaMetrics.IntensityTotal[8, 14] == 9.244475E+08F);
             Assert.IsTrue(abaMetrics.IntensityPGround[8, 14] == 0.0F); // points not classified
+            Assert.IsTrue(abaMetrics.IntensityQuantile10[8, 14] == 1285.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile20[8, 14] == 2313.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile30[8, 14] == 3084.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile40[8, 14] == 4112.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile50[8, 14] == 5140.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile60[8, 14] == 6425.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile70[8, 14] == 7453.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile80[8, 14] == 8995.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile90[8, 14] == 10794.0F);
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ10[8, 14] == 0.102303207F);
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ30[8, 14] == 0.2589203F);
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ50[8, 14] == 0.44931823F);
@@ -334,13 +357,13 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.Points[9, 14] == 44853.0F);
             Assert.IsTrue(abaMetrics.ZMax[9, 14] == 926.576538F);
             Assert.IsTrue(abaMetrics.ZMean[9, 14] == 922.74585F);
-            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[9, 14]));
+            Assert.IsTrue(abaMetrics.ZGroundMean[9, 14] == 921.0524F);
             Assert.IsTrue(abaMetrics.ZStandardDeviation[9, 14] == 1.39960063F);
             Assert.IsTrue(abaMetrics.ZSkew[9, 14] == 0.329364121F);
             Assert.IsTrue(abaMetrics.ZKurtosis[9, 14] == 2.12710214F);
             Assert.IsTrue(abaMetrics.ZNormalizedEntropy[9, 14] == 0.828225255F);
             Assert.IsTrue(abaMetrics.PZAboveZMean[9, 14] == 0.454975128F);
-            Assert.IsTrue(abaMetrics.PZAboveThreshold[9, 14] == 0.5062315F);
+            Assert.IsTrue(abaMetrics.PZAboveThreshold[9, 14] == 0.413171917F);
             Assert.IsTrue(abaMetrics.ZQuantile05[9, 14] == 920.749F);
             Assert.IsTrue(abaMetrics.ZQuantile10[9, 14] == 920.872437F);
             Assert.IsTrue(abaMetrics.ZQuantile15[9, 14] == 921.17804F);
@@ -371,13 +394,22 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.ZPCumulative90[9, 14] == 0.993043959F);
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityFirstReturn[9, 14]));
             Assert.IsTrue(abaMetrics.IntensityMean[9, 14] == 4962.5127F);
-            Assert.IsTrue(abaMetrics.IntensityMeanAboveMedianZ[9, 14] == 8485.947F);
-            Assert.IsTrue(abaMetrics.IntensityMeanBelowMedianZ[9, 14] == 3368.1814F);
+            Assert.IsTrue(abaMetrics.IntensityMeanAboveMedianZ[9, 14] == 5286.88F);
+            Assert.IsTrue(abaMetrics.IntensityMeanBelowMedianZ[9, 14] == 4638.102F);
             Assert.IsTrue(abaMetrics.IntensityMax[9, 14] == 27242.0F);
             Assert.IsTrue(abaMetrics.IntensityStandardDeviation[9, 14] == 3340.16382F);
             Assert.IsTrue(abaMetrics.IntensitySkew[9, 14] == 0.6552501F);
             Assert.IsTrue(abaMetrics.IntensityKurtosis[9, 14] == 2.89136815F);
             Assert.IsTrue(abaMetrics.IntensityTotal[9, 14] == 222583584.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile10[9, 14] == 771.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile20[9, 14] == 2056.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile30[9, 14] == 2827.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile40[9, 14] == 3341.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile50[9, 14] == 4369.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile60[9, 14] == 5397.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile70[9, 14] == 6682.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile80[9, 14] == 7967.0F);
+            Assert.IsTrue(abaMetrics.IntensityQuantile90[9, 14] == 9766.0F);
             Assert.IsTrue(abaMetrics.IntensityPGround[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ10[9, 14] == 0.115006164F);
             Assert.IsTrue(abaMetrics.IntensityPCumulativeZQ30[9, 14] == 0.294207036F);
@@ -395,7 +427,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.Points[8, 15] == 0);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean[8, 15]));
-            Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean[8, 15]));
+            Assert.IsTrue(abaMetrics.ZGroundMean[8, 15] == 921.348267F);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZStandardDeviation[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZSkew[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZKurtosis[8, 15]));
@@ -439,6 +471,15 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensitySkew[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityKurtosis[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityTotal[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile10[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile20[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile30[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile40[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile50[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile60[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile70[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile80[8, 15]));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityQuantile90[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPGround[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ10[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.IntensityPCumulativeZQ30[8, 15]));
@@ -595,8 +636,8 @@ namespace Mars.Clouds.UnitTests
             imageReader.ReadPointsToImage(lasTile, image);
 
             image.OnPointAdditionComplete();
-            ImageRaster<Int16> image16 = image.AsInt16(Int16.MinValue);
-            ImageRaster<Int32> image32 = image.AsInt32(Int32.MinValue);
+            ImageRaster<UInt16> image16 = image.AsUInt16();
+            ImageRaster<UInt32> image32 = image.AsUInt32();
 
             Assert.IsTrue(image.BandCount == 8);
             Assert.IsTrue(image.CellsPerBand == 72);
@@ -619,19 +660,19 @@ namespace Mars.Clouds.UnitTests
                     Assert.IsTrue(image.FirstReturns[xIndex, yIndex] == 0);
                     Assert.IsTrue(image.SecondReturns[xIndex, yIndex] == 0);
 
-                    Assert.IsTrue(image32.Red[xIndex, yIndex] == Int32.MinValue);
-                    Assert.IsTrue(image32.Green[xIndex, yIndex] == Int32.MinValue);
-                    Assert.IsTrue(image32.Blue[xIndex, yIndex] == Int32.MinValue);
-                    Assert.IsTrue(image32.NearInfrared[xIndex, yIndex] == Int32.MinValue);
-                    Assert.IsTrue(image32.Intensity[xIndex, yIndex] == Int32.MinValue);
+                    Assert.IsTrue(image32.Red[xIndex, yIndex] == UInt32.MaxValue);
+                    Assert.IsTrue(image32.Green[xIndex, yIndex] == UInt32.MaxValue);
+                    Assert.IsTrue(image32.Blue[xIndex, yIndex] == UInt32.MaxValue);
+                    Assert.IsTrue(image32.NearInfrared[xIndex, yIndex] == UInt32.MaxValue);
+                    Assert.IsTrue(image32.Intensity[xIndex, yIndex] == UInt32.MaxValue);
                     Assert.IsTrue(image32.FirstReturns[xIndex, yIndex] == 0);
                     Assert.IsTrue(image32.SecondReturns[xIndex, yIndex] == 0);
 
-                    Assert.IsTrue(image16.Red[xIndex, yIndex] == Int16.MinValue);
-                    Assert.IsTrue(image16.Green[xIndex, yIndex] == Int16.MinValue);
-                    Assert.IsTrue(image16.Blue[xIndex, yIndex] == Int16.MinValue);
-                    Assert.IsTrue(image16.NearInfrared[xIndex, yIndex] == Int16.MinValue);
-                    Assert.IsTrue(image16.Intensity[xIndex, yIndex] == Int16.MinValue);
+                    Assert.IsTrue(image16.Red[xIndex, yIndex] == UInt16.MaxValue);
+                    Assert.IsTrue(image16.Green[xIndex, yIndex] == UInt16.MaxValue);
+                    Assert.IsTrue(image16.Blue[xIndex, yIndex] == UInt16.MaxValue);
+                    Assert.IsTrue(image16.NearInfrared[xIndex, yIndex] == UInt16.MaxValue);
+                    Assert.IsTrue(image16.Intensity[xIndex, yIndex] == UInt16.MaxValue);
                     Assert.IsTrue(image16.FirstReturns[xIndex, yIndex] == 0);
                     Assert.IsTrue(image16.SecondReturns[xIndex, yIndex] == 0);
                 }
