@@ -63,6 +63,13 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndex, yIndex);
         }
 
+        public (double xCentroid, double yCentroid) GetCentroid()
+        {
+            double xCentroid = this.Transform.OriginX + 0.5 * this.XSize * this.Transform.CellWidth;
+            double yCentroid = this.Transform.OriginY + 0.5 * this.XSize * this.Transform.CellHeight;
+            return (xCentroid, yCentroid);
+        }
+
         public (double xMin, double xMax, double yMin, double yMax) GetExtent()
         {
             Debug.Assert(this.Transform.CellHeight < 0.0);
@@ -123,6 +130,15 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
         }
 
+        public bool IsSameExtent(Grid other)
+        {
+            (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
+            (double otherXmin, double otherXmax, double otherYmin, double otherYmax) = other.GetExtent();
+
+            // for now use exact equality
+            return (thisXmin == otherXmin) && (thisXmax == otherXmax) && (thisYmin == otherYmin) && (thisYmax == otherYmax);
+        }
+
         public int ToCellIndex(int xIndex, int yIndex)
         {
             return xIndex + yIndex * this.XSize;
@@ -142,10 +158,16 @@ namespace Mars.Clouds.GdalExtensions
             this.NonNullCells = 0;
         }
 
+        public TCell? this[int cellIndex]
+        {
+            get { return this.Cells[cellIndex]; }
+            set { this.Cells[cellIndex] = value; }
+        }
+
         public TCell? this[int xIndex, int yIndex]
         {
-            get { return this.Cells[xIndex + yIndex * this.XSize]; }
-            set { this.Cells[xIndex + yIndex * this.XSize] = value; }
+            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            set { this.Cells[this.ToCellIndex(xIndex, yIndex)] = value; }
         }
     }
 }

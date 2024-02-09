@@ -57,7 +57,7 @@ namespace Mars.Clouds.Cmdlets
             }
             for (int workerThread = readThreads; workerThread < orthoimageTasks.Length; ++workerThread)
             {
-                orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
+                orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, TileReadWrite<ImageRaster<UInt64>>>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
             }
 
             this.WaitForTasks("Get-Orthoimages", orthoimageTasks, lasGrid, imageReadWrite);

@@ -8,6 +8,7 @@ namespace Mars.Clouds.Segmentation
     internal class RingLayer : TreetopLayer
     {
         private readonly int dsmZindex;
+        private readonly int inSimilarElevationIndex;
         private readonly int[] maxRingIndex;
         private readonly int[] minRingIndex;
         private readonly int netProminenceNormalizedIndex;
@@ -22,6 +23,7 @@ namespace Mars.Clouds.Segmentation
             this.tileName = tileName;
 
             this.dsmZindex = this.Definition.GetFieldIndex("dsmZ");
+            this.inSimilarElevationIndex = this.Definition.GetFieldIndex("inSimilarElevationGroup");
             this.maxRingIndex[0] = this.Definition.GetFieldIndex("maxRing1");
             this.maxRingIndex[1] = this.Definition.GetFieldIndex("maxRing2");
             this.maxRingIndex[2] = this.Definition.GetFieldIndex("maxRing3");
@@ -35,7 +37,16 @@ namespace Mars.Clouds.Segmentation
             this.netProminenceNormalizedIndex = this.Definition.GetFieldIndex("netProminenceNormalized");
         }
 
-        public void Add(int id, double x, double y, double elevation, double dsmZ, double radius, double netProminenceNormalized, int maxRingIndex, ReadOnlySpan<float> maxRingHeight, ReadOnlySpan<float> minRingHeight)
+        /// <param name="id">candidate treetop ID (may not be unique)</param>
+        /// <param name="x">local maxima's x location in CRS units</param>
+        /// <param name="y">local maxima's y location in CRS units</param>
+        /// <param name="elevation">local maxima's DTM elevation in CRS units</param>
+        /// <param name="dsmZ">local maxima's DSM elevation in CRS units</param>
+        /// <param name="localMaximaRadius">radius over which local maxima is known to be the highest point in CRS units (either the distance to the next highest DSM cell or the maximum search radius)</param>
+        /// <param name="maxRingIndexEvaluated">maximum index to which ring elevations are populated</param>
+        /// <param name="maxRingElevation">minimum DSM elevation by ring in CRS units</param>
+        /// <param name="minRingElevation">minimum DSM elevation by ring in CRS units</param>
+        public void Add(int id, double x, double y, double elevation, double dsmZ, bool isInSimilarElevationGroup, double localMaximaRadius, double netProminenceNormalized, int maxRingIndexEvaluated, ReadOnlySpan<float> maxRingElevation, ReadOnlySpan<float> minRingElevation)
         {
             Feature treetopCandidate = new(this.Definition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
@@ -44,17 +55,18 @@ namespace Mars.Clouds.Segmentation
             treetopCandidate.SetField(this.TileFieldIndex, this.tileName);
             treetopCandidate.SetField(this.TreeIDfieldIndex, id);
             treetopCandidate.SetField(this.HeightFieldIndex, dsmZ - elevation);
-            treetopCandidate.SetField(this.RadiusFieldIndex, radius);
+            treetopCandidate.SetField(this.RadiusFieldIndex, localMaximaRadius);
             treetopCandidate.SetField(this.dsmZindex, dsmZ);
+            treetopCandidate.SetField(this.inSimilarElevationIndex, isInSimilarElevationGroup ? 1.0F : 0.0F);
             treetopCandidate.SetField(this.netProminenceNormalizedIndex, netProminenceNormalized);
 
-            int maxLoggedRingIndex = Int32.Min(this.maxRingIndex.Length, maxRingIndex);
-            for (int ringIndex = 0; ringIndex < maxLoggedRingIndex; ++ringIndex)
+            int maxLoggedRingIndex = Int32.Min(this.maxRingIndex.Length - 1, maxRingIndexEvaluated);
+            for (int ringIndex = 0; ringIndex <= maxLoggedRingIndex; ++ringIndex)
             {
-                treetopCandidate.SetField(this.maxRingIndex[ringIndex], maxRingHeight[ringIndex]);
-                treetopCandidate.SetField(this.minRingIndex[ringIndex], minRingHeight[ringIndex]);
+                treetopCandidate.SetField(this.maxRingIndex[ringIndex], maxRingElevation[ringIndex]);
+                treetopCandidate.SetField(this.minRingIndex[ringIndex], minRingElevation[ringIndex]);
             }
-            for (int ringIndex = maxLoggedRingIndex; ringIndex < this.maxRingIndex.Length; ++ringIndex)
+            for (int ringIndex = maxLoggedRingIndex + 1; ringIndex < this.maxRingIndex.Length; ++ringIndex)
             {
                 treetopCandidate.SetField(this.maxRingIndex[ringIndex], Double.NaN);
                 treetopCandidate.SetField(this.minRingIndex[ringIndex], Double.NaN);
@@ -68,6 +80,7 @@ namespace Mars.Clouds.Segmentation
             Layer gdalLayer = TreetopLayer.CreateGdalLayer(ringFile, "ringDsm", crs, tileName.Length);
             gdalLayer.CreateField("netProminenceNormalized", FieldType.OFTReal);
             gdalLayer.CreateField("dsmZ", FieldType.OFTReal);
+            gdalLayer.CreateField("inSimilarElevationGroup", FieldType.OFTReal);
             gdalLayer.CreateField("maxRing1", FieldType.OFTReal);
             gdalLayer.CreateField("maxRing2", FieldType.OFTReal);
             gdalLayer.CreateField("maxRing3", FieldType.OFTReal);

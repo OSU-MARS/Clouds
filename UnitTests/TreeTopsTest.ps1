@@ -9,6 +9,10 @@ $dataPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County"
 $tile = "s04200w06810" # "s04230w06810"
 Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM with outlier rejection\$tile control.tif" -Dtm "$dataPath\DTM\$tile.tif" -Diagnostics "$dataPath\DSM with outlier rejection\ring diagnostics" -Treetops "$dataPath\DSM with outlier rejection\$tile.gpkg" -Verbose
 
+# 4x3 tiles of DSM ring-based treetop identification
+#$tiles = "s042?0w068?0"
+#Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM\$tiles.tif" -Dtm "$dataPath\DTM" -Diagnostics "$dataPath\treetops\ring diagnostics" -Treetops "$dataPath\treetops" -Verbose
+
 # DSM radius-based treetop identification
 #$tile = "s04020w06690"
 #Get-Treetops -Dsm "$dataPath\DSM\$tile.tif" -Dtm "$dataPath\DTM\$tile.tif" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM\$tile DSM radius.gpkg")) -Verbose
@@ -18,7 +22,9 @@ Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM with outlier rejection\$tile co
 #Get-Treetops -Method ChmRadius -Dsm "$dataPath\DSM\*.tif" -Dtm "$dataPath\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops CHM")) -Verbose
 
 # treetop identification across many tiles
-Get-Treetops -Method DsmRing -Dsm "D:\Elliott\GIS\DOGAMI\2009 OLC South Coast\DSM\*.tif" -Dtm "$dataPath\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2009 OLC South Coast\treetops DSM ring")) -Verbose
+# 2009 flight
+#Get-Treetops -Method DsmRing -Dsm "D:\Elliott\GIS\DOGAMI\2009 OLC South Coast\DSM\*.tif" -Dtm "$dataPath\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2009 OLC South Coast\treetops DSM ring")) -Verbose
+# 2021 flight
 #Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM\*.tif" -Dtm "$dataPath\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM ring")) -Verbose
 
 #Get-Treetops -Method DsmRadius -Dsm "$dataPath\DSM\*.tif" -Dtm "$dataPath\DTM" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM")) -Verbose
@@ -33,3 +39,12 @@ Get-Treetops -Method DsmRing -Dsm "D:\Elliott\GIS\DOGAMI\2009 OLC South Coast\DS
 #{
 #  Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM\$tile.tif" -Dtm "$dataPath\DTM\$tile.tif" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "PhD\Elliott\GIS\DOGAMI\2021 OLC Coos County\treetops DSM ring\$tile.gpkg")) -Verbose
 #}
+
+# get raster of local maxima radii
+$tile = "s04200w06810"
+Get-LocalMaxima -Dsm "$dataPath\DSM with outlier rejection\$tile control.tif" -LocalMaxima "$dataPath\DSM with outlier rejection\$tile local maxima.tif" -Verbose
+
+# 4x3 group of local maxima radii tiles
+#$tiles = "s042?0w068?0"
+#Get-LocalMaxima -Dsm "$dataPath\DSM\$tiles.tif" -LocalMaxima "$dataPath\treetops\ring diagnostics" -Verbose
+

@@ -83,8 +83,8 @@ namespace Mars.Clouds.Las
         public RasterBand<float>? ZPCumulative80 { get; private init; }
         public RasterBand<float>? ZPCumulative90 { get; private init; }
 
-        public GridMetricsRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, GridMetricsSettings settings)
-            : base(crs, transform, xSize, ySize, GridMetricsRaster.GetBandCount(settings), Single.NaN)
+        public GridMetricsRaster(Grid extent, GridMetricsSettings settings)
+            : base(extent, GridMetricsRaster.GetBandCount(settings), Raster<float>.GetDefaultNoDataValue())
         {
             int bandIndex = 0;
 

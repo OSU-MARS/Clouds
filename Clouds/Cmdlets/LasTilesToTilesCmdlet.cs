@@ -47,7 +47,7 @@ namespace Mars.Clouds.Cmdlets
             return (lasGrid, outputTileSizeX, outputTileSizeY);
         }
 
-        protected void ReadTiles<TTile>(LasTileGrid lasGrid, Func<LasTile, TileReadWrite<TTile>, TTile> readTile, TileReadWrite<TTile> tileReadWrite)
+        protected void ReadTiles<TTile, TReadWrite>(LasTileGrid lasGrid, Func<LasTile, TReadWrite, TTile> readTile, TReadWrite tileReadWrite) where TReadWrite : TileReadWrite<TTile>
         {
             try
             {
@@ -129,7 +129,7 @@ namespace Mars.Clouds.Cmdlets
             tileReadWrite.Stopwatch.Stop();
         }
 
-        protected void WriteTiles<TTile>(Func<string, TTile, TileReadWrite<TTile>, int> writeTile, TileReadWrite<TTile> tileReadWrite) where TTile : Grid
+        protected void WriteTiles<TTile, TReadWrite>(Func<string, TTile, TReadWrite, int> writeTile, TReadWrite tileReadWrite) where TTile : Grid where TReadWrite : TileReadWrite<TTile>
         {
             foreach ((string tileName, TTile dsmTilePointZ) in tileReadWrite.LoadedTiles.GetConsumingEnumerable())
             {

@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Mars.Clouds.Extensions
 {
-    internal static class Tile
+    public static class Tile
     {
         public static string GetName(string tileFilePath)
         {

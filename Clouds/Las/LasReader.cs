@@ -404,6 +404,58 @@ namespace Mars.Clouds.Las
             }
         }
 
+        public void ReadPointsToGrid(LasTile tile, Grid<PointListZ> dsmGrid, bool dropGroundPoints)
+        {
+            LasHeader10 lasHeader = tile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(tile);
+
+            // read points
+            // See performance notes in ReadPointsToGrid().
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            double xOffset = lasHeader.XOffset;
+            double xScale = lasHeader.XScaleFactor;
+            double yOffset = lasHeader.YOffset;
+            double yScale = lasHeader.YScaleFactor;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
+            {
+                this.BaseStream.ReadExactly(pointBytes);
+                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
+                {
+                    continue;
+                }
+                if (dropGroundPoints && (classification == PointClassification.Ground))
+                {
+                    continue;
+                }
+
+                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                (int xIndex, int yIndex) = dsmGrid.GetCellIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmGrid.XSize) || (yIndex >= dsmGrid.YSize))
+                {
+                    // point lies outside of the DSM tile and is therefore not of interest
+                    // If the DSM tile's extents are equal to or larger than the .las tile in all directions reaching this case is an error.
+                    // For now DSM tiles with smaller extents than the .las tile aren't supported.
+                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmGrid.GetExtentString() + " .");
+                }
+
+                PointListZ? dsmCell = dsmGrid[xIndex, yIndex];
+                if (dsmCell == null)
+                {
+                    dsmCell = new(xIndex, yIndex);
+                    dsmGrid[xIndex, yIndex] = dsmCell;
+                }
+
+                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                dsmCell.Z.Add(z);
+            }
+        }
+
         public void ReadPointsToGrid(LasTile tile, Grid<PointListZirnc> metricsGrid)
         {
             LasHeader10 lasHeader = tile.Header;
@@ -521,47 +573,6 @@ namespace Mars.Clouds.Las
                         //}
                     }
                 }
-            }
-        }
-
-        public void ReadUpperPointsToGrid(LasTile tile, PointGridZ dsmTilePoints)
-        {
-            LasHeader10 lasHeader = tile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(tile);
-
-            // read points
-            // See performance notes in ReadPointsToGrid().
-            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
-            byte pointFormat = lasHeader.PointDataRecordFormat;
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
-            float zOffset = (float)lasHeader.ZOffset;
-            float zScale = (float)lasHeader.ZScaleFactor;
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
-            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
-            {
-                this.BaseStream.ReadExactly(pointBytes);
-                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
-                {
-                    continue;
-                }
-
-                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = dsmTilePoints.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTilePoints.XSize) || (yIndex >= dsmTilePoints.YSize))
-                {
-                    // point lies outside of the DSM tile and is therefore not of interest
-                    // If the DSM tile's extents are equal to or larger than the .las tile in all directions reaching this case is an error.
-                    // For now DSM tiles with smaller extents than the .las tile aren't supported.
-                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTilePoints.GetExtentString() + " .");
-                }
-
-                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                dsmTilePoints.TryAddUpperPoint(xIndex, yIndex, z);
             }
         }
 

@@ -1,9 +1,8 @@
-﻿using Mars.Clouds.Segmentation;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.Segmentation;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,9 +19,17 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string? Dsm { get; set; }
 
+        [Parameter(HelpMessage = "Band number of DSM height values in surface raster. Default is 1.")]
+        [ValidateRange(1, 100)] // arbitrary upper bound
+        public int DsmBand { get; set; }
+
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to a single digital terrain model (DTM) raster to estimate DSM height above ground from or 2,3) path to a directory containing DTM tiles whose file names match the DSM tiles. Each DSM must be a  single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
         [ValidateNotNullOrEmpty]
         public string? Dtm { get; set; }
+
+        [Parameter(HelpMessage = "Band number of DTM height values in terrain raster. Default is 1.")]
+        [ValidateRange(1, 100)] // arbitrary upper bound
+        public int DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Method of treetop detection. ChmRadius = local maxima in CHM filtered by height dependent radius (default), DsmRadius = local maxima in DSM filtered by height dependent radius, DsmRing = ring prominence in DSM.")]
         public TreetopDetectionMethod Method { get; set; }
@@ -37,9 +44,11 @@ namespace Mars.Clouds.Cmdlets
 
         public GetTreetops()
         {
-            // this.Dsm is mandatory
-            // this.Dtm is mandatory
             this.Diagnostics = null;
+            // this.Dsm is mandatory
+            this.DsmBand = 1;
+            // this.Dtm is mandatory
+            this.DtmBand = 1;
             this.Method = TreetopDetectionMethod.DsmRadius;
             this.MinimumHeight = Single.NaN;
             // this.Treetops is mandatory
@@ -50,28 +59,25 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert((this.Dsm != null) && (this.Dtm != null) && (this.Treetops != null));
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            TreetopSearch treetopSearch = TreetopSearch.Create(this.Method);
+            TreetopSearch treetopSearch = TreetopSearch.Create(this.Method, this.DsmBand - 1, this.DtmBand - 1);
             treetopSearch.DiagnosticsPath = this.Diagnostics;
 
             string[] dsmTilePaths = GdalCmdlet.GetExistingTilePaths(this.Dsm, Constant.File.GeoTiffExtension);
             int treetopCandidates = 0;
-            if (dsmTilePaths.Length == 0)
+            if (dsmTilePaths.Length == 1)
             {
                 // single tile case
-                treetopSearch.AddTile(this.Dsm, this.Dtm);
+                string dsmTilePath = dsmTilePaths[0];
+                treetopSearch.AddTile(Tile.GetName(dsmTilePath), dsmTilePath, this.Dtm);
                 treetopSearch.BuildGrids();
                 treetopCandidates += treetopSearch.FindTreetops(0, this.Treetops);
             }
             else
             {
                 // multi-tile case
-                if (Directory.Exists(this.Dtm) == false)
-                {
-                    throw new ParameterOutOfRangeException(nameof(this.Dtm), "-" + nameof(this.Dtm) + " must be an existing directory when " + nameof(this.Dsm) + " indicates multiple files.");
-                }
                 if (Directory.Exists(this.Treetops) == false)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when " + nameof(this.Dsm) + " indicates multiple files.");
+                    throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
                 }
 
                 // load all tiles
@@ -92,16 +98,16 @@ namespace Mars.Clouds.Cmdlets
                         string dsmTilePath = dsmTilePaths[tileIndex];
                         string dsmTileFileName = Path.GetFileName(dsmTilePath);
                         string dtmTilePath = Path.Combine(this.Dtm, dsmTileFileName);
-                        treetopSearch.AddTile(dsmTilePath, dtmTilePath);
+                        string tileName = Tile.GetName(dsmTilePath);
+                        treetopSearch.AddTile(tileName, dsmTilePath, dtmTilePath);
 
-                        mostRecentDsmTileName = dsmTileFileName;
+                        mostRecentDsmTileName = tileName;
                         Interlocked.Increment(ref tilesLoaded);
                     });
                 });
 
-                TimeSpan progressInterval = TimeSpan.FromSeconds(2.0);
                 ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
-                while (loadTilesTask.Wait(progressInterval) == false)
+                while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
                     float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Length;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
@@ -133,7 +139,7 @@ namespace Mars.Clouds.Cmdlets
                     });
                 });
 
-                while (findTreetopsTask.Wait(progressInterval) == false)
+                while (findTreetopsTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
                     float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Length;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
@@ -144,9 +150,9 @@ namespace Mars.Clouds.Cmdlets
             }
 
             stopwatch.Stop();
-            string elapsedTimeFormat = stopwatch.Elapsed.TotalHours >= 1.0 ? "hh\\:mm\\:ss" : "mm\\:ss";
             string tileOrTiles = dsmTilePaths.Length > 1 ? "tiles" : "tile";
-            this.WriteVerbose(dsmTilePaths.Length + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            this.WriteVerbose(dsmTilePaths.Length + " " + tileOrTiles + " and " + treetopCandidates.ToString("#,#,#,0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
+            base.ProcessRecord();
         }
     }
 }

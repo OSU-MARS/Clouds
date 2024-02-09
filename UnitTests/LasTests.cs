@@ -1,3 +1,4 @@
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using MaxRev.Gdal.Core;
@@ -26,61 +27,63 @@ namespace Mars.Clouds.UnitTests
             GdalBase.ConfigureAll();
         }
 
+        private VirtualRaster<float> ReadDtm()
+        {
+            Debug.Assert(this.unitTestPath != null);
+
+            VirtualRaster<float> dtm = new();
+            dtm.Add(Tile.GetName(TestConstant.DtmFileName), Raster<float>.Read(Path.Combine(this.unitTestPath, TestConstant.DtmFileName)));
+            dtm.BuildGrid();
+
+            return dtm;
+        }
+
         [TestMethod]
         public void ReadLasDsm()
         {
-            Debug.Assert(this.unitTestPath != null);
             LasTile lasTile = this.ReadLasTile();
+            (double lasTileCentroidX, double lasTileCentroidY) = lasTile.GridExtent.GetCentroid();
+            VirtualRaster<float> dtm = this.ReadDtm();
+            Assert.IsTrue(dtm.TryGetTile(lasTileCentroidX, lasTileCentroidY, bandIndex: 0, out RasterBand<float>? dtmTile));
 
             double dsmCellSize = 0.5;
             int dsmXsize = (int)(lasTile.GridExtent.Width / dsmCellSize) + 1; // 3.6 x 4.2 m -> 4.0 x 4.5 m
             int dsmYsize = (int)(lasTile.GridExtent.Height / dsmCellSize) + 1;
-            float isolationDistance = 0.94F; // m, isolated point rejection starts below 93.2 cm
+            float gapZ = 0.94F; // m, isolated point rejection starts below 93.2 cm
             GridGeoTransform lasTileTransform = new(lasTile.GridExtent, dsmCellSize, dsmCellSize);
 
-            PointGridZ dsmPoints1 = new(lasTile.GetSpatialReference(), lasTileTransform, dsmXsize, dsmYsize, 1);
-            using LasReader pointReader1 = lasTile.CreatePointReader();
-            pointReader1.ReadUpperPointsToGrid(lasTile, dsmPoints1);
-            Raster<float> dsm1 = dsmPoints1.GetDigitalSurfaceModel(isolationDistance);
-            Raster<float> upperPoints1 = dsmPoints1.GetUpperPoints();
+            Grid<PointListZ> dsmPoints = new(lasTile.GetSpatialReference(), lasTileTransform, dsmXsize, dsmYsize);
+            using LasReader pointReader = lasTile.CreatePointReader();
+            pointReader.ReadPointsToGrid(lasTile, dsmPoints, dropGroundPoints: true);
+            DigitalSurfaceModel dsm = new(dsmPoints, dtmTile, gapZ, layersToLog: 2);
+            DigitalSurfaceModel dsmWithUpperPoints = new(dsmPoints, dtmTile, gapZ, layersToLog: 4);
 
-            PointGridZ dsmPoints2 = new(lasTile.GetSpatialReference(), lasTileTransform, dsmXsize, dsmYsize, 2);
-            using LasReader pointReader2 = lasTile.CreatePointReader();
-            pointReader2.ReadUpperPointsToGrid(lasTile, dsmPoints2);
-            Raster<float> dsm2 = dsmPoints2.GetDigitalSurfaceModel(isolationDistance);
-            Raster<float> upperPoints2 = dsmPoints2.GetUpperPoints();
-            
-            Assert.IsTrue((dsmPoints1.PointsPerCell == 1) && (dsm1.BandCount == 1) && (upperPoints1.BandCount == 1));
-            Assert.IsTrue((dsmPoints1.XSize == dsmXsize) && (dsm1.XSize == dsmXsize) && (upperPoints1.XSize == dsmXsize));
-            Assert.IsTrue((dsmPoints1.YSize == dsmYsize) && (dsm1.YSize == dsmYsize) && (upperPoints1.YSize == dsmYsize));
-            Assert.IsTrue((dsmPoints2.PointsPerCell == 2) && (dsm2.BandCount == 1) && (upperPoints2.BandCount == 2));
-            Assert.IsTrue((dsmPoints2.XSize == dsmXsize) && (dsm2.XSize == dsmXsize) && (upperPoints2.XSize == dsmXsize));
-            Assert.IsTrue((dsmPoints2.YSize == dsmYsize) && (dsm2.YSize == dsmYsize) && (upperPoints2.YSize == dsmYsize));
+            Assert.IsTrue((dsm.BandCount == 5) && (dsmWithUpperPoints.BandCount == 7));
+            Assert.IsTrue((dsmPoints.XSize == dsmXsize) && (dsm.XSize == dsmXsize) && (dsmWithUpperPoints.XSize == dsmXsize));
+            Assert.IsTrue((dsmPoints.YSize == dsmYsize) && (dsm.YSize == dsmYsize) && (dsmWithUpperPoints.YSize == dsmYsize));
 
-            RasterBand<float> upperPointsBand0 = upperPoints2.Bands[0];
-            RasterBand<float> upperPointsBand1 = upperPoints2.Bands[1];
-            for (int cellIndex = 0; cellIndex < dsmPoints1.Counts.Length; ++cellIndex)
+            RasterBand<float> dsmBand = dsm.SurfaceModel;
+            RasterBand<float> upperPointsBand0 = dsm.Bands[1];
+            RasterBand<float> upperPointsBand1 = dsm.Bands[2];
+            RasterBand<float> chm = dsm.CanopyHeight;
+            RasterBand<float> regionSize = dsm.RegionSize;
+            for (int cellIndex = 0; cellIndex < dsm.CellsPerBand; ++cellIndex)
             {
-                Assert.IsTrue(dsmPoints1.Counts[cellIndex] == 1);
-
-                float dsmZ = dsmPoints1.Points[cellIndex];
+                float dsmZ = dsmBand[cellIndex];
                 Assert.IsTrue((dsmZ > 920.0F) && (dsmZ < 930.0F));
-                Assert.IsTrue(dsm1.Data[cellIndex] == dsmZ);
-                Assert.IsTrue(dsm2.Data[cellIndex] == dsmZ);
-                Assert.IsTrue(upperPoints1.Data[cellIndex] == dsmZ);
+                Assert.IsTrue(dsm.Data[cellIndex] == dsmZ);
+                Assert.IsTrue(upperPointsBand0[cellIndex] == dsmZ);
+                Assert.IsTrue(Single.IsNaN(upperPointsBand1[cellIndex]) || (upperPointsBand1[cellIndex] <= upperPointsBand0[cellIndex]));
+                Assert.IsTrue(chm[cellIndex] >= 0.0F);
+                Assert.IsTrue(Single.IsNaN(regionSize[cellIndex])); // not yet populated
 
-                Assert.IsTrue(dsmPoints2.Counts[cellIndex] == 2);
-
-                int pointStartIndex = dsmPoints2.PointsPerCell * cellIndex;
-                int pointEndIndex = dsmPoints2.PointsPerCell * cellIndex + 1;
-                float dsm2candidateZlower = dsmPoints2.Points[pointStartIndex];
-                float dsm2candidateZupper = dsmPoints2.Points[pointEndIndex];
-                Assert.IsTrue(dsm2candidateZlower <= dsm2candidateZupper);
-                Assert.IsTrue((dsm2candidateZupper - dsm2candidateZlower) < isolationDistance);
-                Assert.IsTrue(dsm2candidateZupper == dsmZ);
-
-                Assert.IsTrue(upperPointsBand0[cellIndex] == dsm2candidateZupper);
-                Assert.IsTrue(upperPointsBand1[cellIndex] == dsm2candidateZlower);
+                Assert.IsTrue(dsmWithUpperPoints.SurfaceModel[cellIndex] == dsmZ);
+                Assert.IsTrue(dsmWithUpperPoints.Bands[1][cellIndex] == dsmZ);
+                Assert.IsTrue(Single.IsNaN(dsmWithUpperPoints.Bands[2][cellIndex]) || (dsmWithUpperPoints.Bands[2][cellIndex] <= dsmWithUpperPoints.Bands[1][cellIndex]));
+                Assert.IsTrue(Single.IsNaN(dsmWithUpperPoints.Bands[3][cellIndex]) || (dsmWithUpperPoints.Bands[3][cellIndex] <= dsmWithUpperPoints.Bands[2][cellIndex]));
+                Assert.IsTrue(Single.IsNaN(dsmWithUpperPoints.Bands[4][cellIndex]) || (dsmWithUpperPoints.Bands[4][cellIndex] <= dsmWithUpperPoints.Bands[3][cellIndex]));
+                Assert.IsTrue(dsmWithUpperPoints.CanopyHeight[cellIndex] >= 0.0F);
+                Assert.IsTrue(Single.IsNaN(dsmWithUpperPoints.RegionSize[cellIndex]));
             }
         }
 
@@ -94,9 +97,7 @@ namespace Mars.Clouds.UnitTests
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
 
-            VirtualRaster<float> dtm = new();
-            dtm.Add(Raster<float>.Read(Path.Combine(this.unitTestPath, TestConstant.DtmFileName)));
-            dtm.BuildGrid();
+            VirtualRaster<float> dtm = this.ReadDtm();
 
             LasHeader14 lasHeader14 = (LasHeader14)lasTile.Header;
             Assert.IsTrue(String.Equals(lasHeader14.FileSignature, LasFile.Signature, StringComparison.Ordinal));
@@ -262,7 +263,7 @@ namespace Mars.Clouds.UnitTests
             float oneMeterHeightClass = 1.0F / crsLinearUnits;
             float twoMeterHeightThreshold = 2.0F / crsLinearUnits;
 
-            GridMetricsRaster abaMetrics = new(abaGrid.Crs, abaGrid.Transform, abaGrid.XSize, abaGrid.YSize, abaMetricsSettings);
+            GridMetricsRaster abaMetrics = new(abaGrid, abaMetricsSettings);
 
             (double psmeCell1X, double psmeCell1Y) = abaMetrics.Transform.GetCellCenter(psmeCell1.XIndex, psmeCell1.YIndex);
             Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell1X, psmeCell1Y, bandIndex: 0, out VirtualRasterNeighborhood8<float>? psmeDtmNeighborhood1));

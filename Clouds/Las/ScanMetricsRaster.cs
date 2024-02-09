@@ -20,7 +20,7 @@ namespace Mars.Clouds.Las
         public RasterBand<double> GpstimeMax { get; private init; }
 
         public ScanMetricsRaster(Raster cellDefinitions)
-            : base(cellDefinitions.Crs, cellDefinitions.Transform, cellDefinitions.XSize, cellDefinitions.YSize, 11)
+            : base(cellDefinitions, 11)
         {
             int bandIndex = 0;
 

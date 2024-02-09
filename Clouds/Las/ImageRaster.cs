@@ -19,6 +19,11 @@ namespace Mars.Clouds.Las
         public RasterBand<TPixel> FirstReturns { get; private init; }
         public RasterBand<TPixel> SecondReturns { get; private init; }
 
+        public ImageRaster(Grid extent, TPixel noDataValue)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, noDataValue)
+        {
+        }
+
         public ImageRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, TPixel noDataValue)
             : base(crs, transform, xSize, ySize, 8)
         {
@@ -55,7 +60,7 @@ namespace Mars.Clouds.Las
         {
             UInt16 noData16 = UInt16.MaxValue;
             UInt16 maxData16 = UInt16.MaxValue - 1;
-            ImageRaster<UInt16> image16 = new(this.Crs.Clone(), new(this.Transform), this.XSize, this.YSize, noData16);
+            ImageRaster<UInt16> image16 = new(this, noData16);
 
             for (int cellIndex = 0; cellIndex < this.CellsPerBand; ++cellIndex)
             {
@@ -118,7 +123,7 @@ namespace Mars.Clouds.Las
         {
             UInt32 noData32 = UInt32.MaxValue;
             UInt32 maxData32 = UInt32.MaxValue - 1;
-            ImageRaster<UInt32> image32 = new(this.Crs.Clone(), new(this.Transform), this.XSize, this.YSize, noData32);
+            ImageRaster<UInt32> image32 = new(this, noData32);
 
             for (int cellIndex = 0; cellIndex < this.CellsPerBand; ++cellIndex)
             {

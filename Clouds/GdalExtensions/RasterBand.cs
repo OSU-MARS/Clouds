@@ -49,13 +49,14 @@ namespace Mars.Clouds.GdalExtensions
             : base(name, crs, transform, xSize, ySize)
         {
             this.Data = data;
+            // leave this.HasNoDataValue as false
             this.NoDataValue = Raster<TBand>.GetDefaultNoDataValue();
         }
 
-        public TBand this[int index]
+        public TBand this[int cellIndex]
         {
-            get { return this.Data.Span[index]; }
-            set { this.Data.Span[index] = value; }
+            get { return this.Data.Span[cellIndex]; }
+            set { this.Data.Span[cellIndex] = value; }
         }
 
         public TBand this[int xIndex, int yIndex]

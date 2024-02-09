@@ -77,15 +77,14 @@ namespace Mars.Clouds.Cmdlets
                     Raster<byte> classificationTile = Raster<byte>.Read(classificationTilePath);
                     lock (classificationTiles)
                     {
-                        classificationTiles.Add(classificationTile);
+                        classificationTiles.Add(treetopTileName, classificationTile);
                         ++tilesLoaded;
                     }
                 });
             });
 
-            TimeSpan progressInterval = TimeSpan.FromSeconds(2.0);
             ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
-            while (loadClassificationVrt.Wait(progressInterval) == false)
+            while (loadClassificationVrt.Wait(Constant.DefaultProgressInterval) == false)
             {
                 float fractionComplete = (float)tilesLoaded / (float)treetopTilePaths.Count;
                 progressRecord.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename

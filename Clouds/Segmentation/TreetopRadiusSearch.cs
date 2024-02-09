@@ -8,7 +8,8 @@ namespace Mars.Clouds.Segmentation
     {
         public bool SearchChm { get; set; }
 
-        public TreetopRadiusSearch()
+        public TreetopRadiusSearch(int dsmBandIndex, int dtmBandIndex)
+            : base(dsmBandIndex, dtmBandIndex)
         {
             this.SearchChm = false;
         }
@@ -21,7 +22,7 @@ namespace Mars.Clouds.Segmentation
             };
         }
 
-        protected override (bool addTreetop, int radiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TreetopTileSearchState searchState)
+        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TreetopTileSearchState searchState)
         {
             float heightInCrsUnits = dsmZ - dtmElevation;
             float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
@@ -32,79 +33,89 @@ namespace Mars.Clouds.Segmentation
 
             // check if point is local maxima
             float candidateZ = this.SearchChm ? heightInCrsUnits : dsmZ;
-            bool dsmCellInEqualHeightPatch = false;
+            bool dsmCellInSimilarElevationGroup = false;
             bool higherCellFound = false;
             bool newEqualHeightPatchFound = false;
             int ySearchRadiusInCells = Math.Max((int)(searchRadiusInCrsUnits / searchState.DsmCellHeight + 0.5F), 1);
-            for (int searchYoffset = -ySearchRadiusInCells; searchYoffset <= ySearchRadiusInCells; ++searchYoffset)
+            int localMaximaRadiusInCells = ySearchRadiusInCells;
+            for (int searchYoffset = 0; searchYoffset <= ySearchRadiusInCells; ++searchYoffset)
             {
-                int searchYindex = dsmYindex + searchYoffset;
-                // constrain column bounds to circular search based on row offset
-                float searchYoffsetInCrsUnits = searchYoffset * searchState.DsmCellHeight;
-                int maxXoffsetInCells = 0;
-                if (MathF.Abs(searchYoffsetInCrsUnits) < searchRadiusInCrsUnits) // avoid NaN from Sqrt()
+                for (int searchYsign = (searchYoffset != 0 ? -1 : 1); searchYsign <= 1; searchYsign += 2)
                 {
-                    float xSearchDistanceInCrsUnits = MathF.Sqrt(searchRadiusInCrsUnits * searchRadiusInCrsUnits - searchYoffsetInCrsUnits * searchYoffsetInCrsUnits);
-                    maxXoffsetInCells = (int)(xSearchDistanceInCrsUnits / searchState.DsmCellWidth + 0.5F);
-                }
-                if ((maxXoffsetInCells < 1) && (Math.Abs(searchYoffset) < 2))
-                {
-                    // enforce minimum search of eight immediate neighbors as checking for local maxima becomes meaningless
-                    // if the search radius collapses to zero.
-                    maxXoffsetInCells = 1;
-                }
-
-                for (int searchXoffset = -maxXoffsetInCells; searchXoffset <= maxXoffsetInCells; ++searchXoffset)
-                {
-                    int searchXindex = dsmXindex + searchXoffset;
-                    if (searchState.DsmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dsmSearchZ) == false)
+                    int searchYindex = dsmYindex + searchYsign * searchYoffset;
+                    // constrain column bounds to circular search based on row offset
+                    float searchYoffsetInCrsUnits = searchYoffset * searchState.DsmCellHeight;
+                    int maxXoffsetInCells = 0;
+                    if (MathF.Abs(searchYoffsetInCrsUnits) < searchRadiusInCrsUnits) // avoid NaN from Sqrt()
                     {
-                        continue;
+                        float xSearchDistanceInCrsUnits = MathF.Sqrt(searchRadiusInCrsUnits * searchRadiusInCrsUnits - searchYoffsetInCrsUnits * searchYoffsetInCrsUnits);
+                        maxXoffsetInCells = (int)(xSearchDistanceInCrsUnits / searchState.DsmCellWidth + 0.5F);
+                    }
+                    if ((maxXoffsetInCells < 1) && (Math.Abs(searchYoffset) < 2))
+                    {
+                        // enforce minimum search of eight immediate neighbors as checking for local maxima becomes meaningless
+                        // if the search radius collapses to zero.
+                        maxXoffsetInCells = 1;
                     }
 
-                    float searchZ = dsmSearchZ;
-                    if (this.SearchChm)
+                    for (int searchXoffset = -maxXoffsetInCells; searchXoffset <= maxXoffsetInCells; ++searchXoffset)
                     {
-                        if (searchState.DtmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dtmZ) == false)
+                        int searchXindex = dsmXindex + searchXoffset;
+                        if (searchState.DsmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dsmSearchZ) == false)
                         {
                             continue;
                         }
-                        searchZ -= dtmZ;
+
+                        float searchZ = dsmSearchZ;
+                        if (this.SearchChm)
+                        {
+                            if (searchState.DtmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dtmZ) == false)
+                            {
+                                continue;
+                            }
+                            searchZ -= dtmZ;
+                        }
+
+                        if (searchZ > candidateZ) // check of cell against itself when searchRowOffset = searchColumnOffset = 0 deemed not worth testing for but would need to be addressed if > is changed to >=
+                        {
+                            // some other cell within search radius is higher, so exclude this cell as a local maxima
+                            // Abort local search, move to next cell.
+                            higherCellFound = true;
+                            break;
+                        }
+                        else if ((searchZ == candidateZ) && Raster.IsNeighbor8(searchYoffset, searchXoffset))
+                        {
+                            // if a neighboring cell (eight way adjacency) is of equal height, grow an equal height patch
+                            // Growth is currently cell by cell, relying on incremental and sequential search of raster. Will need
+                            // to be adjusted if cell skipping is implemented.
+                            // While equal height patches are most commonly two cells there may be three or more cells in a patch and,
+                            // depending on how the patch is discovered during search, OnEqualHeightPatch() may be called multiple times
+                            // around the DSM cell where the patch is discovered. Since the patch is created only on the first call to
+                            // OnEqualHeightPatch() |= is therefore used with newEqualHeightPatchFound to avoid potentially creating both
+                            // a patch and a treetop (or possibly multiple treetops, though that's unlikely).
+                            dsmCellInSimilarElevationGroup = true;
+                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmXindex, dsmYindex, candidateZ, searchXindex, searchYindex, ySearchRadiusInCells);
+                        }
                     }
 
-                    if (searchZ > candidateZ) // check of cell against itself when searchRowOffset = searchColumnOffset = 0 deemed not worth testing for but would need to be addressed if > is changed to >=
+                    if (higherCellFound)
                     {
-                        // some other cell within search radius is higher, so exclude this cell as a local maxima
-                        // Abort local search, move to next cell.
-                        higherCellFound = true;
                         break;
-                    }
-                    else if ((searchZ == candidateZ) && Raster.IsNeighbor8(searchYoffset, searchXoffset))
-                    {
-                        // if a neighboring cell (eight way adjacency) is of equal height, grow an equal height patch
-                        // Growth is currently cell by cell, relying on incremental and sequential search of raster. Will need
-                        // to be adjusted if cell skipping is implemented.
-                        // While equal height patches are most commonly two cells there may be three or more cells in a patch and,
-                        // depending on how the patch is discovered during search, OnEqualHeightPatch() may be called multiple times
-                        // around the DSM cell where the patch is discovered. Since the patch is created only on the first call to
-                        // OnEqualHeightPatch() |= is therefore used with newEqualHeightPatchFound to avoid potentially creating both
-                        // a patch and a treetop (or possibly multiple treetops, though that's unlikely).
-                        dsmCellInEqualHeightPatch = true;
-                        newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmXindex, dsmYindex, candidateZ, searchXindex, searchYindex, ySearchRadiusInCells);
                     }
                 }
 
                 if (higherCellFound)
                 {
+                    localMaximaRadiusInCells = searchYoffset;
                     break;
                 }
             }
 
             if (higherCellFound)
             {
-                return (false, -1);
+                return (false, localMaximaRadiusInCells);
             }
-            else if (dsmCellInEqualHeightPatch)
+            else if (dsmCellInSimilarElevationGroup)
             {
                 if (newEqualHeightPatchFound)
                 {
@@ -112,11 +123,11 @@ namespace Mars.Clouds.Segmentation
                     searchState.TreetopEqualHeightPatches.Add(searchState.MostRecentEqualHeightPatch);
                 }
 
-                return (false, -1);
+                return (false, localMaximaRadiusInCells);
             }
             else
             {
-                return (true, ySearchRadiusInCells);
+                return (true, localMaximaRadiusInCells);
             }
         }
     }

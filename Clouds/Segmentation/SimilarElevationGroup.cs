@@ -4,7 +4,7 @@ using System.Numerics;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class SameHeightPatch<TCell> where TCell : INumber<TCell>
+    internal class SimilarElevationGroup<TCell> where TCell : INumber<TCell>
     {
         private readonly List<(int xIndex, int yIndex, TCell elevation)> cellsInPatch;
         private readonly int radiusFromSingleCell;
@@ -12,7 +12,7 @@ namespace Mars.Clouds.Segmentation
         public int ID { get; set; }
         public TCell Height { get; private init; }
 
-        public SameHeightPatch(TCell height, int yIndex1, int xIndex1, TCell elevation1, int yIndex2, int xIndex2, TCell elevation2, int radiusInCells)
+        public SimilarElevationGroup(TCell height, int yIndex1, int xIndex1, TCell elevation1, int yIndex2, int xIndex2, TCell elevation2, int radiusInCells)
         {
             this.cellsInPatch = new(2) { (xIndex1, yIndex1, elevation1), (xIndex2, yIndex2, elevation2) };
             this.radiusFromSingleCell = radiusInCells;

@@ -23,15 +23,15 @@ namespace Mars.Clouds.Segmentation
             this.MinimumHeight = Single.NaN;
         }
 
-        public void AddTile(string dsmTilePath, string dtmTilePath)
+        public void AddTile(string tileName, string dsmTilePath, string dtmTilePath)
         {
             Raster<float> dsmTile = Raster<float>.Read(dsmTilePath);
             Raster<float> dtmTile = Raster<float>.Read(dtmTilePath);
 
             lock (this.DsmTiles)
             {
-                this.DsmTiles.Add(dsmTile);
-                this.DtmTiles.Add(dtmTile);
+                this.DsmTiles.Add(tileName, dsmTile);
+                this.DtmTiles.Add(tileName,dtmTile);
             }
         }
 
@@ -60,13 +60,13 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        public static TreetopSearch Create(TreetopDetectionMethod detectionMethod)
+        public static TreetopSearch Create(TreetopDetectionMethod detectionMethod, int dsmBandIndex, int dtmBandIndex)
         {
             return detectionMethod switch
             {
                 TreetopDetectionMethod.ChmRadius or
-                TreetopDetectionMethod.DsmRadius => new TreetopRadiusSearch() { SearchChm = detectionMethod == TreetopDetectionMethod.ChmRadius },
-                TreetopDetectionMethod.DsmRing => new TreetopRingSearch(),
+                TreetopDetectionMethod.DsmRadius => new TreetopRadiusSearch(dsmBandIndex, dtmBandIndex) { SearchChm = detectionMethod == TreetopDetectionMethod.ChmRadius },
+                TreetopDetectionMethod.DsmRing => new TreetopRingSearch(dsmBandIndex, dtmBandIndex),
                 _ => throw new NotSupportedException("Unhandled treetop detection method " + detectionMethod + ".")
             };
         }
@@ -76,6 +76,18 @@ namespace Mars.Clouds.Segmentation
 
     internal abstract class TreetopSearch<TSearchState> : TreetopSearch where TSearchState : TreetopTileSearchState
     {
+        private readonly int dsmBandIndex;
+        private readonly int dtmBandIndex;
+
+        protected TreetopSearch(int dsmBandIndex, int dtmBandIndex) 
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(dsmBandIndex, 0, nameof(dsmBandIndex));
+            ArgumentOutOfRangeException.ThrowIfLessThan(dtmBandIndex, 0, nameof(dtmBandIndex));
+
+            this.dsmBandIndex = dsmBandIndex;
+            this.dtmBandIndex = dtmBandIndex;
+        }
+
         private static void AddToLayer(TreetopLayer treetopLayer, TreetopTileSearchState tileSearch, int treeID, double yIndexFractional, double xIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation, double treeRadiusInCrsUnits)
         {
             (double centroidX, double centroidY) = tileSearch.Dsm.Transform.GetProjectedCoordinate(xIndexFractional, yIndexFractional);
@@ -88,8 +100,8 @@ namespace Mars.Clouds.Segmentation
 
         public override int FindTreetops(int tileIndex, string treetopFilePath)
         {
-            VirtualRasterNeighborhood8<float> dsmNeighborhood = this.DsmTiles.GetNeighborhood8(tileIndex, 0);
-            VirtualRasterNeighborhood8<float> dtmNeighborhood = this.DtmTiles.GetNeighborhood8(tileIndex, 0);
+            VirtualRasterNeighborhood8<float> dsmNeighborhood = this.DsmTiles.GetNeighborhood8(tileIndex, this.dsmBandIndex);
+            VirtualRasterNeighborhood8<float> dtmNeighborhood = this.DtmTiles.GetNeighborhood8(tileIndex, this.dtmBandIndex);
             using TSearchState tileSearch = this.CreateSearchState(Tile.GetName(this.DsmTiles[tileIndex].FilePath), dsmNeighborhood, dtmNeighborhood);
 
             // set default minimum height if one was not specified
@@ -133,11 +145,11 @@ namespace Mars.Clouds.Segmentation
 
 
                     // add treetop if this cell is a unique local maxima
-                    (bool addTreetop, int radiusInCells) = this.FindTreetops(dsmXindex, dsmYindex, dsmZ, dtmElevation, tileSearch);
+                    (bool addTreetop, int localMaximaRadiusInCells) = this.FindTreetops(dsmXindex, dsmYindex, dsmZ, dtmElevation, tileSearch);
                     if (addTreetop)
                     {
                         (double cellX, double cellY) = tileSearch.Dsm.Transform.GetCellCenter(dsmXindex, dsmYindex);
-                        treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits, radiusInCells * dsmCellSize);
+                        treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmElevation, heightInCrsUnits, localMaximaRadiusInCells * dsmCellSize);
                     }
                 }
 
@@ -150,7 +162,7 @@ namespace Mars.Clouds.Segmentation
                     int maxPatchIndex = -1;
                     for (int patchIndex = 0; patchIndex < tileSearch.TreetopEqualHeightPatches.Count; ++patchIndex)
                     {
-                        SameHeightPatch<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
+                        SimilarElevationGroup<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
                         (double centroidXindex, double centroidYindex, float centroidElevation, float radiusInCells) = equalHeightPatch.GetCentroid();
                         if (centroidYindex > maxPatchRowIndexToCommit)
                         {
@@ -172,7 +184,7 @@ namespace Mars.Clouds.Segmentation
             // create treetop points for equal height patches which haven't already been committed to layer
             for (int patchIndex = 0; patchIndex < tileSearch.TreetopEqualHeightPatches.Count; ++patchIndex)
             {
-                SameHeightPatch<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
+                SimilarElevationGroup<float> equalHeightPatch = tileSearch.TreetopEqualHeightPatches[patchIndex];
                 (double centroidXindex, double centroidYindex, float centroidElevation, float radiusInCells) = equalHeightPatch.GetCentroid();
 
                 double radiusInCrsUnits = radiusInCells * dsmCellSize;
@@ -191,6 +203,6 @@ namespace Mars.Clouds.Segmentation
             return tileSearch.NextTreeID - 1;
         }
 
-        protected abstract (bool addTreetop, int radiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TSearchState searchState);
+        protected abstract (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TSearchState searchState);
     }
 }

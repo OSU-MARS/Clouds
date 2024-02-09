@@ -18,8 +18,8 @@ namespace Mars.Clouds.Segmentation
         public int NextTreeID { get; set; }
 
         public int EqualHeightPatchCommitInterval { get; set; }
-        public SameHeightPatch<float>? MostRecentEqualHeightPatch { get; set; }
-        public List<SameHeightPatch<float>> TreetopEqualHeightPatches { get; private init; }
+        public SimilarElevationGroup<float>? MostRecentEqualHeightPatch { get; set; }
+        public List<SimilarElevationGroup<float>> TreetopEqualHeightPatches { get; private init; }
 
         public TreetopTileSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
         {
@@ -47,7 +47,7 @@ namespace Mars.Clouds.Segmentation
                 throw new InvalidOperationException("Attempt to accept the most recent equal height patch as a treetop when no patch has yet been found.");
             }
 
-            SameHeightPatch<float> treetop = this.MostRecentEqualHeightPatch;
+            SimilarElevationGroup<float> treetop = this.MostRecentEqualHeightPatch;
             treetop.ID = this.NextTreeID++;
             this.TreetopEqualHeightPatches.Add(treetop);
         }
@@ -86,7 +86,7 @@ namespace Mars.Clouds.Segmentation
                 // towards the ned of the list.
                 for (int patchIndex = this.TreetopEqualHeightPatches.Count - 1; patchIndex >= 0; --patchIndex)
                 {
-                    SameHeightPatch<float> candidatePatch = this.TreetopEqualHeightPatches[patchIndex];
+                    SimilarElevationGroup<float> candidatePatch = this.TreetopEqualHeightPatches[patchIndex];
                     if (candidatePatch.Height != candidateZ)
                     {
                         continue;
@@ -123,8 +123,8 @@ namespace Mars.Clouds.Segmentation
             {
                 if (this.MostRecentEqualHeightPatch.Contains(dsmXindex, dsmYindex) == false)
                 {
-                    this.TryGetDtmValueNoDataNan(searchXindex, searchYindex, out float dtmSearchZ);
-                    this.MostRecentEqualHeightPatch.Add(searchXindex, searchYindex, dtmSearchZ);
+                    this.TryGetDtmValueNoDataNan(dsmXindex, dsmYindex, out float dtmSearchZ);
+                    this.MostRecentEqualHeightPatch.Add(dsmXindex, dsmYindex, dtmSearchZ);
                 }
             }
 

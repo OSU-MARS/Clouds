@@ -53,8 +53,8 @@ namespace Mars.Clouds.Segmentation
                     Ring ring = Ring.Rings[ringIndex];
                     for (int cellIndex = 0; cellIndex < ring.Count; ++cellIndex)
                     {
-                        int treeXindex = treetopXindex + ring.YIndices[cellIndex];
-                        int treeYindex = treetopYindex + ring.XIndices[cellIndex];
+                        int treeXindex = treetopXindex + ring.XIndices[cellIndex];
+                        int treeYindex = treetopYindex + ring.YIndices[cellIndex];
                         if (classificationNeighborhood.TryGetValue(treeXindex, treeYindex, out classification))
                         {
                             // count classification of cell in tree's assumed canopy

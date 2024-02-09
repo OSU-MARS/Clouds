@@ -173,6 +173,16 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public Raster(Grid extent, int bands, TBand noDataValue)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bands, noDataValue)
+        {
+        }
+
+        public Raster(Grid extent, int bands)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bands)
+        {
+        }
+
         public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, int bands, TBand noDataValue)
             : this(crs, transform, xSize, ySize, bands)
         {
@@ -217,7 +227,7 @@ namespace Mars.Clouds.GdalExtensions
                 TypeCode.UInt16 => TBand.CreateChecked(UInt16.MaxValue),
                 TypeCode.UInt32 => TBand.CreateChecked(UInt32.MaxValue),
                 TypeCode.UInt64 => TBand.CreateChecked(UInt64.MaxValue),
-                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and not GDT_TypeCount not currently reachable
+                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently reachable
                 _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
             };
         }

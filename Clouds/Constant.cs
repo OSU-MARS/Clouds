@@ -1,7 +1,11 @@
-﻿namespace Mars.Clouds
+﻿using System;
+
+namespace Mars.Clouds
 {
     public static class Constant
     {
+        public static readonly TimeSpan DefaultProgressInterval = TimeSpan.FromSeconds(2.0);
+
         public static class File
         {
             public const string GeoPackageExtension = ".gpkg";

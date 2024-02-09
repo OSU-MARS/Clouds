@@ -66,19 +66,26 @@ namespace Mars.Clouds.Cmdlets
             }
 
             GridMetricsPointLists metricsGrid = new(cellDefinitions, this.CellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
-            GridMetricsRaster metricsRaster = new(metricsGrid.Crs, metricsGrid.Transform, metricsGrid.XSize, metricsGrid.YSize, this.Settings);
+            GridMetricsRaster metricsRaster = new(metricsGrid, this.Settings);
 
             MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxTiles);
-            Task readPoints = Task.Run(() => this.ReadLasTiles(lasGrid, metricsGrid, metricsRead), metricsRead.CancellationTokenSource.Token);
-            Task calculateMetrics = Task.Run(() => this.WriteTiles(metricsRaster, metricsRead), metricsRead.CancellationTokenSource.Token);
+            Task[] gridMetricsTasks = new Task[2];
+            int readThreads = gridMetricsTasks.Length / 2;
+            for (int readThread = 0; readThread < readThreads; ++readThread)
+            {
+                gridMetricsTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, metricsGrid, metricsRead), metricsRead.CancellationTokenSource.Token);
+            }
+            for (int calculateThread = readThreads; calculateThread < gridMetricsTasks.Length; ++calculateThread)
+            {
+                gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsRead), metricsRead.CancellationTokenSource.Token);
+            }
 
-            Task[] gridMetricsTasks = [ readPoints, calculateMetrics ];
             this.WaitForTasks("Get-GridMetrics", gridMetricsTasks, lasGrid, metricsRead);
             this.WriteObject(metricsRaster);
             metricsRead.Stopwatch.Stop();
 
             string elapsedTimeFormat = metricsRead.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("#,#,0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + metricsRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / metricsRead.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("#,#,#,0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + metricsRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / metricsRead.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 
