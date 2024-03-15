@@ -270,6 +270,13 @@ namespace Mars.Clouds.Las
                     // Points marked with return number 0 (which is LAS 1.4 compliance issue) pass through this check.
                     continue;
                 }
+               
+                bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
+                if (notNoiseOrWithheld == false)
+                {
+                    // point isn't valid data => skip
+                    continue;
+                }
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
@@ -286,7 +293,8 @@ namespace Mars.Clouds.Las
                 UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
                 if (returnNumber == 1)
                 {
-                    image.FirstReturns[cellIndex] += 1;
+                    // assume first returns are always the most representative => only first returns contribute to RGB+NIR
+                    ++image.FirstReturns[cellIndex];
 
                     if (redOffset > 0)
                     {
@@ -344,11 +352,11 @@ namespace Mars.Clouds.Las
                 }
 
                 int cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
-                scanMetrics.Points[cellIndex] += 1.0F;
-
                 bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
                 if (notNoiseOrWithheld)
                 {
+                    ++scanMetrics.AcceptedPoints[cellIndex];
+
                     float scanAngle;
                     if (tile.Header.PointDataRecordFormat < 6)
                     {
@@ -359,7 +367,8 @@ namespace Mars.Clouds.Las
                         scanAngle = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
                     }
 
-                    scanMetrics.ScanAngleMean[cellIndex] += scanAngle;
+                    // TODO: mean absolute scan angle
+                    scanMetrics.ScanAngleMeanAbsolute[cellIndex] += MathF.Abs(scanAngle);
                     if (scanMetrics.ScanAngleMin[cellIndex] > scanAngle)
                     {
                         scanMetrics.ScanAngleMin[cellIndex] = scanAngle;
@@ -372,20 +381,28 @@ namespace Mars.Clouds.Las
                     // scanMetrics.NoiseOrWithheld[cellIndex] += 0.0F; // nothing to do
                     if ((scanFlags & ScanFlags.ScanDirection) != 0)
                     {
-                        scanMetrics.ScanDirection[cellIndex] += 1.0F;
+                        scanMetrics.ScanDirectionMean[cellIndex] += 1.0F;
                     }
                     if ((scanFlags & ScanFlags.EdgeOfFlightLine) != 0)
                     {
-                        scanMetrics.EdgeOfFlightLine[cellIndex] += 1.0F;
+                        ++scanMetrics.EdgeOfFlightLine[cellIndex];
                     }
                     if ((scanFlags & ScanFlags.Overlap) != 0)
                     {
-                        scanMetrics.Overlap[cellIndex] += 1.0F;
+                        ++scanMetrics.Overlap[cellIndex];
                     }
 
                     if (gpstimeOffset >= 0)
                     {
-                        float gpstime = (float)BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[gpstimeOffset..]);
+                        // TODO: GPS week time origin or adjusted standard GPS time origin (https://geozoneblog.wordpress.com/2013/10/31/when-was-lidar-point-collected/)
+                        // tile.Header.GlobalEncoding
+                        // unset: LAS 1.0 and 1.1 (always) or 1.2+ with GPS week time - needs Sunday midnight as origin
+                        // AdjustedStandardGpsTime: standard GPS time origin of 1980-01-06T00:00:00 + 1 Gs = UTC origin 2011-09-14T01:46:25 due to 15 leap seconds = GPS time (TAI) origin 2011-09-14 01:46:40
+                        // subsequent leap seconds: June 30 2012 + 2016, December 31 2016
+                        // What is most useful set of output formats, assuming concurrent point and imagery acquisition? Time of day (hours), solar time, solar azimuth and elevation, ... ?
+                        // WGS84 coordinate projection to obtain longitude and latitude? (https://stackoverflow.com/questions/71528556/transform-local-coordinates-to-wgs84-and-back-in-c-sharp, https://guideving.blogspot.com/2010/08/sun-position-in-c.html)
+                        // What goes in C# and what in R?
+                        double gpstime = BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[gpstimeOffset..]);
                         scanMetrics.GpstimeMean[cellIndex] += gpstime;
                         if (scanMetrics.GpstimeMin[cellIndex] > gpstime)
                         {
@@ -399,7 +416,7 @@ namespace Mars.Clouds.Las
                 }
                 else
                 {
-                    scanMetrics.NoiseOrWithheld[cellIndex] += 1.0F;
+                    ++scanMetrics.NoiseOrWithheld[cellIndex];
                 }
             }
         }
@@ -424,7 +441,8 @@ namespace Mars.Clouds.Las
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
-                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
+                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                if (notNoiseOrWithheld == false)
                 {
                     continue;
                 }
@@ -506,7 +524,8 @@ namespace Mars.Clouds.Las
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
-                if (LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification) == false)
+                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                if (notNoiseOrWithheld == false)
                 {
                     continue;
                 }

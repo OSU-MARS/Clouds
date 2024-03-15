@@ -21,12 +21,12 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "GridMetrics")]
     public class GetGridMetrics : LasTilesToRasterCmdlet
     {
-        [Parameter(HelpMessage = "Band number of -Cells to use in defining grid cells. Ones based, default is 1 (the first band).")]
-        [ValidateRange(1, 500)] // arbitrary upper bound
-        public int CellBand { get; set; }
+        [Parameter(HelpMessage = "Name of band in -Cells to use in defining grid cells. Default is the first band.")]
+        [ValidateNotNullOrWhiteSpace]
+        public string? CellBand { get; set; }
 
         [Parameter(Mandatory = true, HelpMessage = "1) path to a single digital terrain model (DTM) raster to estimate DSM height above ground from or 2,3) path to a directory containing DTM tiles whose file names match the DSM tiles. Each DSM must be a  single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
-        [ValidateNotNullOrEmpty]
+        [ValidateNotNullOrWhiteSpace]
         public string? Dtm { get; set; }
 
         [Parameter(HelpMessage = "Number of DTM band to use in calculating mean ground elevations. Default is 1 (the first band).")]
@@ -39,7 +39,7 @@ namespace Mars.Clouds.Cmdlets
 
         public GetGridMetrics()
         {
-            this.CellBand = 1;
+            this.CellBand = null;
             // this.Dtm is mandatory
             this.DtmBand = 1;
             // leave this.MaxThreads at default for DTM read
@@ -58,14 +58,16 @@ namespace Mars.Clouds.Cmdlets
             Raster cellDefinitions = Raster.Create(gridCellDefinitionDataset);
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(gridEpsg);
-            VirtualRaster<float> dtm = this.ReadVirtualRaster("Get-GridMetrics", this.Dtm);
+            string cmdletName = "Get-GridMetrics";
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
+            VirtualRaster<float> dtm = this.ReadVirtualRaster(cmdletName, this.Dtm);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
                 throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
             }
 
-            GridMetricsPointLists metricsGrid = new(cellDefinitions, this.CellBand - 1, lasGrid); // convert band number from ones based numbering to zero based indexing
+            RasterBand cellMask = cellDefinitions.GetBand(this.CellBand);
+            GridMetricsPointLists metricsGrid = new(cellMask, lasGrid); // convert band number from ones based numbering to zero based indexing
             GridMetricsRaster metricsRaster = new(metricsGrid, this.Settings);
 
             MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxTiles);

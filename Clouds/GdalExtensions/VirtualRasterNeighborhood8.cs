@@ -3,6 +3,9 @@ using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
+    /// <summary>
+    /// One band of a virtual raster tile and, where extant, its neighboring bands in the eight neighboring tiles (first order queen adjacency).
+    /// </summary>
     public class VirtualRasterNeighborhood8<TBand> where TBand : INumber<TBand>
     {
         public RasterBand<TBand> Center { get; private init; }

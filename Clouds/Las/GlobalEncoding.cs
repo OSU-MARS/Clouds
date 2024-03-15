@@ -15,7 +15,7 @@ namespace Mars.Clouds.Las
         /// Unset: GPS time is GPS week time (default in LAS 1.0 and 1.1, which lack a global encoding field).
         /// Set: GPS time is adjusted standard GPS time.
         /// </summary>
-        GpsTimeType = 0x0001,
+        AdjustedStandardGpsTime = 0x0001,
 
         /// <summary>
         /// Waveform data packets contained in this .las or .laz file. LAS 1.3+, Mutually exclusive with <see cref="WaveformDataPacketsExternal"/>.

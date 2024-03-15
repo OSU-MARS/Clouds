@@ -25,7 +25,7 @@ namespace Mars.Clouds.Las
         }
 
         public ImageRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, TPixel noDataValue)
-            : base(crs, transform, xSize, ySize, 8)
+            : base(crs, transform, xSize, ySize, [ "red", "green", "blue", "nir", "intensity", "intensitySecondReturn", "firstReturns", "secondReturns" ])
         {
             this.Red = this.Bands[0];
             this.Green = this.Bands[1];
@@ -35,15 +35,6 @@ namespace Mars.Clouds.Las
             this.IntensitySecondReturn = this.Bands[5];
             this.FirstReturns = this.Bands[6];
             this.SecondReturns = this.Bands[7];
-
-            this.Red.Name = "red";
-            this.Green.Name = "green";
-            this.Blue.Name = "blue";
-            this.NearInfrared.Name = "nir";
-            this.Intensity.Name = "intensity";
-            this.IntensitySecondReturn.Name = "intensitySecondReturn";
-            this.FirstReturns.Name = "firstReturns";
-            this.SecondReturns.Name = "secondReturns";
 
             this.SetNoDataOnAllBands(noDataValue);
 
@@ -62,7 +53,7 @@ namespace Mars.Clouds.Las
             UInt16 maxData16 = UInt16.MaxValue - 1;
             ImageRaster<UInt16> image16 = new(this, noData16);
 
-            for (int cellIndex = 0; cellIndex < this.CellsPerBand; ++cellIndex)
+            for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
                 TPixel firstReturns = this.FirstReturns[cellIndex];
                 if (firstReturns != TPixel.Zero)
@@ -125,7 +116,7 @@ namespace Mars.Clouds.Las
             UInt32 maxData32 = UInt32.MaxValue - 1;
             ImageRaster<UInt32> image32 = new(this, noData32);
 
-            for (int cellIndex = 0; cellIndex < this.CellsPerBand; ++cellIndex)
+            for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
                 TPixel firstReturns = this.FirstReturns[cellIndex];
                 if (firstReturns != TPixel.Zero)
@@ -187,7 +178,7 @@ namespace Mars.Clouds.Las
             TPixel intensityNoData = this.Intensity.NoDataValue;
             TPixel intensitySecondReturnNoData = this.IntensitySecondReturn.NoDataValue;
 
-            for (int index = 0; index < this.CellsPerBand; ++index)
+            for (int index = 0; index < this.Cells; ++index)
             {
                 TPixel firstReturns = this.FirstReturns[index];
                 if (firstReturns != TPixel.Zero)

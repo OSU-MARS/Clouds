@@ -328,7 +328,7 @@ namespace Mars.Clouds.GdalExtensions
             return true;
         }
 
-        public bool TryGetTile(double x, double y, int bandIndex, [NotNullWhen(true)] out RasterBand<TBand>? tileBand)
+        public bool TryGetTile(double x, double y, string? bandName, [NotNullWhen(true)] out RasterBand<TBand>? tileBand)
         {
             if (this.tileGrid == null)
             {
@@ -346,13 +346,12 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             Raster<TBand>? tileRaster = this.tileGrid[tileGridXindex, tileGridYindex];
-            if ((tileRaster == null) || (bandIndex >= tileRaster.BandCount))
+            if ((tileRaster == null) || (tileRaster.TryGetBand(bandName, out tileBand) == false))
             {
                 tileBand = null;
                 return false;
             }
 
-            tileBand = tileRaster.Bands[bandIndex];
             return true;
         }
     }

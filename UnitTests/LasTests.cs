@@ -44,7 +44,7 @@ namespace Mars.Clouds.UnitTests
             LasTile lasTile = this.ReadLasTile();
             (double lasTileCentroidX, double lasTileCentroidY) = lasTile.GridExtent.GetCentroid();
             VirtualRaster<float> dtm = this.ReadDtm();
-            Assert.IsTrue(dtm.TryGetTile(lasTileCentroidX, lasTileCentroidY, bandIndex: 0, out RasterBand<float>? dtmTile));
+            Assert.IsTrue(dtm.TryGetTile(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile));
 
             double dsmCellSize = 0.5;
             int dsmXsize = (int)(lasTile.GridExtent.Width / dsmCellSize) + 1; // 3.6 x 4.2 m -> 4.0 x 4.5 m
@@ -58,7 +58,7 @@ namespace Mars.Clouds.UnitTests
             DigitalSurfaceModel dsm = new(dsmPoints, dtmTile, gapZ, layersToLog: 2);
             DigitalSurfaceModel dsmWithUpperPoints = new(dsmPoints, dtmTile, gapZ, layersToLog: 4);
 
-            Assert.IsTrue((dsm.BandCount == 5) && (dsmWithUpperPoints.BandCount == 7));
+            Assert.IsTrue((dsm.Bands.Length == 5) && (dsmWithUpperPoints.Bands.Length == 7));
             Assert.IsTrue((dsmPoints.XSize == dsmXsize) && (dsm.XSize == dsmXsize) && (dsmWithUpperPoints.XSize == dsmXsize));
             Assert.IsTrue((dsmPoints.YSize == dsmYsize) && (dsm.YSize == dsmYsize) && (dsmWithUpperPoints.YSize == dsmYsize));
 
@@ -67,11 +67,11 @@ namespace Mars.Clouds.UnitTests
             RasterBand<float> upperPointsBand1 = dsm.Bands[2];
             RasterBand<float> chm = dsm.CanopyHeight;
             RasterBand<float> regionSize = dsm.RegionSize;
-            for (int cellIndex = 0; cellIndex < dsm.CellsPerBand; ++cellIndex)
+            for (int cellIndex = 0; cellIndex < dsm.Cells; ++cellIndex)
             {
                 float dsmZ = dsmBand[cellIndex];
                 Assert.IsTrue((dsmZ > 920.0F) && (dsmZ < 930.0F));
-                Assert.IsTrue(dsm.Data[cellIndex] == dsmZ);
+                Assert.IsTrue(dsmBand.Data[cellIndex] == dsmZ);
                 Assert.IsTrue(upperPointsBand0[cellIndex] == dsmZ);
                 Assert.IsTrue(Single.IsNaN(upperPointsBand1[cellIndex]) || (upperPointsBand1[cellIndex] <= upperPointsBand0[cellIndex]));
                 Assert.IsTrue(chm[cellIndex] >= 0.0F);
@@ -188,7 +188,7 @@ namespace Mars.Clouds.UnitTests
             Raster<UInt16> gridCellDefinitions = this.SnapLasTileToGridCells(lasTile);
             GridGeoTransform lasFileTransform = new(lasTile.GridExtent, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
             LasTileGrid lasGrid = new(lasTile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
-            GridMetricsPointLists abaGrid = new(gridCellDefinitions, 0, lasGrid);
+            GridMetricsPointLists abaGrid = new(gridCellDefinitions.Bands[0], lasGrid);
 
             Assert.IsTrue(gridCellDefinitions.Crs.IsSame(abaGrid.Crs, []) == 1);
             Assert.IsTrue(GridGeoTransform.Equals(gridCellDefinitions.Transform, abaGrid.Transform));
@@ -285,7 +285,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.IntensityTotal != null);
             Assert.IsTrue((abaMetrics.ZPCumulative10 != null) && (abaMetrics.ZPCumulative20 != null) && (abaMetrics.ZPCumulative30 != null) && (abaMetrics.ZPCumulative40 != null) && (abaMetrics.ZPCumulative50 != null) && (abaMetrics.ZPCumulative60 != null) && (abaMetrics.ZPCumulative70 != null) && (abaMetrics.ZPCumulative80 != null) && (abaMetrics.ZPCumulative90 != null));
 
-            Assert.IsTrue(abaMetrics.Points[8, 14] == 162764);
+            Assert.IsTrue(abaMetrics.AcceptedPoints[8, 14] == 162764);
             Assert.IsTrue(abaMetrics.ZMax[8, 14] == 928.6306F);
             Assert.IsTrue(abaMetrics.ZMean[8, 14] == 923.698242F);
             Assert.IsTrue(abaMetrics.ZGroundMean[8, 14] == 920.8271F);
@@ -355,7 +355,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround[8, 14] == 0.0F); // points not classified
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
 
-            Assert.IsTrue(abaMetrics.Points[9, 14] == 44853.0F);
+            Assert.IsTrue(abaMetrics.AcceptedPoints[9, 14] == 44853.0F);
             Assert.IsTrue(abaMetrics.ZMax[9, 14] == 926.576538F);
             Assert.IsTrue(abaMetrics.ZMean[9, 14] == 922.74585F);
             Assert.IsTrue(abaMetrics.ZGroundMean[9, 14] == 921.0524F);
@@ -425,7 +425,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[9, 14] == 3.70189786F);
 
-            Assert.IsTrue(abaMetrics.Points[8, 15] == 0);
+            Assert.IsTrue(abaMetrics.AcceptedPoints[8, 15] == 0);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean[8, 15]));
             Assert.IsTrue(abaMetrics.ZGroundMean[8, 15] == 921.348267F);
@@ -495,10 +495,10 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
 
-            Assert.IsTrue(abaMetrics.Points[9, 15] == 0);
+            Assert.IsTrue(abaMetrics.AcceptedPoints[9, 15] == 0);
             // for now, remaining bands aren't checked for NaN as coverage of previous cell should suffice
 
-            Assert.IsTrue(abaMetrics.Points.HasNoDataValue);
+            Assert.IsTrue(abaMetrics.AcceptedPoints.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMax.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZMean.HasNoDataValue);
             Assert.IsTrue(abaMetrics.ZGroundMean.HasNoDataValue);
@@ -559,7 +559,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PGround.HasNoDataValue);
             Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
 
-            Assert.IsTrue(Single.IsNaN(abaMetrics.Points.NoDataValue));
+            Assert.IsTrue(Single.IsNaN(abaMetrics.AcceptedPoints.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMean.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZGroundMean.NoDataValue));
@@ -640,8 +640,8 @@ namespace Mars.Clouds.UnitTests
             ImageRaster<UInt16> image16 = image.AsUInt16();
             ImageRaster<UInt32> image32 = image.AsUInt32();
 
-            Assert.IsTrue(image.BandCount == 8);
-            Assert.IsTrue(image.CellsPerBand == 72);
+            Assert.IsTrue(image.Bands.Length == 8);
+            Assert.IsTrue(image.Cells == 72);
             Assert.IsTrue(image.XSize == imageXsize);
             Assert.IsTrue(image.YSize == imageYsize);
 
@@ -692,10 +692,19 @@ namespace Mars.Clouds.UnitTests
             pointReader.ReadPointsToGrid(lasTile, scanMetrics);
             scanMetrics.OnPointAdditionComplete();
 
-            Assert.IsTrue(scanMetrics.BandCount == 11);
-            Assert.IsTrue(scanMetrics.CellsPerBand == 575);
+            Assert.IsTrue(scanMetrics.Cells == 575);
             Assert.IsTrue(scanMetrics.XSize == 23);
             Assert.IsTrue(scanMetrics.YSize == 25);
+
+            Assert.IsTrue(scanMetrics.EdgeOfFlightLine.IsNoData(UInt32.MaxValue));
+            Assert.IsTrue(scanMetrics.NoiseOrWithheld.IsNoData(UInt32.MaxValue));
+            Assert.IsTrue(scanMetrics.Overlap.IsNoData(UInt32.MaxValue));
+            Assert.IsTrue(scanMetrics.GpstimeMax.IsNoData(Double.NaN));
+            Assert.IsTrue(scanMetrics.GpstimeMean.IsNoData(Double.NaN));
+            Assert.IsTrue(scanMetrics.GpstimeMin.IsNoData(Double.NaN));
+            Assert.IsTrue(scanMetrics.ScanAngleMin.IsNoData(Single.NaN));
+            Assert.IsTrue(scanMetrics.ScanAngleMeanAbsolute.IsNoData(Single.NaN));
+            Assert.IsTrue(scanMetrics.ScanAngleMax.IsNoData(Single.NaN));
 
             for (int yIndex = 0; yIndex < scanMetrics.YSize; ++yIndex)
             {
@@ -705,49 +714,49 @@ namespace Mars.Clouds.UnitTests
                     {
                         if (xIndex == 8)
                         {
-                            Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 162764.0);
-                            Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == 0.0); // fields not populated in test data
-                            Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
+                            Assert.IsTrue(scanMetrics.AcceptedPoints[xIndex, yIndex] == 162764.0);
+                            Assert.IsTrue(scanMetrics.ScanAngleMeanAbsolute[xIndex, yIndex] == 0.0); // fields not populated in test data
+                            Assert.IsTrue(scanMetrics.ScanDirectionMean[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMax[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.NoiseOrWithheld[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.EdgeOfFlightLine[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.Overlap[xIndex, yIndex] == 0.0);
-                            Assert.IsTrue(scanMetrics.GpstimeMin[xIndex, yIndex] == 1688896256.0);
-                            Assert.IsTrue(scanMetrics.GpstimeMean[xIndex, yIndex] == 1688896259.7488389);
-                            Assert.IsTrue(scanMetrics.GpstimeMax[xIndex, yIndex] == 1688896384.0);
+                            Assert.IsTrue(scanMetrics.GpstimeMin[xIndex, yIndex] == 1688896198.4103589);
+                            Assert.IsTrue(scanMetrics.GpstimeMean[xIndex, yIndex] == 1688896288.6329067);
+                            Assert.IsTrue(scanMetrics.GpstimeMax[xIndex, yIndex] == 1688896434.3628883);
 
                             continue;
                         }
                         else if (xIndex == 9)
                         {
-                            Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 44853.0);
-                            Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == 0.0);
-                            Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
+                            Assert.IsTrue(scanMetrics.AcceptedPoints[xIndex, yIndex] == 44853.0);
+                            Assert.IsTrue(scanMetrics.ScanAngleMeanAbsolute[xIndex, yIndex] == 0.0);
+                            Assert.IsTrue(scanMetrics.ScanDirectionMean[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.ScanAngleMax[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.NoiseOrWithheld[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.EdgeOfFlightLine[xIndex, yIndex] == 0.0);
                             Assert.IsTrue(scanMetrics.Overlap[xIndex, yIndex] == 0.0);
-                            Assert.IsTrue(scanMetrics.GpstimeMin[xIndex, yIndex] == 1688896256.0);
-                            Assert.IsTrue(scanMetrics.GpstimeMean[xIndex, yIndex] == 1688896256.3738434);
-                            Assert.IsTrue(scanMetrics.GpstimeMax[xIndex, yIndex] == 1688896384.0);
+                            Assert.IsTrue(scanMetrics.GpstimeMin[xIndex, yIndex] == 1688896204.9299486);
+                            Assert.IsTrue(scanMetrics.GpstimeMean[xIndex, yIndex] == 1688896285.2203009);
+                            Assert.IsTrue(scanMetrics.GpstimeMax[xIndex, yIndex] == 1688896383.909029);
 
                             continue;
                         }
                     }
 
-                    Assert.IsTrue(scanMetrics.Points[xIndex, yIndex] == 0.0);
-                    Assert.IsTrue(scanMetrics.ScanAngleMean[xIndex, yIndex] == Double.MinValue);
-                    Assert.IsTrue(scanMetrics.ScanDirection[xIndex, yIndex] == 0.0);
-                    Assert.IsTrue(scanMetrics.ScanAngleMin[xIndex, yIndex] == Double.MinValue);
-                    Assert.IsTrue(scanMetrics.ScanAngleMax[xIndex, yIndex] == Double.MinValue);
-                    Assert.IsTrue(scanMetrics.NoiseOrWithheld[xIndex, yIndex] == 0.0);
-                    Assert.IsTrue(scanMetrics.EdgeOfFlightLine[xIndex, yIndex] == 0.0);
-                    Assert.IsTrue(scanMetrics.Overlap[xIndex, yIndex] == 0.0);
-                    Assert.IsTrue(scanMetrics.GpstimeMin[xIndex, yIndex] == Double.MinValue);
-                    Assert.IsTrue(scanMetrics.GpstimeMean[xIndex, yIndex] == Double.MinValue);
-                    Assert.IsTrue(scanMetrics.GpstimeMax[xIndex, yIndex] == Double.MinValue);
+                    Assert.IsTrue(scanMetrics.AcceptedPoints[xIndex, yIndex] == 0);
+                    Assert.IsTrue(Single.IsNaN(scanMetrics.ScanAngleMeanAbsolute[xIndex, yIndex]));
+                    Assert.IsTrue(Single.IsNaN(scanMetrics.ScanDirectionMean[xIndex, yIndex]));
+                    Assert.IsTrue(Single.IsNaN(scanMetrics.ScanAngleMin[xIndex, yIndex]));
+                    Assert.IsTrue(Single.IsNaN(scanMetrics.ScanAngleMax[xIndex, yIndex]));
+                    Assert.IsTrue(scanMetrics.NoiseOrWithheld[xIndex, yIndex] == 0);
+                    Assert.IsTrue(scanMetrics.EdgeOfFlightLine[xIndex, yIndex] == 0);
+                    Assert.IsTrue(scanMetrics.Overlap[xIndex, yIndex] == 0);
+                    Assert.IsTrue(Double.IsNaN(scanMetrics.GpstimeMin[xIndex, yIndex]));
+                    Assert.IsTrue(Double.IsNaN(scanMetrics.GpstimeMean[xIndex, yIndex]));
+                    Assert.IsTrue(Double.IsNaN(scanMetrics.GpstimeMax[xIndex, yIndex]));
                 }
             }
         }

@@ -8,14 +8,28 @@ namespace Mars.Clouds.GdalExtensions
     {
         public SpatialReference Crs { get; protected set; }
         public GridGeoTransform Transform { get; private init; }
-        public int XSize { get; protected set; }
-        public int YSize { get; protected set; }
+        public int XSize { get; protected set; } // cells
+        public int YSize { get; protected set; } // cells
 
-        protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
+        protected Grid(Grid extent, bool cloneCrsAndTransform)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, cloneCrsAndTransform)
         {
-            crs.ExportToWkt(out string wkt, []);
-            this.Crs = new(wkt);
-            this.Transform = new(transform);
+        }
+
+        protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells, bool cloneCrsAndTransform)
+        {
+            if (cloneCrsAndTransform)
+            {
+                crs.ExportToWkt(out string wkt, []);
+                this.Crs = new(wkt);
+                this.Transform = new(transform);
+            }
+            else
+            {
+                this.Crs = crs;
+                this.Transform = transform;
+            }
+
             this.XSize = xSizeInCells;
             this.YSize = ySizeInCells;
         }
@@ -152,7 +166,7 @@ namespace Mars.Clouds.GdalExtensions
         public int NonNullCells { get; protected set; }
 
         public Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
-            : base(crs, transform, xSizeInCells, ySizeInCells)
+            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
         {
             this.Cells = new TCell?[xSizeInCells * ySizeInCells];
             this.NonNullCells = 0;

@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -43,7 +44,7 @@ namespace Mars.Clouds.Segmentation
             for (int ringIndex = 0; ringIndex < maxRingIndex; ++ringIndex)
             {
                 Ring ring = Ring.Rings[ringIndex];
-
+                
                 float ringMinimumZ = Single.MaxValue;
                 float ringMaximumZ = Single.MinValue;
                 for (int cellIndex = 0; cellIndex < ring.Count; ++cellIndex)

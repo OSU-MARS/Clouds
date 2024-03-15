@@ -37,8 +37,9 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least eight.");
             }
 
+            string cmdletName = "Get-Orthoimages";
             bool imagePathIsDirectory = Directory.Exists(this.Image);
-            (LasTileGrid lasGrid, int imageTileSizeX, int imageTileSizeY) = this.ReadLasHeadersAndCellSize(nameof(this.Image), imagePathIsDirectory);
+            (LasTileGrid lasGrid, int imageTileSizeX, int imageTileSizeY) = this.ReadLasHeadersAndCellSize(cmdletName, nameof(this.Image), imagePathIsDirectory);
 
             TileReadWrite<ImageRaster<UInt64>> imageReadWrite = new(this.MaxTiles, imageTileSizeX, imageTileSizeY, imagePathIsDirectory);
 
@@ -60,7 +61,7 @@ namespace Mars.Clouds.Cmdlets
                 orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, TileReadWrite<ImageRaster<UInt64>>>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
             }
 
-            this.WaitForTasks("Get-Orthoimages", orthoimageTasks, lasGrid, imageReadWrite);
+            this.WaitForTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
 
             string elapsedTimeFormat = imageReadWrite.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
             this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("#,#,#,0") + " pixels in " + imageReadWrite.TilesLoaded + " LAS tiles in " + imageReadWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / imageReadWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
@@ -92,17 +93,17 @@ namespace Mars.Clouds.Cmdlets
                 case 16:
                     // will likely fail since source data is UInt16; divide by two to avoid Int16 overflows?
                     ImageRaster<UInt16> imageTile16 = imageTile.AsUInt16();
-                    imageTile16.Write(imageTilePath);
+                    imageTile16.Write(imageTilePath, this.CompressRasters);
                     break;
                 case 32:
                     ImageRaster<UInt32> imageTile32 = imageTile.AsUInt32();
-                    imageTile32.Write(imageTilePath); // 32 bit integer deflate compression appears to be somewhat expensive
+                    imageTile32.Write(imageTilePath, this.CompressRasters); // 32 bit integer deflate compression appears to be somewhat expensive
                     break;
                 default:
                     throw new NotSupportedException("Unhandled depth of " + this.BitDepth + " bits per channel.");
             }
 
-            return imageTile.CellsPerBand;
+            return imageTile.Cells;
         }
     }
 }

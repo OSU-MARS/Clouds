@@ -12,6 +12,9 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "LocalMaxima")]
     public class GetLocalMaxima : GdalCmdlet
     {
+        [Parameter(HelpMessage = "Whether or not to compress output rasters. Default is false.")]
+        public SwitchParameter CompressRasters { get; set; }
+
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate treetops within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each DSM must be a single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
         [ValidateNotNullOrEmpty]
         public string? Dsm { get; set; }
@@ -26,6 +29,7 @@ namespace Mars.Clouds.Cmdlets
 
         public GetLocalMaxima() 
         {
+            this.CompressRasters = false;
             // this.Dsm is mandatory
             this.DsmBand = 1;
             // this.LocalMaxima is mandatory
@@ -34,7 +38,7 @@ namespace Mars.Clouds.Cmdlets
         private static Raster<byte> FindLocalMaxima(VirtualRasterNeighborhood8<float> dsmNeighborhood)
         {
             RasterBand<float> dsmTile = dsmNeighborhood.Center;
-            Raster<byte> localMaxima = new(dsmTile, 1, Byte.MaxValue);
+            Raster<byte> localMaxima = new(dsmTile, [ "localMaximaRadiusInCells" ], Byte.MaxValue);
             RasterBand<byte> localMaximaTile = localMaxima.Bands[0];
             localMaximaTile.Name = "localMaximaRadius";
 
@@ -100,7 +104,7 @@ namespace Mars.Clouds.Cmdlets
                 Raster<byte> localMaximaTile = GetLocalMaxima.FindLocalMaxima(dsmNeighborhood);
 
                 string localMaximaTilePath = Directory.Exists(this.LocalMaxima) ? Path.Combine(this.LocalMaxima, dsm.TileNames[0] + Constant.File.GeoTiffExtension) : this.LocalMaxima;
-                localMaximaTile.Write(localMaximaTilePath);
+                localMaximaTile.Write(localMaximaTilePath, this.CompressRasters);
                 ++tilesCompleted;
             }
             else
@@ -128,7 +132,7 @@ namespace Mars.Clouds.Cmdlets
 
                         string dsmTileName = dsm.TileNames[tileIndex];
                         string localMaximaTilePath = Path.Combine(this.LocalMaxima, dsmTileName + Constant.File.GeoTiffExtension);
-                        localMaximaTile.Write(localMaximaTilePath);
+                        localMaximaTile.Write(localMaximaTilePath, this.CompressRasters);
                         mostRecentDsmTileName = dsmTileName;
                     });
                 });

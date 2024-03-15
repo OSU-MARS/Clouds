@@ -2,6 +2,8 @@
 using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -10,31 +12,32 @@ namespace Mars.Clouds.GdalExtensions
 {
     public abstract class Raster : Grid
     {
-        protected static readonly string[] DefaultCompressionOptions;
+        protected static readonly string[] DefaultGeoTiffCompressionOptions;
 
-        protected DataType CellDataType { get; private init; }
-
-        public abstract int BandCount { get; }
         public string FilePath { get; set; }
 
         static Raster()
         {
-            Raster.DefaultCompressionOptions = [ "COMPRESS=DEFLATE", "PREDICTOR=2", "ZLEVEL=9" ];
+            Raster.DefaultGeoTiffCompressionOptions = [ "COMPRESS=DEFLATE", "PREDICTOR=2", "ZLEVEL=9" ];
         }
 
-        protected Raster(Dataset rasterDataset, DataType cellDataType)
-            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), -1, -1, cellDataType)
+        protected Raster(Dataset rasterDataset)
+            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), -1, -1)
         {
         }
 
-        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, DataType cellDataType)
-            : base(crs, transform, xSize, ySize)
+        protected Raster(Grid extent)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize)
         {
-            this.CellDataType = cellDataType;
+        }
+
+        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
+            : base(crs, transform, xSize, ySize, cloneCrsAndTransform: true)
+        {
             this.FilePath = String.Empty;
         }
 
-        public int CellsPerBand
+        public int Cells
         {
             get { return this.XSize * this.YSize; }
         }
@@ -55,9 +58,9 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_Int16 => new Raster<Int16>(rasterDataset),
                 DataType.GDT_Int32 => new Raster<Int32>(rasterDataset),
                 DataType.GDT_Int64 => new Raster<Int64>(rasterDataset),
-                DataType.GDT_UInt16 => new Raster<Int64>(rasterDataset),
-                DataType.GDT_UInt32 => new Raster<Int64>(rasterDataset),
-                DataType.GDT_UInt64 => new Raster<Int64>(rasterDataset),
+                DataType.GDT_UInt16 => new Raster<UInt16>(rasterDataset),
+                DataType.GDT_UInt32 => new Raster<UInt32>(rasterDataset),
+                DataType.GDT_UInt64 => new Raster<UInt64>(rasterDataset),
                 DataType.GDT_Unknown => throw new NotSupportedException("Raster data type is unknown (" + band1.DataType + ")."),
                 DataType.GDT_CFloat32 or
                 DataType.GDT_CFloat64 or
@@ -67,7 +70,15 @@ namespace Mars.Clouds.GdalExtensions
             };
         }
 
-        public abstract RasterBand GetBand(int bandIndex);
+        public RasterBand GetBand(string? name)
+        {
+            if (this.TryGetBand(name, out RasterBand? band) == false)
+            {
+                throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+            }
+
+            return band;
+        }
 
         public static (DataType dataType, long totalCells) GetBandProperties(Dataset rasterDataset)
         {
@@ -101,20 +112,72 @@ namespace Mars.Clouds.GdalExtensions
             // Of these, only the self case (row offset = column offset = 0) needs to be excluded.
             return (absRowOffset + absColumnOffset) > 0;
         }
+
+        public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
+
+        public abstract void Write(string rasterPath, bool compress);
+
+        protected Dataset CreateGdalRasterAndSetFilePath(string rasterPath, int bands, DataType cellDataType, bool compress)
+        {
+            Driver rasterDriver = GdalExtensions.GetDriverByExtension(rasterPath);
+            if (File.Exists(rasterPath))
+            {
+                // no overwrite option in GTiff.Create(), likely also the case for other drivers
+                // This will throw ApplicationException if the raster file is incomplete.
+                rasterDriver.Delete(rasterPath);
+            }
+
+            string[] rasterDriverOptions = compress ? Raster.DefaultGeoTiffCompressionOptions : [];
+            Dataset rasterDataset = rasterDriver.Create(rasterPath, this.XSize, this.YSize, bands, cellDataType, rasterDriverOptions);
+            rasterDataset.SetGeoTransform(this.Transform.GetPadfTransform());
+            rasterDataset.SetSpatialRef(this.Crs);
+
+            this.FilePath = rasterPath;
+            return rasterDataset;
+        }
+
+        protected void WriteBand(Dataset rasterDataset, RasterBand band, int gdalBandIndex)
+        {
+            Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+            if (gdalBand.DataType != DataType.GDT_Float64)
+            {
+                throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Output raster is not of type " + DataType.GDT_Float64 + " (double precision floating point).");
+            }
+
+            double noDataValue = RasterBand<double>.GetDefaultNoDataValue();
+            gdalBand.SetDescription(band.Name);
+            gdalBand.SetNoDataValue(noDataValue);
+
+            GCHandle dataPin = band.GetPinnedDataHandle<double>(noDataValue);
+            try
+            {
+                CPLErr gdalErrorCode = gdalBand.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.XSize, buf_ySize: this.YSize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.WriteRaster));
+            }
+            finally
+            {
+                dataPin.Free();
+            }
+        }
     }
 
+    /// <summary>
+    /// A default raster implementation where all bands are of the same type.
+    /// </summary>
     public class Raster<TBand> : Raster where TBand : INumber<TBand>
     {
         public RasterBand<TBand>[] Bands { get; private init; }
-        public TBand[] Data { get; private init; } // GDAL type layout: all of band 1, all of band 2, ...
 
         public Raster(Dataset rasterDataset)
-            : base(rasterDataset, Raster<TBand>.GetGdalDataType())
+            : base(rasterDataset)
         {
             if (rasterDataset.RasterCount < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Raster has no bands.");
             }
+            string[] sourceFiles = rasterDataset.GetFileList();
+            Debug.Assert(sourceFiles.Length > 0);
+            this.FilePath = sourceFiles[0]; // for now, assume primary source file is always the first file in the raster's sources
 
             // check bands for consistency
             for (int gdalBandIndex = 1; gdalBandIndex <= rasterDataset.RasterCount; ++gdalBandIndex)
@@ -145,110 +208,72 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             // allocate data and create bands
-            this.Bands = new RasterBand<TBand>[rasterDataset.RasterCount];
-            this.Data = new TBand[rasterDataset.RasterCount * this.XSize * this.YSize];
+            DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
 
-            int cellsPerBand = this.XSize * this.YSize;
-            for (int bandOffset = 0, bandIndex = 0; bandIndex < this.Bands.Length; bandOffset += cellsPerBand, ++bandIndex)
+            this.Bands = new RasterBand<TBand>[rasterDataset.RasterCount];
+            int[] bandMap = ArrayExtensions.CreateSequence(1, this.Bands.Length);
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
                 int gdalBandIndex = bandIndex + 1;
-                RasterBand<TBand> band = new(rasterDataset.GetRasterBand(gdalBandIndex), this.Crs, this.Transform, new(this.Data, bandOffset, cellsPerBand));
+                Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                if (gdalBand.DataType != gdalDataType)
+                {
+                    throw new NotSupportedException("A Raster<" + typeof(TBand).Name + "> cannot be loaded from '" + this.FilePath + "' because band " + gdalBandIndex + " is of type " + gdalBand.DataType + ".");
+                }
+
+                RasterBand<TBand> band = new(gdalBand, this);
                 this.Bands[bandIndex] = band;
-            }
 
-            // for now, load raster data on creation
-            // In some use cases or failure paths it's desirable to load the band lazily but this isn't currently supported.
-            // See https://stackoverflow.com/questions/15958830/c-sharp-generics-cast-generic-type-to-value-type for discussion of
-            // C# generics' limitations in recognizing TBand[] as float[], int[], ...
-            int[] bandMap = ArrayExtensions.CreateSequence(1, this.Bands.Length);
-            GCHandle dataPin = GCHandle.Alloc(this.Data, GCHandleType.Pinned);
-            try
-            {
-                CPLErr gdalErrorCode = rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.XSize, buf_ySize: this.YSize, buf_type: this.CellDataType, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.ReadRaster));
-            }
-            finally
-            {
-                dataPin.Free();
+                // for now, load all raster data on creation
+                // In some use cases or failure paths it's desirable to load the band lazily but this isn't currently supported.
+                // See https://stackoverflow.com/questions/15958830/c-sharp-generics-cast-generic-type-to-value-type for discussion of
+                // C# generics' limitations in recognizing TBand[] as float[], int[], ...
+                GCHandle dataPin = GCHandle.Alloc(band.Data, GCHandleType.Pinned);
+                try
+                {
+                    CPLErr gdalErrorCode = rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.XSize, buf_ySize: this.YSize, buf_type: gdalBand.DataType, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+                    GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.ReadRaster));
+                }
+                finally
+                {
+                    dataPin.Free();
+                }
             }
         }
 
-        public Raster(Grid extent, int bands, TBand noDataValue)
-            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bands, noDataValue)
+        public Raster(Grid extent, string[] bandNames, TBand noDataValue)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bandNames, noDataValue)
         {
         }
 
-        public Raster(Grid extent, int bands)
-            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bands)
+        public Raster(Grid extent, string[] bandNames)
+            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, bandNames)
         {
         }
 
-        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, int bands, TBand noDataValue)
-            : this(crs, transform, xSize, ySize, bands)
+        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, string[] bandNames, TBand noDataValue)
+            : this(crs, transform, xSize, ySize, bandNames)
         {
             this.SetNoDataOnAllBands(noDataValue);
-            Array.Fill(this.Data, noDataValue);
-        }
-
-        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, int bands)
-            : base(crs, transform, xSize, ySize, Raster<TBand>.GetGdalDataType())
-        {
-            this.Bands = new RasterBand<TBand>[bands];
-            this.Data = new TBand[xSize * ySize * bands];
-
-            int cellsPerBand = this.XSize * this.YSize;
-            for (int bandOffset = 0, bandIndex = 0; bandIndex < this.Bands.Length; bandOffset += cellsPerBand, ++bandIndex)
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
-                this.Bands[bandIndex] = new(name: String.Empty, this.Crs, this.Transform, this.XSize, this.YSize, new(this.Data, bandOffset, cellsPerBand));
+                Array.Fill(this.Bands[bandIndex].Data, noDataValue);
             }
         }
 
-        public override int BandCount 
-        { 
-            get { return this.Bands.Length; } 
-        }
-
-        public override RasterBand GetBand(int bandIndex)
+        public Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, string[] bandNames)
+            : base(crs, transform, xSize, ySize)
         {
-            return this.Bands[bandIndex];
-        }
-
-        public static TBand GetDefaultNoDataValue()
-        {
-            return Type.GetTypeCode(typeof(TBand)) switch
+            if (bandNames.Length < 1)
             {
-                TypeCode.Byte => TBand.CreateChecked(Byte.MaxValue),
-                TypeCode.Double => TBand.CreateChecked(Double.NaN),
-                TypeCode.Int16 => TBand.CreateChecked(Int16.MinValue),
-                TypeCode.Int32 => TBand.CreateChecked(Int32.MinValue),
-                TypeCode.Int64 => TBand.CreateChecked(Int64.MinValue),
-                TypeCode.SByte => TBand.CreateChecked(SByte.MinValue),
-                TypeCode.Single => TBand.CreateChecked(Single.NaN),
-                TypeCode.UInt16 => TBand.CreateChecked(UInt16.MaxValue),
-                TypeCode.UInt32 => TBand.CreateChecked(UInt32.MaxValue),
-                TypeCode.UInt64 => TBand.CreateChecked(UInt64.MaxValue),
-                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently reachable
-                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
-            };
-        }
+                throw new ArgumentOutOfRangeException(nameof(bandNames), "Rasters must have at least one band but " + bandNames.Length + " band names were specified.");
+            }
 
-        public static DataType GetGdalDataType()
-        {
-            return Type.GetTypeCode(typeof(TBand)) switch
+            this.Bands = new RasterBand<TBand>[bandNames.Length];
+            for (int bandIndex = 0; bandIndex < bandNames.Length; ++bandIndex)
             {
-                TypeCode.Byte => DataType.GDT_Byte,
-                TypeCode.Double => DataType.GDT_Float64,
-                TypeCode.Int16 => DataType.GDT_Int16,
-                TypeCode.Int32 => DataType.GDT_Int32,
-                TypeCode.Int64 => DataType.GDT_Int64,
-                TypeCode.SByte => DataType.GDT_Int8,
-                TypeCode.Single => DataType.GDT_Float32,
-                TypeCode.UInt16 => DataType.GDT_UInt16,
-                TypeCode.UInt32 => DataType.GDT_UInt32,
-                TypeCode.UInt64 => DataType.GDT_UInt64,
-                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently supported
-                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
-            };
+                this.Bands[bandIndex] = new(bandNames[bandIndex], this);
+            }
         }
 
         public static Raster<TBand> Read(string rasterPath)
@@ -256,7 +281,7 @@ namespace Mars.Clouds.GdalExtensions
             using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
             (DataType dataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
 
-            DataType expectedDataType = Raster<TBand>.GetGdalDataType();
+            DataType expectedDataType = RasterBand.GetGdalDataType<TBand>();
             if (dataType != expectedDataType)
             {
                 throw new NotSupportedException("Raster '" + rasterPath + "' has data type " + dataType + " instead of " + expectedDataType + ".");
@@ -278,6 +303,39 @@ namespace Mars.Clouds.GdalExtensions
             {
                 this.Bands[bandIndex].SetNoDataValue(noDataValue);
             }
+        }
+
+        public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
+        {
+            if (this.TryGetBand(name, out RasterBand<TBand>? typedBand))
+            {
+                band = typedBand;
+                return true;
+            }
+
+            band = null;
+            return false;
+        }
+
+        public bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand<TBand>? band)
+        {
+            if (name == null)
+            {
+                band = this.Bands[0];
+                return true;
+            }
+
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
+            {
+                RasterBand<TBand> candidateBand = this.Bands[bandIndex];
+                if (String.Equals(candidateBand.Name, name, StringComparison.Ordinal))
+                {
+                    band = candidateBand;
+                    return true;
+                }
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
         }
 
         //public bool TryGetNoDataValue(out TBand noDataValue)
@@ -309,45 +367,19 @@ namespace Mars.Clouds.GdalExtensions
         //    return bandsWithNoData > 0;
         //}
 
-        public void Write(string rasterPath)
+        public override void Write(string rasterPath, bool compress)
         {
-            Driver rasterDriver = GdalExtensions.GetDriverByExtension(rasterPath);
-            if (File.Exists(rasterPath))
-            {
-                // no overwrite option in GTiff.Create(), likely also the case for other drivers
-                // This will throw ApplicationException if the raster file is incomplete.
-                rasterDriver.Delete(rasterPath);
-            }
-            using Dataset rasterDataset = rasterDriver.Create(rasterPath, this.XSize, this.YSize, this.Bands.Length, this.CellDataType, Raster.DefaultCompressionOptions);
-            rasterDataset.SetGeoTransform(this.Transform.GetPadfTransform());
-            rasterDataset.SetSpatialRef(this.Crs);
+            // all bands have the same type, so no need for type conversion to meet GDAL (and GeoTIFF) single type constraints
+            DataType cellDataType = RasterBand.GetGdalDataType<TBand>();
 
-
-            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
+            using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, this.Bands.Length, cellDataType, compress);
+            for (int bandIndex = 0; bandIndex< this.Bands.Length; ++bandIndex)
             {
                 RasterBand<TBand> band = this.Bands[bandIndex];
-                if (band.HasNoDataValue)
-                {
-                    int gdalbandIndex = bandIndex + 1;
-                    Band gdalBand = rasterDataset.GetRasterBand(gdalbandIndex);
-                    gdalBand.SetDescription(band.Name);
-                    gdalBand.SetNoDataValue(Double.CreateChecked(band.NoDataValue));
-                }
-            }
+                int gdalbandIndex = bandIndex + 1;
 
-            int[] bandMap = ArrayExtensions.CreateSequence(1, this.Bands.Length);
-            GCHandle dataPin = GCHandle.Alloc(this.Data, GCHandleType.Pinned);
-            try
-            {
-                CPLErr gdalErrorCode = rasterDataset.WriteRaster(xOff: 0, yOff: 0, xSize: this.XSize, ySize: this.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.XSize, buf_ySize: this.YSize, buf_type: this.CellDataType, bandCount: this.Bands.Length, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
-                GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.WriteRaster));
+                this.WriteBand(rasterDataset, band, gdalbandIndex);
             }
-            finally
-            {
-                dataPin.Free();
-            }
-
-            this.FilePath = rasterPath;
         }
     }
 }

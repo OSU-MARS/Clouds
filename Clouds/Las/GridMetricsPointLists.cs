@@ -8,8 +8,8 @@ namespace Mars.Clouds.Las
 {
     public class GridMetricsPointLists : Grid<PointListZirnc>
     {
-        public GridMetricsPointLists(Raster cellDefinitions, int cellDefinitionBandIndex, LasTileGrid lasGrid)
-            : base(cellDefinitions.Crs, cellDefinitions.Transform, cellDefinitions.XSize, cellDefinitions.YSize)
+        public GridMetricsPointLists(RasterBand cellMask, LasTileGrid lasGrid)
+            : base(cellMask.Crs, cellMask.Transform, cellMask.XSize, cellMask.YSize)
         {
             if ((this.Transform.ColumnRotation != 0.0) || (this.Transform.RowRotation != 0.0))
             {
@@ -19,14 +19,12 @@ namespace Mars.Clouds.Las
             {
                 throw new NotSupportedException("Grid cells are larger than point cloud tiles in at least one dimension. This is not currently supported by the simple calculations used to intersect grid cells and LiDAR tiles.");
             }
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cellDefinitions.BandCount, cellDefinitionBandIndex, nameof(cellDefinitions));
 
             // metrics grid might extend beyond tile grid, in which areas metrics cells need not be created as no points are available
             Debug.Assert(this.Transform.CellHeight < 0.0);
             (double lasGridXmin, double lasGridXmax, double lasGridYmin, double lasGridYmax) = lasGrid.GetExtent();
             (int metricsXindexMin, int metricsXindexMaxInclusive, int metricsYindexMin, int metricsYindexMaxInclusive) = this.GetIntersectingCellIndices(lasGridXmin, lasGridXmax, lasGridYmin, lasGridYmax);
 
-            RasterBand cellMask = cellDefinitions.GetBand(cellDefinitionBandIndex);
             for (int metricsYindex = metricsYindexMin; metricsYindex <= metricsYindexMaxInclusive; ++metricsYindex)
             {
                 for (int metricsXindex = metricsXindexMin; metricsXindex <= metricsXindexMaxInclusive; ++metricsXindex)

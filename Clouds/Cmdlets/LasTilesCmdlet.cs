@@ -36,7 +36,7 @@ namespace Mars.Clouds.Cmdlets
             this.Snap = false;
         }
 
-        protected LasTileGrid ReadLasHeadersAndFormGrid(int? requiredEpsg)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
             string[] lasTilePaths = GdalCmdlet.GetExistingTilePaths(this.Las, Constant.File.LasExtension);
 
@@ -44,7 +44,7 @@ namespace Mars.Clouds.Cmdlets
             stopwatch.Start();
 
             List<LasTile> lasTiles = new(lasTilePaths.Length);
-            ProgressRecord tileIndexProgress = new(0, "Get-GridMetrics", "placeholder"); // can't pass null or empty statusDescription
+            ProgressRecord tileIndexProgress = new(0, cmdletName, "placeholder"); // can't pass null or empty statusDescription
             for (int tileIndex = 0; tileIndex < lasTilePaths.Length; tileIndex++)
             {
                 // tile load status

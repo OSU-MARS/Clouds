@@ -20,9 +20,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string? Dtm { get; set; }
 
-        [Parameter(HelpMessage = "Number of DTM band to use in calculating mean ground elevations. Default is 1 (the first band).")]
-        [ValidateRange(1, 500)] // arbitrary upper bound
-        public int DtmBand { get; set; }
+        [Parameter(HelpMessage = "Name of DTM band to use in calculating mean ground elevations. Default is the first band.")]
+        [ValidateNotNullOrWhiteSpace]
+        public string? DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Vertical distance beyond which groups of points are considered distinct layers. Default is 10 m for metric point clouds and 30 feet for point clouds with English units.")]
         [ValidateRange(0.0F, 500.0F)] // arbitrary upper bound
@@ -36,7 +36,7 @@ namespace Mars.Clouds.Cmdlets
         {
             // this.Dsm is mandatory
             // this.Dtm is mandatory
-            this.DtmBand = 1;
+            this.DtmBand = null;
             this.LayerSeparation = -1.0F;
             // leave this.MaxThreads at default for DTM read
             this.UpperPoints = 0;
@@ -50,9 +50,10 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
             }
 
+            string cmdletName = "Get-Dsm";
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
-            (LasTileGrid lasGrid, int dsmTileSizeX, int dsmTileSizeY) = this.ReadLasHeadersAndCellSize(nameof(this.Dsm), dsmPathIsDirectory);
-            VirtualRaster<float> dtm = this.ReadVirtualRaster("Get-Dsm", this.Dtm);
+            (LasTileGrid lasGrid, int dsmTileSizeX, int dsmTileSizeY) = this.ReadLasHeadersAndCellSize(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
+            VirtualRaster<float> dtm = this.ReadVirtualRaster(cmdletName, this.Dtm);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
                 throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
@@ -111,9 +112,9 @@ namespace Mars.Clouds.Cmdlets
             DigitalSurfaceModel dsmTile = new(dsmTilePointZ, dtmTile, this.LayerSeparation, this.UpperPoints);
 
             string dsmTilePath = dsmReadWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
-            dsmTile.Write(dsmTilePath);
+            dsmTile.Write(dsmTilePath, this.CompressRasters);
 
-            return dsmTile.CellsPerBand;
+            return dsmTile.Cells;
         }
 
         private class DsmReadWrite : TileReadWrite<Grid<PointListZ>>

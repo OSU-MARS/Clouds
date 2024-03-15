@@ -25,14 +25,15 @@ namespace Mars.Clouds.Cmdlets
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
             Raster cellDefinitions = Raster.Create(gridCellDefinitionDataset);
 
+            string cmdletName = "Get-GridMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(gridEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
 
             TileRead tileRead = new();
             ScanMetricsRaster scanMetrics = new(cellDefinitions);
             Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, scanMetrics, tileRead), tileRead.CancellationTokenSource.Token);
 
-            ProgressRecord gridMetricsProgress = new(0, "Get-ScanMetrics", "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
+            ProgressRecord gridMetricsProgress = new(0, cmdletName, "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
             this.WriteProgress(gridMetricsProgress);
 
             while (readPoints.Wait(LasTilesCmdlet.ProgressUpdateInterval) == false)

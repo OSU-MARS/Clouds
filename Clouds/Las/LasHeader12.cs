@@ -20,7 +20,7 @@ namespace Mars.Clouds.Las
 
             // currently permissive: allows any known combination of flags with any LAS version
             // Can be made more restrictive if needed. Enum.IsDefined() doesn't support combinations of flags.
-            if (this.GlobalEncoding > (GlobalEncoding.GpsTimeType | GlobalEncoding.WaveformDataPacketsExternal | GlobalEncoding.SyntheticReturnNumbers | GlobalEncoding.WellKnownText))
+            if (this.GlobalEncoding > (GlobalEncoding.AdjustedStandardGpsTime | GlobalEncoding.WaveformDataPacketsExternal | GlobalEncoding.SyntheticReturnNumbers | GlobalEncoding.WellKnownText))
             {
                 throw new InvalidDataException("GlobalEncoding");
             }

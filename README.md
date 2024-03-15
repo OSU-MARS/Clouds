@@ -7,13 +7,13 @@ A research codebase with an ad hoc collection of PowerShell cmdlets for working 
 - Get-TreeTops: find treetop candidates in a canopy height or digital surface model
 
 The cmdlets are multithreaded at the tile level but, currently, it's assumed 1) point cloud datasets are large enough to be stored on 3.5 
-inch drives and don't in memory while 2) DSMs and DTMs (digital surface and terrain models) are stored on faster drives (NVMe, SSD). Thread 
-counts and IO capabilities scale accordingly. [LAS](https://www.asprs.org/divisions-committees/lidar-division/laser-las-file-format-exchange-activities) 
+inch drives and don't fit in memory while 2) DSMs and DTMs (digital surface and terrain models) are stored on faster drives (NVMe, SSD). 
+Thread counts and IO capabilities scale accordingly. [LAS](https://www.asprs.org/divisions-committees/lidar-division/laser-las-file-format-exchange-activities) 
 and [GDAL](https://gdal.org/) file formats are supported, though GDAL testing is limited to GeoPackage and GeoTIFF. In cases where 
-directories are searched for data tiles GeoTIFF is the default extension.
+directories are searched for data tiles .las and .tif are the default file extensions.
 
 Code is provided as is. In general, the head commit should compile and pass unit tests but this isn't absolutely guaranteed. APIs are
-likely volatile.
+likely volatile and subject to breaking changes.
 
 ### Supporting cmdlets
 Supporting tools are
@@ -34,3 +34,11 @@ write transactions on large GeoPackages.
 
 Clouds is developed using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/) 
 edition. Clouds is only tested on Windows 10 but should run on any .NET supported platform.
+
+### Limitations
+Current constraints are
+
+- The user has to know what thread counts to specify for optimal performance. Thread selection is automatable but requires performance 
+  characterization and drive capability identification.
+- There's not a way to attach multiple outputs to a single .las file read, likely resulting in longer runtimes and greater drive workload 
+  rates due a given .las file being read multiple times by different cmdlets.

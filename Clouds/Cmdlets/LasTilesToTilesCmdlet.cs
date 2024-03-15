@@ -12,14 +12,18 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Size of a DSM cell or orthoimage pixel in the point clouds' CRS units. Must be an integer multiple of the tile size. Default is 0.5 m for metric point clouds and 1.5 feet for point clouds with English units.")]
         public double CellSize { get; set; }
 
+        [Parameter(HelpMessage = "Whether or not to compress output rasters (DSM or orthoimages). Default is false.")]
+        public SwitchParameter CompressRasters { get; set; }
+
         protected LasTilesToTilesCmdlet()
         {
             this.CellSize = -1.0;
+            this.CompressRasters = false;
         }
 
-        protected (LasTileGrid lasGrid, int tileSizeX, int tileSizeY) ReadLasHeadersAndCellSize(string outputParameterName, bool outputPathIsDirectory)
+        protected (LasTileGrid lasGrid, int tileSizeX, int tileSizeY) ReadLasHeadersAndCellSize(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
         {
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(requiredEpsg: null);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
             if ((lasGrid.NonNullCells > 1) && (outputPathIsDirectory == false))
             {
                 throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when " + nameof(this.Las) + " indicates multiple files.");

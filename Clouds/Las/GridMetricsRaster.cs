@@ -1,17 +1,16 @@
 ﻿using Mars.Clouds.GdalExtensions;
-using OSGeo.OSR;
 using System;
 using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
     /// <summary>
-    /// 60 band raster containing standard point cloud z and intensity metrics plus distribution of returns.
+    /// 50+ band raster containing standard point cloud z and intensity metrics plus distribution of returns.
     /// </summary>
     public class GridMetricsRaster : Raster<float>
     {
         // always on bands
-        public RasterBand<float> Points { get; private init; }
+        public RasterBand<float> AcceptedPoints { get; private init; }
         public RasterBand<float> ZMax { get; private init; }
         public RasterBand<float> ZMean { get; private init; }
         public RasterBand<float> ZGroundMean { get; private init; }
@@ -84,12 +83,12 @@ namespace Mars.Clouds.Las
         public RasterBand<float>? ZPCumulative90 { get; private init; }
 
         public GridMetricsRaster(Grid extent, GridMetricsSettings settings)
-            : base(extent, GridMetricsRaster.GetBandCount(settings), Raster<float>.GetDefaultNoDataValue())
+            : base(extent, GridMetricsRaster.GetBandNames(settings), RasterBand<float>.GetDefaultNoDataValue())
         {
             int bandIndex = 0;
 
             // always present bands
-            this.Points = this.Bands[bandIndex++];
+            this.AcceptedPoints = this.Bands[bandIndex++];
             this.ZMax = this.Bands[bandIndex++];
             this.ZMean = this.Bands[bandIndex++];
             this.ZGroundMean = this.Bands[bandIndex++];
@@ -141,58 +140,6 @@ namespace Mars.Clouds.Las
             this.PFifthReturn = this.Bands[bandIndex++];
             this.PGround = this.Bands[bandIndex++];
 
-            this.Points.Name = "points";
-            this.ZGroundMean.Name = "zGroundMean";
-            this.ZMax.Name = "zMax";
-            this.ZMean.Name = "zMean";
-            this.ZStandardDeviation.Name = "zStdDev";
-            this.ZSkew.Name = "zSkew";
-            this.ZNormalizedEntropy.Name = "zNormalizedEntropy";
-            this.PZAboveZMean.Name = "pZaboveZmean";
-            this.PZAboveThreshold.Name = "pZaboveThreshold";
-            this.ZQuantile05.Name = "zQ05";
-            this.ZQuantile10.Name = "zQ10";
-            this.ZQuantile15.Name = "zQ15";
-            this.ZQuantile20.Name = "zQ20";
-            this.ZQuantile25.Name = "zQ25";
-            this.ZQuantile30.Name = "zQ30";
-            this.ZQuantile35.Name = "zQ35";
-            this.ZQuantile40.Name = "zQ40";
-            this.ZQuantile45.Name = "zQ45";
-            this.ZQuantile50.Name = "zQ50";
-            this.ZQuantile55.Name = "zQ55";
-            this.ZQuantile60.Name = "zQ60";
-            this.ZQuantile65.Name = "zQ65";
-            this.ZQuantile70.Name = "zQ70";
-            this.ZQuantile75.Name = "zQ75";
-            this.ZQuantile80.Name = "zQ80";
-            this.ZQuantile85.Name = "zQ85";
-            this.ZQuantile90.Name = "zQ90";
-            this.ZQuantile95.Name = "zQ95";
-            this.IntensityFirstReturn.Name = "intensityFirstReturn";
-            this.IntensityMean.Name = "intensityMean";
-            this.IntensityMeanAboveMedianZ.Name = "intensityMeanAboveMedianZ";
-            this.IntensityMeanBelowMedianZ.Name = "intensityMeanBelowMedianZ";
-            this.IntensityMax.Name = "intensityMax";
-            this.IntensityStandardDeviation.Name = "intensityStdDev";
-            this.IntensitySkew.Name = "intensitySkew";
-            this.IntensityPGround.Name = "intensityPground";
-            this.IntensityQuantile10.Name = "intensityQ10";
-            this.IntensityQuantile20.Name = "intensityQ20";
-            this.IntensityQuantile30.Name = "intensityQ30";
-            this.IntensityQuantile40.Name = "intensityQ40";
-            this.IntensityQuantile50.Name = "intensityQ50";
-            this.IntensityQuantile60.Name = "intensityQ60";
-            this.IntensityQuantile70.Name = "intensityQ70";
-            this.IntensityQuantile80.Name = "intensityQ80";
-            this.IntensityQuantile90.Name = "intensityQ90";
-            this.PFirstReturn.Name = "pFirstReturn";
-            this.PSecondReturn.Name = "pSecondReturn";
-            this.PThirdReturn.Name = "pThirdReturn";
-            this.PFourthReturn.Name = "pFourthReturn";
-            this.PFifthReturn.Name = "pFifthReturn";
-            this.PGround.Name = "pGround";
-
             // optional bands
             this.IntensityPCumulativeZQ10 = null;
             this.IntensityPCumulativeZQ30 = null;
@@ -209,29 +156,19 @@ namespace Mars.Clouds.Las
                 this.IntensityPCumulativeZQ50 = this.Bands[bandIndex++];
                 this.IntensityPCumulativeZQ70 = this.Bands[bandIndex++];
                 this.IntensityPCumulativeZQ90 = this.Bands[bandIndex++];
-
-                this.IntensityPCumulativeZQ10.Name = "intensityPCumulativeZQ10";
-                this.IntensityPCumulativeZQ30.Name = "intensityPCumulativeZQ30";
-                this.IntensityPCumulativeZQ50.Name = "intensityPCumulativeZQ50";
-                this.IntensityPCumulativeZQ70.Name = "intensityPCumulativeZQ70";
-                this.IntensityPCumulativeZQ90.Name = "intensityPCumulativeZQ90";
             }
             if (settings.IntensityTotal)
             {
                 this.IntensityTotal = this.Bands[bandIndex++];
-                this.IntensityTotal.Name = "intensityTotal";
             }
             if (settings.Kurtosis)
             {
                 this.IntensityKurtosis = this.Bands[bandIndex++];
-                this.IntensityKurtosis.Name = "intensityKurtosis";
                 this.ZKurtosis = this.Bands[bandIndex++];
-                this.ZKurtosis.Name = "zKurtosis";
             }
             if (settings.PointBoundingArea)
             {
                 this.AreaOfPointBoundingBox = this.Bands[bandIndex++];
-                this.AreaOfPointBoundingBox.Name = "areaOfPointBoundingBox";
             }
             if (settings.ZPCumulative)
             {
@@ -244,52 +181,132 @@ namespace Mars.Clouds.Las
                 this.ZPCumulative70 = this.Bands[bandIndex++];
                 this.ZPCumulative80 = this.Bands[bandIndex++];
                 this.ZPCumulative90 = this.Bands[bandIndex++];
-
-                this.ZPCumulative10.Name = "zPcumulative10";
-                this.ZPCumulative20.Name = "zPcumulative20";
-                this.ZPCumulative30.Name = "zPcumulative30";
-                this.ZPCumulative40.Name = "zPcumulative40";
-                this.ZPCumulative50.Name = "zPcumulative50";
-                this.ZPCumulative60.Name = "zPcumulative60";
-                this.ZPCumulative70.Name = "zPcumulative70";
-                this.ZPCumulative80.Name = "zPcumulative80";
-                this.ZPCumulative90.Name = "zPcumulative90";
             }
         }
 
-        private static int GetBandCount(GridMetricsSettings settings)
+        private static string[] GetBandNames(GridMetricsSettings settings)
         {
             // points + 6 z stats + 2 pZabove + 19 zQ + 8 intensity stats + 9 intensity quantiles + 6 return probabilities
-            int bands = 1 + 6 + 2 + 19 + 8 + 9 + 6; // 51 always on bands
+            int bandCount = 1 + 6 + 2 + 19 + 8 + 9 + 6; // 51 always on bands
             if (settings.IntensityPCumulativeZQ)
             {
-                bands += 5;
+                bandCount += 5;
             }
             if (settings.IntensityTotal)
             {
-                ++bands;
+                ++bandCount;
             }
             if (settings.Kurtosis)
             {
-                bands += 2;
+                bandCount += 2;
             }
             if (settings.PointBoundingArea)
             {
-                ++bands;
+                ++bandCount;
             }
             if (settings.ZPCumulative)
             {
-                bands += 9;
+                bandCount += 9;
             }
 
-            return bands;
+            string[] bandNames = new string[bandCount];
+
+            // always present bands
+            bandNames[0] = "acceptedPoints";
+            bandNames[1] = "zGroundMean";
+            bandNames[2] = "zMax";
+            bandNames[3] = "zMean";
+            bandNames[4] = "zStdDev";
+            bandNames[5] = "zSkew";
+            bandNames[6] = "zNormalizedEntropy";
+            bandNames[7] = "pZaboveZmean";
+            bandNames[8] = "pZaboveThreshold";
+            bandNames[9] = "zQ05";
+            bandNames[10] = "zQ10";
+            bandNames[11] = "zQ15";
+            bandNames[12] = "zQ20";
+            bandNames[13] = "zQ25";
+            bandNames[14] = "zQ30";
+            bandNames[15] = "zQ35";
+            bandNames[16] = "zQ40";
+            bandNames[17] = "zQ45";
+            bandNames[18] = "zQ50";
+            bandNames[19] = "zQ55";
+            bandNames[20] = "zQ60";
+            bandNames[21] = "zQ65";
+            bandNames[22] = "zQ70";
+            bandNames[23] = "zQ75";
+            bandNames[24] = "zQ80";
+            bandNames[25] = "zQ85";
+            bandNames[26] = "zQ90";
+            bandNames[27] = "zQ95";
+            bandNames[28] = "intensityFirstReturn";
+            bandNames[29] = "intensityMean";
+            bandNames[30] = "intensityMeanAboveMedianZ";
+            bandNames[31] = "intensityMeanBelowMedianZ";
+            bandNames[32] = "intensityMax";
+            bandNames[33] = "intensityStdDev";
+            bandNames[34] = "intensitySkew";
+            bandNames[35] = "intensityPground";
+            bandNames[36] = "intensityQ10";
+            bandNames[37] = "intensityQ20";
+            bandNames[38] = "intensityQ30";
+            bandNames[39] = "intensityQ40";
+            bandNames[40] = "intensityQ50";
+            bandNames[41] = "intensityQ60";
+            bandNames[42] = "intensityQ70";
+            bandNames[43] = "intensityQ80";
+            bandNames[44] = "intensityQ90";
+            bandNames[45] = "pFirstReturn";
+            bandNames[46] = "pSecondReturn";
+            bandNames[47] = "pThirdReturn";
+            bandNames[48] = "pFourthReturn";
+            bandNames[49] = "pFifthReturn";
+            bandNames[50] = "pGround";
+
+            int bandIndex = 50;
+            if (settings.IntensityPCumulativeZQ)
+            {
+                bandNames[++bandIndex] = "intensityPCumulativeZQ10";
+                bandNames[++bandIndex] = "intensityPCumulativeZQ30";
+                bandNames[++bandIndex] = "intensityPCumulativeZQ50";
+                bandNames[++bandIndex] = "intensityPCumulativeZQ70";
+                bandNames[++bandIndex] = "intensityPCumulativeZQ90";
+            }
+            if (settings.IntensityTotal)
+            {
+                bandNames[++bandIndex] = "intensityTotal";
+            }
+            if (settings.Kurtosis)
+            {
+                bandNames[++bandIndex] = "intensityKurtosis";
+                bandNames[++bandIndex] = "zKurtosis";
+            }
+            if (settings.PointBoundingArea)
+            {
+                bandNames[++bandIndex] = "areaOfPointBoundingBox";
+            }
+            if (settings.ZPCumulative)
+            {
+                bandNames[++bandIndex] = "zPcumulative10";
+                bandNames[++bandIndex] = "zPcumulative20";
+                bandNames[++bandIndex] = "zPcumulative30";
+                bandNames[++bandIndex] = "zPcumulative40";
+                bandNames[++bandIndex] = "zPcumulative50";
+                bandNames[++bandIndex] = "zPcumulative60";
+                bandNames[++bandIndex] = "zPcumulative70";
+                bandNames[++bandIndex] = "zPcumulative80";
+                bandNames[++bandIndex] = "zPcumulative90";
+            }
+
+            return bandNames;
         }
 
         public void SetMetrics(PointListZirnc cell, VirtualRasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
         {
             int pointCount = cell.Count;
             int cellIndex = this.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing
-            this.Points[cellIndex] = pointCount;
+            this.AcceptedPoints[cellIndex] = pointCount;
 
             (double cellXmin, double cellXmax, double cellYmin, double cellYmax) = this.Transform.GetCellExtent(cell.XIndex, cell.YIndex);
             (int dtmXindexMin, int dtmXindexMax, int dtmYindexMin, int dtmYindexMax) = dtmNeighborhood.Center.GetIntersectingCellIndices(cellXmin, cellXmax, cellYmin, cellYmax);

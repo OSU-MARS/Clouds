@@ -119,7 +119,7 @@ namespace Mars.Clouds.Segmentation
             {
                 for (int dsmXindex = 0; dsmXindex < tileSearch.Dsm.XSize; ++dsmIndex, ++dsmXindex) // x for north up rasters
                 {
-                    float dsmZ = tileSearch.Dsm.Data.Span[dsmIndex];
+                    float dsmZ = tileSearch.Dsm.Data[dsmIndex];
                     if (tileSearch.Dsm.IsNoData(dsmZ))
                     {
                         continue;
