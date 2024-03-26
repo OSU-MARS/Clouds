@@ -13,26 +13,20 @@ using System.IO;
 namespace Mars.Clouds.UnitTests
 {
     [TestClass]
-    public class LasTests
+    public class LasTests : CloudTest
     {
-        private string? unitTestPath;
-
-        public TestContext? TestContext { get; set; }
-
-        [TestInitialize]
-        public void TestInitialize()
+        [AssemblyInitialize]
+        public static void AssemblyInitialize(TestContext _)
         {
-            this.unitTestPath = Path.Combine(this.TestContext!.TestRunDirectory!, "..\\..\\UnitTests");
-
             GdalBase.ConfigureAll();
         }
 
         private VirtualRaster<float> ReadDtm()
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
 
             VirtualRaster<float> dtm = new();
-            dtm.Add(Tile.GetName(TestConstant.DtmFileName), Raster<float>.Read(Path.Combine(this.unitTestPath, TestConstant.DtmFileName)));
+            dtm.Add(Tile.GetName(TestConstant.DtmFileName), Raster<float>.Read(Path.Combine(this.UnitTestPath, TestConstant.DtmFileName)));
             dtm.BuildGrid();
 
             return dtm;
@@ -90,9 +84,9 @@ namespace Mars.Clouds.UnitTests
         [TestMethod]
         public void ReadLasGridMetrics()
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
 
-            FileInfo lasFileInfo = new(Path.Combine(this.unitTestPath, TestConstant.LasFileName));
+            FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
             using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
@@ -624,7 +618,7 @@ namespace Mars.Clouds.UnitTests
         [TestMethod]
         public void ReadLasImage()
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
             LasTile lasTile = this.ReadLasTile();
 
             double imageCellSize = 0.5;
@@ -683,7 +677,7 @@ namespace Mars.Clouds.UnitTests
         [TestMethod]
         public void ReadLasScanMetrics()
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
             LasTile lasTile = this.ReadLasTile();
 
             Raster<UInt16> gridCellDefinitions = this.SnapLasTileToGridCells(lasTile);
@@ -763,9 +757,9 @@ namespace Mars.Clouds.UnitTests
 
         private LasTile ReadLasTile()
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
 
-            FileInfo lasFileInfo = new(Path.Combine(this.unitTestPath, TestConstant.LasFileName));
+            FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
             using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
@@ -775,12 +769,12 @@ namespace Mars.Clouds.UnitTests
 
         public Raster<UInt16> SnapLasTileToGridCells(LasTile lasTile)
         {
-            Debug.Assert(this.unitTestPath != null);
+            Debug.Assert(this.UnitTestPath != null);
 
             // bypass LasTileGrid.Create(lasTiles, 32610) as test point cloud is much smaller than a full LiDAR/SfM tile
             // Since a tile smaller than an ABA cell is an error, the test path is to boost the tile's extent to be the size of an ABA
             // cell and set the LAS tile grid pitch matches the expanded tile size.
-            using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.unitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
+            using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.UnitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
             Raster<UInt16>  gridCellDefinitions = new(gridCellDefinitionDataset);
             lasTile.GridExtent.XMax = lasTile.GridExtent.XMin + gridCellDefinitions.Transform.CellWidth;
             lasTile.GridExtent.YMin = lasTile.GridExtent.YMax + gridCellDefinitions.Transform.CellHeight; // cell height is negative
