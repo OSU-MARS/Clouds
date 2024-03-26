@@ -12,8 +12,8 @@ namespace Mars.Clouds.Cmdlets
         protected static TimeSpan ProgressUpdateInterval { get; private set; }
 
         [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
-        [ValidateNotNullOrEmpty]
-        public string? Las { get; set; }
+        [ValidateNotNullOrWhiteSpace]
+        public List<string>? Las { get; set; }
 
         // quick solution for constraining memory consumption
         // A more adaptive implementation would track memory consumption (e.g. GlobalMemoryStatusEx()), estimate it from the size of the
@@ -38,18 +38,18 @@ namespace Mars.Clouds.Cmdlets
 
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
-            string[] lasTilePaths = GdalCmdlet.GetExistingTilePaths(this.Las, Constant.File.LasExtension);
+            List<string> lasTilePaths = GdalCmdlet.GetExistingTilePaths(this.Las, Constant.File.LasExtension);
 
             Stopwatch stopwatch = new();
             stopwatch.Start();
 
-            List<LasTile> lasTiles = new(lasTilePaths.Length);
+            List<LasTile> lasTiles = new(lasTilePaths.Count);
             ProgressRecord tileIndexProgress = new(0, cmdletName, "placeholder"); // can't pass null or empty statusDescription
-            for (int tileIndex = 0; tileIndex < lasTilePaths.Length; tileIndex++)
+            for (int tileIndex = 0; tileIndex < lasTilePaths.Count; tileIndex++)
             {
                 // tile load status
-                float fractionComplete = (float)tileIndex / (float)lasTilePaths.Length;
-                tileIndexProgress.StatusDescription = "Reading tile header " + tileIndex + " of " + lasTilePaths.Length + "...";
+                float fractionComplete = (float)tileIndex / (float)lasTilePaths.Count;
+                tileIndexProgress.StatusDescription = "Reading point cloud tile header " + tileIndex + " of " + lasTilePaths.Count + "...";
                 tileIndexProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 tileIndexProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(tileIndexProgress);

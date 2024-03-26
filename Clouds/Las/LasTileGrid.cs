@@ -8,6 +8,8 @@ namespace Mars.Clouds.Las
 {
     public class LasTileGrid : Grid<LasTile>
     {
+        public int NonNullCells { get; protected set; }
+
         public LasTileGrid(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, IList<LasTile> tiles)
             : base(crs, transform, xSize, ySize)
         {
@@ -17,7 +19,7 @@ namespace Mars.Clouds.Las
             {
                 LasTile tile = tiles[tileIndex];
                 (double xCentroid, double yCentroid) = tile.GridExtent.GetCentroid();
-                (int xIndex, int yIndex) = this.GetCellIndices(xCentroid, yCentroid);
+                (int xIndex, int yIndex) = this.ToGridIndices(xCentroid, yCentroid);
                 // if needed, expand tile's grid extent to match the grid assuming tiles are anchored at their min (x, y) corner
                 // This provides correction for tile sizes being slightly smaller than grid pitch. See LasTileGrid.Create().
                 // An alternative to maintianing a separate grid extent per tile would be editing the LAS header's extents. However, this
@@ -26,8 +28,8 @@ namespace Mars.Clouds.Las
                 tile.GridExtent.YMax = Double.Max(tile.GridExtent.YMin - this.Transform.CellHeight, tile.GridExtent.YMax);
 
                 int cellIndex = this.ToCellIndex(xIndex, yIndex);
-                Debug.Assert(this.Cells[cellIndex] == null); // check for duplicate inserts
-                this.Cells[cellIndex] = tile;
+                Debug.Assert(this.Data[cellIndex] == null); // check for duplicate inserts
+                this.Data[cellIndex] = tile;
             }
 
             this.NonNullCells = tiles.Count;
@@ -129,9 +131,12 @@ namespace Mars.Clouds.Las
 
             if (snap)
             {
+                // floor and ceiling to get min X and origin Y might move tile more than rounding up the width and height extends the grid
+                // Currently unclear how best to deal with such cases, though adding an extra 1.0 CRS linear units to the width and height
+                // seems a reasonable default if handling proves to be needed.
                 gridCellWidth = Double.Ceiling(gridCellWidth);
                 gridCellHeight = gridCellHeight > 0.0 ? Double.Ceiling(gridCellHeight) : Double.Floor(gridCellHeight);
-                gridMinX = Double.Ceiling(gridMinX);
+                gridMinX = Double.Floor(gridMinX);
                 gridOriginY = Double.Ceiling(gridOriginY);
             }
 

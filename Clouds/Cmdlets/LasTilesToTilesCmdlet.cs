@@ -21,6 +21,13 @@ namespace Mars.Clouds.Cmdlets
             this.CompressRasters = false;
         }
 
+        private static string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, TileReadWrite tileReadWrite)
+        {
+            string status = tileReadWrite.TilesLoaded + (tileReadWrite.TilesLoaded == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
+                            tileReadWrite.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
+            return status;
+        }
+
         protected (LasTileGrid lasGrid, int tileSizeX, int tileSizeY) ReadLasHeadersAndCellSize(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
         {
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
@@ -39,71 +46,81 @@ namespace Mars.Clouds.Cmdlets
             if (lasGrid.Transform.CellWidth - outputTileSizeX * this.CellSize != 0.0)
             {
                 string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "LAS tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
             }
             int outputTileSizeY = (int)(Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize);
             if (Double.Abs(lasGrid.Transform.CellHeight) - outputTileSizeY * this.CellSize != 0.0)
             {
                 string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "LAS tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
             }
 
             return (lasGrid, outputTileSizeX, outputTileSizeY);
         }
 
-        protected void ReadTiles<TTile, TReadWrite>(LasTileGrid lasGrid, Func<LasTile, TReadWrite, TTile> readTile, TReadWrite tileReadWrite) where TReadWrite : TileReadWrite<TTile>
+        protected void ReadLasTiles<TTile, TReadWrite>(LasTileGrid lasGrid, Func<LasTile, TReadWrite, TTile> readTile, TReadWrite tileReadWrite) where TReadWrite : TileReadWrite<TTile>
         {
             try
             {
-                for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
+                // load tiles in grid index order for rowwise neighborhood completion
+                // In cases where processing of individual tiles needs to consider data in adacent tiles, some type of structured completion
+                // is needed to be able to stream large datasets through memory. Currently, tiles are read in grid order which, being row
+                // major, means processing of tiles in row n can check the current tile read index to see if tiles in rows n - 1 or n + 1 are
+                // available.
+                // This design relies on the loaded tiles collection being first in, first out.
+                for (int tileIndex = tileReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = tileReadWrite.GetNextTileReadIndexThreadSafe())
                 {
-                    for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
+                    LasTile? lasTile = lasGrid[tileIndex];
+                    if (lasTile == null)
                     {
-                        LasTile? lasTile = lasGrid[tileXindex, tileYindex];
-                        if (lasTile == null)
-                        {
-                            continue;
-                        }
-
-                        TTile imageTile = readTile(lasTile, tileReadWrite);
-
-                        // check for cancellation before queing tile for metrics calculation
-                        // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
-                        // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
-                        // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                        if (this.Stopping || tileReadWrite.CancellationTokenSource.IsCancellationRequested)
-                        {
-                            break;
-                        }
-
-                        string tileName = Tile.GetName(lasTile.FilePath);
-                        tileReadWrite.LoadedTiles.Add((tileName, imageTile));
-                        ++tileReadWrite.TilesLoaded;
-
-                        //FileInfo fileInfo = new(this.Las);
-                        //UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();
-                        //float megabytesRead = fileInfo.Length / (1024.0F * 1024.0F);
-                        //float gigabytesRead = megabytesRead / 1024.0F;
-                        //double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-                        //this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,0") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
+                        continue; // nothing to do as no tile is present at this grid position
                     }
 
+                    TTile parsedLasTile = readTile(lasTile, tileReadWrite);
+
+                    // check for cancellation before queing tile for metrics calculation
+                    // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
+                    // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
+                    // entirely, but currently seems unnecessary as this appears to be an edge case.)
                     if (this.Stopping || tileReadWrite.CancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
+
+                    string tileName = Tile.GetName(lasTile.FilePath);
+                    lock (tileReadWrite)
+                    {
+                        tileReadWrite.LoadedTiles.Add((tileName, parsedLasTile));
+                        ++tileReadWrite.TilesLoaded;
+
+                        if ((tileReadWrite.TilesLoaded == lasGrid.NonNullCells) && (tileReadWrite.LoadedTiles.IsAddingCompleted == false))
+                        {
+                            tileReadWrite.LoadedTiles.CompleteAdding();
+                        }
+                    }
+
+                    //FileInfo fileInfo = new(this.Las);
+                    //UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();
+                    //float megabytesRead = fileInfo.Length / (1024.0F * 1024.0F);
+                    //float gigabytesRead = megabytesRead / 1024.0F;
+                    //double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
+                    //this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,0") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
                 }
             }
-            finally
+            catch (Exception)
             {
-                // ensure metrics calculation doesn't block indefinitely waiting for more data if an exception occurs during tile loading
-                tileReadWrite.LoadedTiles.CompleteAdding();
+                // ensure tile processing doesn't block indefinitely waiting for more data if an exception occurs during tile loading
+                if (tileReadWrite.LoadedTiles.IsAddingCompleted == false)
+                {
+                    tileReadWrite.LoadedTiles.CompleteAdding();
+                }
+                throw;
             }
         }
 
-        protected void WaitForTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadWrite tileReadWrite)
+        protected void WaitForLasReadTileWriteTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadWrite tileReadWrite)
         {
-            ProgressRecord readWriteProgress = new(0, cmdletName, tileReadWrite.TilesLoaded + " tiles read, " + tileReadWrite.TilesWritten + " tiles written of " + lasGrid.NonNullCells + " tiles...");
+            ProgressRecord readWriteProgress = new(0, cmdletName, LasTilesToTilesCmdlet.GetLasReadTileWriteStatusDescription(lasGrid, tileReadWrite));
             this.WriteProgress(readWriteProgress);
 
             while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
@@ -123,8 +140,8 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                float fractionComplete = (float)tileReadWrite.TilesWritten / (float)lasGrid.NonNullCells;
-                readWriteProgress.StatusDescription = tileReadWrite.TilesLoaded + " tiles read, " + tileReadWrite.TilesWritten + " tiles written of " + lasGrid.NonNullCells + " tiles...";
+                float fractionComplete = 0.5F * (float)(tileReadWrite.TilesLoaded + tileReadWrite.TilesWritten) / (float)lasGrid.NonNullCells;
+                readWriteProgress.StatusDescription = LasTilesToTilesCmdlet.GetLasReadTileWriteStatusDescription(lasGrid, tileReadWrite);
                 readWriteProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 readWriteProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileReadWrite.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(readWriteProgress);
@@ -149,7 +166,7 @@ namespace Mars.Clouds.Cmdlets
                 }
                 catch (Exception exception)
                 {
-                    throw new TaskCanceledException("Failed to write tile '" + tileName + "' with extent (" + dsmTilePointZ.GetExtentString() + ").", exception, tileReadWrite.CancellationTokenSource.Token);
+                    throw new TaskCanceledException("Failed to process tile '" + tileName + "' with extent (" + dsmTilePointZ.GetExtentString() + ").", exception, tileReadWrite.CancellationTokenSource.Token);
                 }
 
                 if (this.Stopping || tileReadWrite.CancellationTokenSource.IsCancellationRequested)

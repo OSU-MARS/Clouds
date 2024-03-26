@@ -17,16 +17,21 @@ $gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metr
 
 # DSM generation, single tile
 $tile = "s04200w06810" # "s04230w06810" # "s04020w07050"
-Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile.tif" -Snap -Verbose
-Get-Dsm -Uppertiles RGB+NIR 1 -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile control.tif" -Snap -Verbose
-Get-Dsm -Uppertiles RGB+NIR 10 -WriteUppertiles RGB+NIR -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM with outlier rejection\$tile tiles RGB+NIR.tif" -Snap -Verbose
+Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\$tile.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM\$tile.tif" -Snap -Verbose
+
+# DSM generation, 3x3 group of tiles
+$tiles = "s042?0w068?0"
+Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tiles.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM\$tiles.tif" -Snap -Verbose
+
+# DSM generation, all on forest and buffer tiles
+Get-Dsm -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM3" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
 # orthoimage generation, single tile
 $tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"
 Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2 16\$tile.tif" -Snap -Verbose
 
 # orthoimage generation, all tiles
-#Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose
+Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose
 
 # high resolution grid metrics bootstrapping from DSM (or CHM or DTM) grid
 # Just under 4 Mcells => 600 MB float32 .tif @ 57 standard metrics bands.
@@ -41,9 +46,9 @@ $scanMetrics = Get-ScanMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021
 $scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics $tile 10 m.tif", $false)
 
 # scan metrics, all tiles
-#$gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
-#$scanMetrics = Get-ScanMetrics -Cells $gridPath -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\*.las" -Verbose
-#$scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics 10 m.tif", compress: $false)
+$gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"
+$scanMetrics = Get-ScanMetrics -Cells $gridPath -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 2+") -Verbose
+$scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics 10 m.tif", $false)
 
 # read header from .las or .laz file
 $lasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))

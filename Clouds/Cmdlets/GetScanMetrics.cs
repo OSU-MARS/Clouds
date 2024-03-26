@@ -23,7 +23,7 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert(String.IsNullOrEmpty(this.Cells) == false);
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Create(gridCellDefinitionDataset);
+            Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset);
 
             string cmdletName = "Get-GridMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
@@ -57,9 +57,9 @@ namespace Mars.Clouds.Cmdlets
         private void ReadTiles(LasTileGrid lasGrid, ScanMetricsRaster scanMetrics, TileRead tileRead)
         {
             Extent scanMetricsExtent = new(scanMetrics);
-            for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
+            for (int tileYindex = 0; tileYindex < lasGrid.SizeY; ++tileYindex)
             {
-                for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
+                for (int tileXindex = 0; tileXindex < lasGrid.SizeX; ++tileXindex)
                 {
                     LasTile? tile = lasGrid[tileXindex, tileYindex];
                     if ((tile == null) || (scanMetricsExtent.Intersects(tile.GridExtent) == false))

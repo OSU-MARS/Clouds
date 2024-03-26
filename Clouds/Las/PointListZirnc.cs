@@ -7,7 +7,7 @@ namespace Mars.Clouds.Las
     /// <summary>
     /// List of points with z, intensity (I), return number (RN), and classification (C; ZIRNC).
     /// </summary>
-    public class PointListZirnc : PointListZ
+    public class PointListZirnc
     {
         public int TilesLoaded { get; set; }
         public int TilesIntersected { get; private init; }
@@ -16,6 +16,7 @@ namespace Mars.Clouds.Las
         public List<PointClassification> Classification { get; set; }
         public List<UInt16> Intensity { get; private init; }
         public List<byte> ReturnNumber { get; private init; }
+        public List<float> Z { get; private init; }
 
         // range of points within the cell
         public double PointXMax { get; set; }
@@ -23,27 +24,34 @@ namespace Mars.Clouds.Las
         public double PointYMax { get; set; }
         public double PointYMin { get; set; }
 
+        // x and y indices in destination raster (grid metrics or DSM tile)
+        public int XIndex { get; private init; }
+        public int YIndex { get; private init; }
+
         public PointListZirnc(int xIndex, int yIndex, int tilesIntersected)
-            : base(xIndex, yIndex)
         {
+            this.XIndex = xIndex;
+            this.YIndex = yIndex;
             this.TilesLoaded = 0;
             this.TilesIntersected = tilesIntersected;
 
             this.Classification = [];
             this.Intensity = [];
             this.ReturnNumber = [];
+            this.Z = [];
+
             this.PointXMax = Double.MinValue;
             this.PointXMin = Double.MaxValue;
             this.PointYMax = Double.MinValue;
             this.PointYMin = Double.MaxValue;
         }
 
-        public override int Capacity
+        public int Capacity
         {
             get
             {
-                Debug.Assert((this.Intensity.Capacity == this.ReturnNumber.Capacity) && (this.Intensity.Capacity == this.Z.Capacity));
-                return this.Intensity.Capacity;
+                Debug.Assert((this.Classification.Capacity == this.Intensity.Capacity) && (this.Classification.Capacity == this.Intensity.Capacity) && (this.Classification.Capacity == this.Intensity.Capacity) && (this.Classification.Capacity == this.Z.Capacity));
+                return this.Classification.Capacity;
             }
             set
             {
@@ -54,9 +62,17 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public override void ClearAndRelease()
+        public int Count
         {
-            base.ClearAndRelease();
+            get
+            {
+                Debug.Assert((this.Classification.Count == this.Intensity.Count) && (this.Classification.Count == this.Intensity.Count) && (this.Classification.Count == this.Intensity.Count) && (this.Classification.Count == this.Z.Count));
+                return this.Classification.Count;
+            }
+        }
+
+        public void ClearAndRelease()
+        {
             this.TilesLoaded = 0;
 
             this.Classification.Clear();
@@ -65,6 +81,8 @@ namespace Mars.Clouds.Las
             this.Intensity.Capacity = 0;
             this.ReturnNumber.Clear();
             this.ReturnNumber.Capacity = 0;
+            this.Z.Clear();
+            this.Z.Capacity = 0;
             // no changes to this.TilesIntersected, XMax, XMin, YMax, YMin
         }
     }

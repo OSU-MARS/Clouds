@@ -8,8 +8,8 @@ namespace Mars.Clouds.Segmentation
     {
         public bool SearchChm { get; set; }
 
-        public TreetopRadiusSearch(int dsmBandIndex, int dtmBandIndex)
-            : base(dsmBandIndex, dtmBandIndex)
+        public TreetopRadiusSearch(string? dsmBandName, string? dtmBandName)
+            : base(dsmBandName, dtmBandName)
         {
             this.SearchChm = false;
         }
@@ -18,7 +18,7 @@ namespace Mars.Clouds.Segmentation
         {
             return new(dsmNeighborhood, dtmNeighborhood)
             {
-                MinimumCandidateHeight = this.MinimumHeight
+                MinimumCandidateHeight = this.MinimumTreetopHeight
             };
         }
 

@@ -37,10 +37,10 @@ namespace Mars.Clouds.Segmentation
             double classificationCellSize = 0.5 * (classificationNeighborhood.Center.Transform.CellWidth + Double.Abs(classificationNeighborhood.Center.Transform.CellHeight));
             for (int treetopIndex = 0; treetopIndex < this.Count; ++treetopIndex)
             {
-                (int treetopXindex, int treetopYindex) = classificationNeighborhood.Center.GetCellIndices(this.X[treetopIndex], this.Y[treetopIndex]);
+                (int treetopXindex, int treetopYindex) = classificationNeighborhood.Center.ToGridIndices(this.X[treetopIndex], this.Y[treetopIndex]);
                 // verify treetop is on tile
                 // In edge cases where a treetop lies on the tile's boundary its indices might be in an adjacent tile.
-                Debug.Assert((treetopXindex >= -1) && (treetopXindex <= classificationNeighborhood.Center.XSize) && (treetopYindex >= -1) && (treetopYindex <= classificationNeighborhood.Center.YSize), "Treetop at (" + this.X[treetopIndex] + ", " + this.Y[treetopIndex] + ") is not located over center tile (extents " + classificationNeighborhood.Center.GetExtentString() + ").");
+                Debug.Assert((treetopXindex >= -1) && (treetopXindex <= classificationNeighborhood.Center.SizeX) && (treetopYindex >= -1) && (treetopYindex <= classificationNeighborhood.Center.SizeY), "Treetop at (" + this.X[treetopIndex] + ", " + this.Y[treetopIndex] + ") is not located over center tile (extents " + classificationNeighborhood.Center.GetExtentString() + ").");
                 if (classificationNeighborhood.TryGetValue(treetopXindex, treetopYindex, out byte classification))
                 {
                     ++this.ClassCounts[treetopIndex, classification - 1]; // count classification of treetop

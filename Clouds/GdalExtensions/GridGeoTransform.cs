@@ -105,6 +105,7 @@ namespace Mars.Clouds.GdalExtensions
         public static bool Equals(GridGeoTransform transform, GridGeoTransform other)
         {
             // for now, require exact equality
+            // TODO: if needed, allow for cell height to differ in sign
             return (transform.OriginX == other.OriginX) &&
                    (transform.OriginY == other.OriginY) &&
                    (transform.CellHeight == other.CellHeight) &&

@@ -8,11 +8,11 @@ namespace Mars.Clouds.GdalExtensions
     {
         public SpatialReference Crs { get; protected set; }
         public GridGeoTransform Transform { get; private init; }
-        public int XSize { get; protected set; } // cells
-        public int YSize { get; protected set; } // cells
+        public int SizeX { get; protected set; } // cells
+        public int SizeY { get; protected set; } // cells
 
         protected Grid(Grid extent, bool cloneCrsAndTransform)
-            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, cloneCrsAndTransform)
+            : this(extent.Crs, extent.Transform, extent.SizeX, extent.SizeY, cloneCrsAndTransform)
         {
         }
 
@@ -30,23 +30,186 @@ namespace Mars.Clouds.GdalExtensions
                 this.Transform = transform;
             }
 
-            this.XSize = xSizeInCells;
-            this.YSize = ySizeInCells;
+            this.SizeX = xSizeInCells;
+            this.SizeY = ySizeInCells;
         }
 
-        public (int xIndex, int yIndex) GetCellIndices(double x, double y)
+        public int Cells
+        {
+            get { return this.SizeX * this.SizeY; }
+        }
+
+        public (double xCentroid, double yCentroid) GetCentroid()
+        {
+            double xCentroid = this.Transform.OriginX + 0.5 * this.SizeX * this.Transform.CellWidth;
+            double yCentroid = this.Transform.OriginY + 0.5 * this.SizeX * this.Transform.CellHeight;
+            return (xCentroid, yCentroid);
+        }
+
+        public (double xMin, double xMax, double yMin, double yMax) GetExtent()
+        {
+            Debug.Assert(this.Transform.CellHeight < 0.0);
+            (double xMax, double yMin) = this.Transform.GetProjectedCoordinate(this.SizeX, this.SizeY);
+            return (this.Transform.OriginX, xMax, yMin, this.Transform.OriginY);
+        }
+
+        public string GetExtentString()
+        {
+            double yMin = this.Transform.OriginY;
+            double yMax = this.Transform.OriginY;
+            double signedHeight = this.SizeY * this.Transform.CellHeight; // positive if cell height > 0, otherwise negative
+            if (this.Transform.CellHeight < 0.0)
+            {
+                yMin += signedHeight;
+            }
+            else
+            {
+                yMax += signedHeight;
+            }
+            return this.Transform.OriginX + ", " + (this.Transform.OriginX + this.SizeX * this.Transform.CellWidth) + ", " + yMin + ", " + yMax;
+        }
+
+        public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(Extent extent)
+        {
+            return this.GetIntersectingCellIndices(extent.XMin, extent.XMax, extent.YMin, extent.YMax);
+        }
+
+        public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(double xMin, double xMax, double yMin, double yMax)
+        {
+            Debug.Assert(this.Transform.CellHeight < 0.0);
+            (int xIndexMin, int yIndexMin) = this.ToGridIndices(xMin, yMax);
+            (int xIndexMaxInclusive, int yIndexMaxInclusive) = this.ToGridIndices(xMax, yMin);
+            
+            if ((xIndexMin >= this.SizeX) || (xIndexMaxInclusive < 0) || (yIndexMin >= this.SizeY) || (yIndexMaxInclusive < 0))
+            {
+                (double gridXmin, double gridXmax, double gridYmin, double gridYmax) = this.GetExtent();
+                throw new NotSupportedException("No intersection occurs between grid with extents (" + gridXmin + ", " + gridXmax + ", " + gridYmin + ", " + gridYmax + ") and area (" + xMin + ", " + xMax + ", " + yMin + ", " + yMax + ").");
+            }
+            
+            if (xIndexMin < 0)
+            {
+                xIndexMin = 0;
+            }
+            if (xIndexMaxInclusive >= this.SizeX)
+            {
+                xIndexMaxInclusive = this.SizeX - 1;
+            }
+            if (yIndexMin < 0)
+            {
+                yIndexMin = 0;
+            }
+            if (yIndexMaxInclusive >= this.SizeY)
+            {
+                yIndexMaxInclusive = this.SizeY - 1;
+            }
+
+            return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
+        }
+
+        //public bool IsSameExtent(Grid other)
+        //{
+        //    (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
+        //    (double otherXmin, double otherXmax, double otherYmin, double otherYmax) = other.GetExtent();
+
+        //    // for now use exact equality
+        //    return (thisXmin == otherXmin) && (thisXmax == otherXmax) && (thisYmin == otherYmin) && (thisYmax == otherYmax);
+        //}
+
+        public bool IsSameExtentAndResolution(Grid other)
+        {
+            if ((this.SizeX != other.SizeX) || (this.SizeY != other.SizeY) || 
+                (GridGeoTransform.Equals(this.Transform, other.Transform) == false))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public int ToCellIndex(int xIndex, int yIndex)
+        {
+            return xIndex + yIndex * this.SizeX;
+        }
+
+        // needs testing with nonzero row and column rotations
+        public (int xIndex, int yIndex) ToInteriorGridIndices(double x, double y)
         {
             double yIndexFractional = (y - this.Transform.OriginY - this.Transform.ColumnRotation / this.Transform.CellWidth * (x - this.Transform.OriginX)) / (this.Transform.CellHeight - this.Transform.ColumnRotation * this.Transform.RowRotation / this.Transform.CellWidth);
             double xIndexFractional = (x - this.Transform.OriginX - yIndexFractional * this.Transform.RowRotation) / this.Transform.CellWidth;
 
             int xIndex = (int)xIndexFractional;
             int yIndex = (int)yIndexFractional;
-            
+
+            const double cellFractionTolerance = 0.000010; // 0.0000045 observed in practice
+            if (xIndexFractional < 0.0)
+            {
+                if (xIndexFractional < -cellFractionTolerance)
+                {
+                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " has an x value less than the grid's minimum x extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                }
+
+                Debug.Assert(xIndex == 0); // cast to integer rounds toward zero
+            }
+            else if (xIndex >= this.SizeX)
+            {
+                if ((xIndex > this.SizeX) || (x > this.Transform.OriginX + this.Transform.CellWidth * (this.SizeX + cellFractionTolerance)))
+                {
+                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " has an x value greater than the grid's maximum x extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                }
+
+                xIndex -= 1; // if x lies exactly on or very close to grid edge, consider point part of the grid
+            }
+            // xIndex ∈ [ 0, this.XSize -1 ] falls through
+
+            if (yIndexFractional < 0.0)
+            {
+                if (yIndexFractional < -cellFractionTolerance)
+                {
+                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                }
+
+                Debug.Assert(yIndex == 0); // cast to integer rounds toward zero
+            }
+            else if (yIndex >= this.SizeY)
+            {
+                // similarly, if y lies exactly on or very close grid edge consider point part of the grid
+                if (this.Transform.CellHeight < 0.0)
+                {
+                    // y origin is grid's max y value
+                    if ((yIndex > this.SizeY) || (y < this.Transform.OriginY + this.Transform.CellHeight * (this.SizeY + cellFractionTolerance)))
+                    {
+                        throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                    }
+                }
+                else
+                {
+                    // y origin is grid's minimum y value
+                    if ((yIndex > this.SizeY) || (y >= this.Transform.OriginY - cellFractionTolerance * this.Transform.CellHeight))
+                    {
+                        throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                    }
+                }
+
+                yIndex -= 1;
+            }
+            // xIndex ∈ [ 0, this.XSize -1 ] falls through
+
+            return (xIndex, yIndex);
+        }
+
+        public (int xIndex, int yIndex) ToGridIndices(double x, double y)
+        {
+            double yIndexFractional = (y - this.Transform.OriginY - this.Transform.ColumnRotation / this.Transform.CellWidth * (x - this.Transform.OriginX)) / (this.Transform.CellHeight - this.Transform.ColumnRotation * this.Transform.RowRotation / this.Transform.CellWidth);
+            double xIndexFractional = (x - this.Transform.OriginX - yIndexFractional * this.Transform.RowRotation) / this.Transform.CellWidth;
+
+            int xIndex = (int)xIndexFractional;
+            int yIndex = (int)yIndexFractional;
+
             if (xIndexFractional < 0.0)
             {
                 --xIndex; // integer truncation truncates towards zero
             }
-            else if ((xIndex == this.XSize) && (x == this.Transform.OriginX + this.Transform.CellWidth * this.XSize))
+            else if ((xIndex == this.SizeX) && (x == this.Transform.OriginX + this.Transform.CellWidth * this.SizeX))
             {
                 xIndex -= 1; // if x lies exactly on grid edge, consider point part of the grid
             }
@@ -55,12 +218,12 @@ namespace Mars.Clouds.GdalExtensions
             {
                 --yIndex; // integer truncation truncates towards zero
             }
-            else if (yIndex == this.YSize)
+            else if (yIndex == this.SizeY)
             {
                 // similarly, if y lies exactly on grid edge consider point part of the grid
                 if (this.Transform.CellHeight < 0.0)
                 {
-                    if (y == this.Transform.OriginY + this.Transform.CellHeight * this.XSize)
+                    if (y == this.Transform.OriginY + this.Transform.CellHeight * this.SizeX)
                     {
                         yIndex -= 1;
                     }
@@ -76,112 +239,53 @@ namespace Mars.Clouds.GdalExtensions
 
             return (xIndex, yIndex);
         }
-
-        public (double xCentroid, double yCentroid) GetCentroid()
-        {
-            double xCentroid = this.Transform.OriginX + 0.5 * this.XSize * this.Transform.CellWidth;
-            double yCentroid = this.Transform.OriginY + 0.5 * this.XSize * this.Transform.CellHeight;
-            return (xCentroid, yCentroid);
-        }
-
-        public (double xMin, double xMax, double yMin, double yMax) GetExtent()
-        {
-            Debug.Assert(this.Transform.CellHeight < 0.0);
-            (double xMax, double yMin) = this.Transform.GetProjectedCoordinate(this.XSize, this.YSize);
-            return (this.Transform.OriginX, xMax, yMin, this.Transform.OriginY);
-        }
-
-        public string GetExtentString()
-        {
-            double yMin = this.Transform.OriginY;
-            double yMax = this.Transform.OriginY;
-            double signedHeight = this.YSize * this.Transform.CellHeight; // positive if cell height > 0, otherwise negative
-            if (this.Transform.CellHeight < 0.0)
-            {
-                yMin += signedHeight;
-            }
-            else
-            {
-                yMax += signedHeight;
-            }
-            return this.Transform.OriginX + ", " + (this.Transform.OriginX + this.XSize * this.Transform.CellWidth) + ", " + yMin + ", " + yMax;
-        }
-
-        public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(Extent extent)
-        {
-            return this.GetIntersectingCellIndices(extent.XMin, extent.XMax, extent.YMin, extent.YMax);
-        }
-
-        public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(double xMin, double xMax, double yMin, double yMax)
-        {
-            Debug.Assert(this.Transform.CellHeight < 0.0);
-            (int xIndexMin, int yIndexMin) = this.GetCellIndices(xMin, yMax);
-            (int xIndexMaxInclusive, int yIndexMaxInclusive) = this.GetCellIndices(xMax, yMin);
-            
-            if ((xIndexMin >= this.XSize) || (xIndexMaxInclusive < 0) || (yIndexMin >= this.YSize) || (yIndexMaxInclusive < 0))
-            {
-                (double gridXmin, double gridXmax, double gridYmin, double gridYmax) = this.GetExtent();
-                throw new NotSupportedException("No intersection occurs between grid with extents (" + gridXmin + ", " + gridXmax + ", " + gridYmin + ", " + gridYmax + ") and area (" + xMin + ", " + xMax + ", " + yMin + ", " + yMax + ").");
-            }
-            
-            if (xIndexMin < 0)
-            {
-                xIndexMin = 0;
-            }
-            if (xIndexMaxInclusive >= this.XSize)
-            {
-                xIndexMaxInclusive = this.XSize - 1;
-            }
-            if (yIndexMin < 0)
-            {
-                yIndexMin = 0;
-            }
-            if (yIndexMaxInclusive >= this.YSize)
-            {
-                yIndexMaxInclusive = this.YSize - 1;
-            }
-
-            return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
-        }
-
-        public bool IsSameExtent(Grid other)
-        {
-            (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
-            (double otherXmin, double otherXmax, double otherYmin, double otherYmax) = other.GetExtent();
-
-            // for now use exact equality
-            return (thisXmin == otherXmin) && (thisXmax == otherXmax) && (thisYmin == otherYmin) && (thisYmax == otherYmax);
-        }
-
-        public int ToCellIndex(int xIndex, int yIndex)
-        {
-            return xIndex + yIndex * this.XSize;
-        }
     }
 
     public class Grid<TCell> : Grid where TCell : class?
     {
-        protected TCell?[] Cells { get; private init; }
+        protected TCell?[] Data { get; private init; }
 
-        public int NonNullCells { get; protected set; }
+        public Grid(Grid extent)
+            : base(extent, cloneCrsAndTransform: true)
+        {
+            this.Data = new TCell?[extent.Cells];
+        }
 
         public Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
             : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
         {
-            this.Cells = new TCell?[xSizeInCells * ySizeInCells];
-            this.NonNullCells = 0;
+            this.Data = new TCell?[xSizeInCells * ySizeInCells];
         }
 
         public TCell? this[int cellIndex]
         {
-            get { return this.Cells[cellIndex]; }
-            set { this.Cells[cellIndex] = value; }
+            get { return this.Data[cellIndex]; }
+            set { this.Data[cellIndex] = value; }
         }
 
         public TCell? this[int xIndex, int yIndex]
         {
             get { return this[this.ToCellIndex(xIndex, yIndex)]; }
-            set { this.Cells[this.ToCellIndex(xIndex, yIndex)] = value; }
+            set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }
+        }
+
+        /// <returns><see cref="bool"/> array whose values are true where cells are null</returns>
+        public bool[,] GetUnpopulatedCellMap()
+        {
+            bool[,] cellMap = new bool[this.SizeX, this.SizeY];
+            for (int yIndex = 0; yIndex < this.SizeY; ++yIndex)
+            {
+                for (int xIndex = 0; xIndex < this.SizeX; ++xIndex) 
+                {
+                    TCell? value = this[xIndex, yIndex];
+                    if (value == null)
+                    {
+                        cellMap[xIndex, yIndex] = true;
+                    }
+                }
+            }
+
+            return cellMap;
         }
     }
 }

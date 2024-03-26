@@ -54,17 +54,17 @@ namespace Mars.Clouds.Cmdlets
             int readThreads = 1; // for now; see above
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {
-                orthoimageTasks[readThread] = Task.Run(() => this.ReadTiles(lasGrid, this.ReadTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
+                orthoimageTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, this.ReadTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
             }
             for (int workerThread = readThreads; workerThread < orthoimageTasks.Length; ++workerThread)
             {
                 orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, TileReadWrite<ImageRaster<UInt64>>>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
             }
 
-            this.WaitForTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
+            this.WaitForLasReadTileWriteTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
 
             string elapsedTimeFormat = imageReadWrite.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("#,#,#,0") + " pixels in " + imageReadWrite.TilesLoaded + " LAS tiles in " + imageReadWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / imageReadWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("#,#,#,0") + " pixels in " + imageReadWrite.TilesLoaded + " point cloud tiles in " + imageReadWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / imageReadWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 

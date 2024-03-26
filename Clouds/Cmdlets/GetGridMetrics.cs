@@ -29,9 +29,8 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string? Dtm { get; set; }
 
-        [Parameter(HelpMessage = "Number of DTM band to use in calculating mean ground elevations. Default is 1 (the first band).")]
-        [ValidateRange(1, 500)] // arbitrary upper bound
-        public int DtmBand { get; set; }
+        [Parameter(HelpMessage = "Name of DTM band to use in calculating mean ground elevations. Default is null, which accepts any single band raster.")]
+        public string? DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Settings controlling which grid metrics the output rasters contain.")]
         [ValidateNotNull]
@@ -41,7 +40,7 @@ namespace Mars.Clouds.Cmdlets
         {
             this.CellBand = null;
             // this.Dtm is mandatory
-            this.DtmBand = 1;
+            this.DtmBand = null;
             // leave this.MaxThreads at default for DTM read
             this.Settings = new();
         }
@@ -55,12 +54,12 @@ namespace Mars.Clouds.Cmdlets
             }
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Create(gridCellDefinitionDataset);
+            Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset);
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
             string cmdletName = "Get-GridMetrics";
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
-            VirtualRaster<float> dtm = this.ReadVirtualRaster(cmdletName, this.Dtm);
+            VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
                 throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
@@ -95,9 +94,9 @@ namespace Mars.Clouds.Cmdlets
         {
             try
             {
-                for (int tileYindex = 0; tileYindex < lasGrid.YSize; ++tileYindex)
+                for (int tileYindex = 0; tileYindex < lasGrid.SizeY; ++tileYindex)
                 {
-                    for (int tileXindex = 0; tileXindex < lasGrid.XSize; ++tileXindex)
+                    for (int tileXindex = 0; tileXindex < lasGrid.SizeX; ++tileXindex)
                     {
                         LasTile? tile = lasGrid[tileXindex, tileYindex];
                         if ((tile == null) || (metricsGrid.HasCellsInTile(tile) == false))
@@ -155,7 +154,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     PointListZirnc gridCell = populatedCellBatch[batchIndex];
                     (double cellCenterX, double cellCenterY) = metricsRaster.Transform.GetCellCenter(gridCell.XIndex, gridCell.YIndex);
-                    if (tileRead.DtmTiles.TryGetNeighborhood8(cellCenterX, cellCenterY, bandIndex: this.DtmBand - 1, out VirtualRasterNeighborhood8<float>? dtmNeighborhood) == false)
+                    if (tileRead.DtmTiles.TryGetNeighborhood8(cellCenterX, cellCenterY, this.DtmBand, out VirtualRasterNeighborhood8<float>? dtmNeighborhood) == false)
                     {
                         throw new InvalidOperationException("Could not find DTM tile for metrics grid cell at (" + cellCenterX + ", " + cellCenterY + ") (metrics grid indices " + gridCell.XIndex + ", " + gridCell.YIndex + ") in DTM band " + this.DtmBand + ".");
                     }
@@ -188,10 +187,10 @@ namespace Mars.Clouds.Cmdlets
         private class MetricsTileRead : TileReadToRaster
         {
             public SpatialReference Crs { get; private init; }
-            public VirtualRaster<float> DtmTiles { get; private init; }
+            public VirtualRaster<Raster<float>> DtmTiles { get; private init; }
             public BlockingCollection<List<PointListZirnc>> FullyPopulatedCells { get; private init; }
 
-            public MetricsTileRead(VirtualRaster<float> dtmTiles, int gridEpsg, int metricsCells, int maxSimultaneouslyLoadedTiles) 
+            public MetricsTileRead(VirtualRaster<Raster<float>> dtmTiles, int gridEpsg, int metricsCells, int maxSimultaneouslyLoadedTiles) 
                 : base(metricsCells)
             {
                 this.Crs = new(null);

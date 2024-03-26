@@ -1,6 +1,7 @@
 ﻿using Mars.Clouds.Cmdlets;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using OSGeo.OGR;
 using System;
 using System.Diagnostics;
@@ -11,81 +12,78 @@ namespace Mars.Clouds.Segmentation
     internal abstract class TreetopSearch
     {
         public string? DiagnosticsPath { get; set; }
-        public VirtualRaster<float> DsmTiles { get; private init; }
-        public VirtualRaster<float> DtmTiles { get; private init; }
-        public float MinimumHeight { get; set; }
+        public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
+        public VirtualRaster<Raster<float>> Dtm { get; private init; }
+        public float MinimumTreetopHeight { get; set; }
 
         public TreetopSearch()
         {
             this.DiagnosticsPath = null;
-            this.DsmTiles = new();
-            this.DtmTiles = new();
-            this.MinimumHeight = Single.NaN;
+            this.Dsm = [];
+            this.Dtm = [];
+            this.MinimumTreetopHeight = Single.NaN;
         }
 
         public void AddTile(string tileName, string dsmTilePath, string dtmTilePath)
         {
-            Raster<float> dsmTile = Raster<float>.Read(dsmTilePath);
+            DigitalSurfaceModel dsmTile = DigitalSurfaceModel.Read(dsmTilePath);
             Raster<float> dtmTile = Raster<float>.Read(dtmTilePath);
 
-            lock (this.DsmTiles)
+            lock (this.Dsm)
             {
-                this.DsmTiles.Add(tileName, dsmTile);
-                this.DtmTiles.Add(tileName,dtmTile);
+                this.Dsm.Add(tileName, dsmTile);
+                this.Dtm.Add(tileName,dtmTile);
             }
         }
 
         public void BuildGrids()
         {
-            if (SpatialReferenceExtensions.IsSameCrs(this.DsmTiles.Crs, this.DtmTiles.Crs) == false)
+            if (SpatialReferenceExtensions.IsSameCrs(this.Dsm.Crs, this.Dtm.Crs) == false)
             {
-                throw new NotSupportedException("The DSM and DTM are currently required to be in the same CRS. The DSM CRS is '" + this.DsmTiles.Crs.GetName() + "' while the DTM CRS is " + this.DtmTiles.Crs.GetName() + ".");
+                throw new NotSupportedException("The DSM and DTM are currently required to be in the same CRS. The DSM CRS is '" + this.Dsm.Crs.GetName() + "' while the DTM CRS is " + this.Dtm.Crs.GetName() + ".");
             }
-            if (this.DsmTiles.IsSameSpatialResolutionAndExtent(this.DtmTiles) == false)
+            if (this.Dsm.IsSameSpatialResolutionAndExtent(this.Dtm) == false)
             {
-                throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must be of the same size (width and height in cells) and have the same cell size (width and height in meters or feet). DSM cell size (" + this.DsmTiles.TileCellSizeX + ", " + this.DsmTiles.TileCellSizeY + "), DTM cell size (" + this.DtmTiles.TileCellSizeX + ", " + this.DtmTiles.TileCellSizeY + " " + this.DtmTiles.Crs.GetLinearUnitsPlural() + "). DSM tile size (" + this.DsmTiles.TileSizeInCellsX + ", " + this.DsmTiles.TileSizeInCellsY + "), DTM tile size (" + this.DtmTiles.TileSizeInCellsX + ", " + this.DtmTiles.TileSizeInCellsY + ") cells.");
+                throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must be of the same size (width and height in cells) and have the same cell size (width and height in meters or feet). DSM cell size (" + this.Dsm.TileCellSizeX + ", " + this.Dsm.TileCellSizeY + "), DTM cell size (" + this.Dtm.TileCellSizeX + ", " + this.Dtm.TileCellSizeY + " " + this.Dtm.Crs.GetLinearUnitsPlural() + "). DSM tile size (" + this.Dsm.TileSizeInCellsX + ", " + this.Dsm.TileSizeInCellsY + "), DTM tile size (" + this.Dtm.TileSizeInCellsX + ", " + this.Dtm.TileSizeInCellsY + ") cells.");
             }
 
             // index tiles spatially
-            this.DsmTiles.BuildGrid();
-            this.DtmTiles.BuildGrid();
-            if ((this.DsmTiles.TileTransform.OriginX != this.DtmTiles.TileTransform.OriginX) ||
-                (this.DsmTiles.TileTransform.OriginY != this.DtmTiles.TileTransform.OriginY))
+            this.Dsm.CreateTileGrid();
+            this.Dtm.CreateTileGrid();
+            if ((this.Dsm.TileTransform.OriginX != this.Dtm.TileTransform.OriginX) ||
+                (this.Dsm.TileTransform.OriginY != this.Dtm.TileTransform.OriginY))
             {
-                throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must have the same origin. The DSM origin (" + this.DsmTiles.TileTransform.OriginX + ", " + this.DsmTiles.TileTransform.OriginY + ") is offset from the DTM origin (" + this.DtmTiles.TileTransform.OriginX + ", " + this.DtmTiles.TileTransform.OriginY + ").");
+                throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must have the same origin. The DSM origin (" + this.Dsm.TileTransform.OriginX + ", " + this.Dsm.TileTransform.OriginY + ") is offset from the DTM origin (" + this.Dtm.TileTransform.OriginX + ", " + this.Dtm.TileTransform.OriginY + ").");
             }
-            if (this.DsmTiles.IsSameSpatialResolutionAndExtent(this.DsmTiles) == false)
+            if (this.Dsm.IsSameSpatialResolutionAndExtent(this.Dsm) == false)
             {
                 throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must have the same extent and cell size.");
             }
         }
 
-        public static TreetopSearch Create(TreetopDetectionMethod detectionMethod, int dsmBandIndex, int dtmBandIndex)
+        public static TreetopSearch Create(TreetopDetectionMethod detectionMethod, string? dsmBandName, string? dtmBandName)
         {
             return detectionMethod switch
             {
                 TreetopDetectionMethod.ChmRadius or
-                TreetopDetectionMethod.DsmRadius => new TreetopRadiusSearch(dsmBandIndex, dtmBandIndex) { SearchChm = detectionMethod == TreetopDetectionMethod.ChmRadius },
-                TreetopDetectionMethod.DsmRing => new TreetopRingSearch(dsmBandIndex, dtmBandIndex),
+                TreetopDetectionMethod.DsmRadius => new TreetopRadiusSearch(dsmBandName, dtmBandName) { SearchChm = detectionMethod == TreetopDetectionMethod.ChmRadius },
+                TreetopDetectionMethod.DsmRing => new TreetopRingSearch(dsmBandName, dtmBandName),
                 _ => throw new NotSupportedException("Unhandled treetop detection method " + detectionMethod + ".")
             };
         }
 
-        public abstract int FindTreetops(int tileIndex, string treetopFilePath);
+        public abstract int FindTreetops(int tileIndexX, int tileIndexY, string treetopFilePath);
     }
 
     internal abstract class TreetopSearch<TSearchState> : TreetopSearch where TSearchState : TreetopTileSearchState
     {
-        private readonly int dsmBandIndex;
-        private readonly int dtmBandIndex;
+        private readonly string? dsmBandName;
+        private readonly string? dtmBandName;
 
-        protected TreetopSearch(int dsmBandIndex, int dtmBandIndex) 
+        protected TreetopSearch(string? dsmBandName, string? dtmBandName) 
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(dsmBandIndex, 0, nameof(dsmBandIndex));
-            ArgumentOutOfRangeException.ThrowIfLessThan(dtmBandIndex, 0, nameof(dtmBandIndex));
-
-            this.dsmBandIndex = dsmBandIndex;
-            this.dtmBandIndex = dtmBandIndex;
+            this.dsmBandName = dsmBandName;
+            this.dtmBandName = dtmBandName;
         }
 
         private static void AddToLayer(TreetopLayer treetopLayer, TreetopTileSearchState tileSearch, int treeID, double yIndexFractional, double xIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation, double treeRadiusInCrsUnits)
@@ -98,11 +96,14 @@ namespace Mars.Clouds.Segmentation
 
         protected abstract TSearchState CreateSearchState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood);
 
-        public override int FindTreetops(int tileIndex, string treetopFilePath)
+        public override int FindTreetops(int tileIndexX, int tileIndexY, string treetopFilePath)
         {
-            VirtualRasterNeighborhood8<float> dsmNeighborhood = this.DsmTiles.GetNeighborhood8(tileIndex, this.dsmBandIndex);
-            VirtualRasterNeighborhood8<float> dtmNeighborhood = this.DtmTiles.GetNeighborhood8(tileIndex, this.dtmBandIndex);
-            using TSearchState tileSearch = this.CreateSearchState(Tile.GetName(this.DsmTiles[tileIndex].FilePath), dsmNeighborhood, dtmNeighborhood);
+            VirtualRasterNeighborhood8<float> dsmNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.dsmBandName);
+            VirtualRasterNeighborhood8<float> dtmNeighborhood = this.Dtm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.dtmBandName);
+            DigitalSurfaceModel? dsmTile = this.Dsm[tileIndexX, tileIndexY];
+            Debug.Assert(dsmTile != null);
+
+            using TSearchState tileSearch = this.CreateSearchState(Tile.GetName(dsmTile.FilePath), dsmNeighborhood, dtmNeighborhood);
 
             // set default minimum height if one was not specified
             // Assumption here is that xy and z units match, which is not necessarily enforced.
@@ -115,9 +116,9 @@ namespace Mars.Clouds.Segmentation
             using DataSource treetopFile = File.Exists(treetopFilePath) ? Ogr.Open(treetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(treetopFilePath, null);
             using TreetopLayer treetopLayer = TreetopLayer.CreateOrOverwrite(treetopFile, tileSearch.Dsm.Crs);
             double dsmCellSize = tileSearch.Dsm.Transform.GetCellSize();
-            for (int dsmIndex = 0, dsmYindex = 0; dsmYindex < tileSearch.Dsm.YSize; ++dsmYindex) // y for north up rasters
+            for (int dsmIndex = 0, dsmYindex = 0; dsmYindex < tileSearch.Dsm.SizeY; ++dsmYindex) // y for north up rasters
             {
-                for (int dsmXindex = 0; dsmXindex < tileSearch.Dsm.XSize; ++dsmIndex, ++dsmXindex) // x for north up rasters
+                for (int dsmXindex = 0; dsmXindex < tileSearch.Dsm.SizeX; ++dsmIndex, ++dsmXindex) // x for north up rasters
                 {
                     float dsmZ = tileSearch.Dsm.Data[dsmIndex];
                     if (tileSearch.Dsm.IsNoData(dsmZ))

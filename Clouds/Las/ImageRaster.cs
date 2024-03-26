@@ -20,7 +20,7 @@ namespace Mars.Clouds.Las
         public RasterBand<TPixel> SecondReturns { get; private init; }
 
         public ImageRaster(Grid extent, TPixel noDataValue)
-            : this(extent.Crs, extent.Transform, extent.XSize, extent.YSize, noDataValue)
+            : this(extent.Crs, extent.Transform, extent.SizeX, extent.SizeY, noDataValue)
         {
         }
 

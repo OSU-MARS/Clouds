@@ -1,6 +1,9 @@
 ﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
@@ -16,20 +19,18 @@ namespace Mars.Clouds.Cmdlets
         public string? Diagnostics { get; set; }
 
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate treetops within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each DSM must be a single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
-        [ValidateNotNullOrEmpty]
+        [ValidateNotNullOrWhiteSpace]
         public string? Dsm { get; set; }
 
-        [Parameter(HelpMessage = "Band number of DSM height values in surface raster. Default is 1.")]
-        [ValidateRange(1, 100)] // arbitrary upper bound
-        public int DsmBand { get; set; }
+        [Parameter(HelpMessage = "Band number of DSM height values in surface raster. Default is \"dsm\".")]
+        public string? DsmBand { get; set; }
 
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to a single digital terrain model (DTM) raster to estimate DSM height above ground from or 2,3) path to a directory containing DTM tiles whose file names match the DSM tiles. Each DSM must be a  single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
-        [ValidateNotNullOrEmpty]
+        [ValidateNotNullOrWhiteSpace]
         public string? Dtm { get; set; }
 
-        [Parameter(HelpMessage = "Band number of DTM height values in terrain raster. Default is 1.")]
-        [ValidateRange(1, 100)] // arbitrary upper bound
-        public int DtmBand { get; set; }
+        [Parameter(HelpMessage = "Band number of DTM height values in terrain raster. Default is null, which accepts any single band raster.")]
+        public string? DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Method of treetop detection. ChmRadius = local maxima in CHM filtered by height dependent radius (default), DsmRadius = local maxima in DSM filtered by height dependent radius, DsmRing = ring prominence in DSM.")]
         public TreetopDetectionMethod Method { get; set; }
@@ -39,16 +40,16 @@ namespace Mars.Clouds.Cmdlets
         public float MinimumHeight { get; set; }
 
         [Parameter(Mandatory = true, Position = 2, HelpMessage = "1) path to write treetop candidates to as an XYZ point layer with fields treeID and height or 2,3) path to a directory to write treetop candidate .gpkg tiles to.")]
-        [ValidateNotNullOrEmpty]
+        [ValidateNotNullOrWhiteSpace]
         public string? Treetops { get; set; }
 
         public GetTreetops()
         {
             this.Diagnostics = null;
             // this.Dsm is mandatory
-            this.DsmBand = 1;
+            this.DsmBand = "dsm";
             // this.Dtm is mandatory
-            this.DtmBand = 1;
+            this.DtmBand = null;
             this.Method = TreetopDetectionMethod.DsmRadius;
             this.MinimumHeight = Single.NaN;
             // this.Treetops is mandatory
@@ -59,18 +60,18 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert((this.Dsm != null) && (this.Dtm != null) && (this.Treetops != null));
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            TreetopSearch treetopSearch = TreetopSearch.Create(this.Method, this.DsmBand - 1, this.DtmBand - 1);
+            TreetopSearch treetopSearch = TreetopSearch.Create(this.Method, this.DsmBand, this.DtmBand);
             treetopSearch.DiagnosticsPath = this.Diagnostics;
 
-            string[] dsmTilePaths = GdalCmdlet.GetExistingTilePaths(this.Dsm, Constant.File.GeoTiffExtension);
+            List<string> dsmTilePaths = GdalCmdlet.GetExistingTilePaths([ this.Dsm ], Constant.File.GeoTiffExtension);
             int treetopCandidates = 0;
-            if (dsmTilePaths.Length == 1)
+            if (dsmTilePaths.Count == 1)
             {
                 // single tile case
                 string dsmTilePath = dsmTilePaths[0];
                 treetopSearch.AddTile(Tile.GetName(dsmTilePath), dsmTilePath, this.Dtm);
                 treetopSearch.BuildGrids();
-                treetopCandidates += treetopSearch.FindTreetops(0, this.Treetops);
+                treetopCandidates += treetopSearch.FindTreetops(0, 0, this.Treetops);
             }
             else
             {
@@ -85,14 +86,14 @@ namespace Mars.Clouds.Cmdlets
                 // locality advantage.
                 ParallelOptions parallelOptions = new()
                 {
-                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, dsmTilePaths.Length)
+                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, dsmTilePaths.Count)
                 };
 
                 string? mostRecentDsmTileName = null;
                 int tilesLoaded = 0;
                 Task loadTilesTask = Task.Run(() =>
                 {
-                    Parallel.For(0, dsmTilePaths.Length, parallelOptions, (int tileIndex) =>
+                    Parallel.For(0, dsmTilePaths.Count, parallelOptions, (int tileIndex) =>
                     {
                         // find treetops in tile
                         string dsmTilePath = dsmTilePaths[tileIndex];
@@ -109,7 +110,7 @@ namespace Mars.Clouds.Cmdlets
                 ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
                 while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Length;
+                    float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Count;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
                     progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                     progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
@@ -121,27 +122,35 @@ namespace Mars.Clouds.Cmdlets
                 // find treetop candidates in all tiles
                 mostRecentDsmTileName = null;
                 int tilesCompleted = 0;
-                Task findTreetopsTask = Task.Run(() =>
+
+                VirtualRasterEnumerator<DigitalSurfaceModel> tileEnumerator = treetopSearch.Dsm.GetEnumerator();
+                ParallelTasks findTreetopsTasks = new(parallelOptions.MaxDegreeOfParallelism, () =>
                 {
-                    Parallel.For(0, treetopSearch.DsmTiles.TileCount, parallelOptions, (int tileIndex) =>
+                    while (tileEnumerator.MoveNextThreadSafe())
                     {
-                        string dsmTilePath = treetopSearch.DsmTiles[tileIndex].FilePath;
+                        DigitalSurfaceModel dsmTile = tileEnumerator.Current;
+                        string dsmTilePath = dsmTile.FilePath;
                         Debug.Assert(String.IsNullOrWhiteSpace(dsmTilePath) == false);
 
                         string dsmFileName = Path.GetFileName(dsmTilePath);
                         string dsmFileNameWithoutExtension = Path.GetFileNameWithoutExtension(dsmFileName);
                         string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + Constant.File.GeoPackageExtension);
-                        mostRecentDsmTileName = dsmFileName;
 
-                        int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndex, treetopTilePath);
-                        Interlocked.Add(ref treetopCandidates, treetopCandidatesInTile);
-                        Interlocked.Increment(ref tilesCompleted);
-                    });
+                        (int tileIndexX, int tileIndexY) = tileEnumerator.GetGridIndices();
+                        int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, treetopTilePath);
+
+                        lock (parallelOptions)
+                        {
+                            treetopCandidates += treetopCandidatesInTile;
+                            ++tilesCompleted;
+                        }
+                        mostRecentDsmTileName = dsmFileName;
+                    }
                 });
 
-                while (findTreetopsTask.Wait(Constant.DefaultProgressInterval) == false)
+                while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Length;
+                    float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Count;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
                     progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                     progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
@@ -150,8 +159,8 @@ namespace Mars.Clouds.Cmdlets
             }
 
             stopwatch.Stop();
-            string tileOrTiles = dsmTilePaths.Length > 1 ? "tiles" : "tile";
-            this.WriteVerbose(dsmTilePaths.Length + " " + tileOrTiles + " and " + treetopCandidates.ToString("#,#,#,0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
+            string tileOrTiles = dsmTilePaths.Count > 1 ? "tiles" : "tile";
+            this.WriteVerbose(dsmTilePaths.Count + " " + tileOrTiles + " and " + treetopCandidates.ToString("#,#,#,0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
         }
     }

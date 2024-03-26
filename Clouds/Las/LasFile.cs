@@ -42,9 +42,12 @@ namespace Mars.Clouds.Las
                         }
                     }
                 }
-                else if ((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) && String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
+                // assume GeoAsciiParamsTagRecords can be ignored since they provide supporting information to GeoKeyDirectoryTagRecords
+                // assume GeoDoubleParamsTagRecord can be ignored since they provide supporting information to GeoKeyDirectoryTagRecords
+                else if (((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) || (vlr.RecordID == OgcMathTransformWktRecord.LasfProjectionRecordID)) && 
+                         String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
                 {
-                    OgcCoordinateSystemWktRecord wktRecord = (OgcCoordinateSystemWktRecord)vlr;
+                    OgcWktRecord wktRecord = (OgcWktRecord)vlr;
                     return Int32.Parse(wktRecord.SpatialReference.GetAuthorityCode("PROJCS")); // wkt.SpatialReference.AutoIdentifyEPSG() tends to return 0
                 }
             }
@@ -71,9 +74,12 @@ namespace Mars.Clouds.Las
                         }
                     }
                 }
-                else if ((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) && String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
+                // assume GeoAsciiParamsTagRecords can be ignored since they provide supporting information to GeoKeyDirectoryTagRecords
+                // assume GeoDoubleParamsTagRecord can be ignored since they provide supporting information to GeoKeyDirectoryTagRecords
+                else if (((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) || (vlr.RecordID == OgcMathTransformWktRecord.LasfProjectionRecordID)) && 
+                         String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
                 {
-                    OgcCoordinateSystemWktRecord wktRecord = (OgcCoordinateSystemWktRecord)vlr;
+                    OgcWktRecord wktRecord = (OgcWktRecord)vlr;
                     return wktRecord.SpatialReference;
                 }
             }

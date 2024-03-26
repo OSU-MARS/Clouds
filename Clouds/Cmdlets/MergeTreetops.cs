@@ -31,6 +31,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string? Classification { get; set; }
 
+        [Parameter(HelpMessage = "Name of raster band containing classification data. Default is null, which accepts any single band raster.")]
+        public string? ClassificationBandName { get; set; }
+
         [Parameter(Position = 2, HelpMessage = "Name of merged treetop file to create in the directory indicated by -Treetops.")]
         [ValidateNotNullOrEmpty]
         public string Merge { get; set; }
@@ -40,12 +43,13 @@ namespace Mars.Clouds.Cmdlets
         public string[] ClassNames { get; set; }
 
         public MergeTreetops() 
-        { 
+        {
+            this.ClassificationBandName = null;
             this.ClassNames = [ "conifer", "nonForest", "hardwood", "unknown" ];
             this.Merge = "treetops" + Constant.File.GeoPackageExtension;
         }
 
-        private (VirtualRaster<byte> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(IList<string> treetopTilePaths)
+        private (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(IList<string> treetopTilePaths)
         {
             Debug.Assert(this.Classification != null);
 
@@ -56,7 +60,7 @@ namespace Mars.Clouds.Cmdlets
             };
 
             int tilesLoaded = 0;
-            VirtualRaster<byte> classificationTiles = new();
+            VirtualRaster<Raster<byte>> classificationTiles = [];
             Task loadClassificationVrt = Task.Run(() =>
             {
                 // for now, load classification tiles in direct correspondence to treetop tiles
@@ -97,7 +101,7 @@ namespace Mars.Clouds.Cmdlets
             return (classificationTiles, stopwatch.Elapsed);
         }
 
-        private (SortedList<string, Treetops>, int tileFieldWidth, TimeSpan elapsedTime) LoadTreetopTiles(IList<string> treetopTilePaths, VirtualRaster<byte> classificationTiles)
+        private (SortedList<string, Treetops>, int tileFieldWidth, TimeSpan elapsedTime) LoadTreetopTiles(IList<string> treetopTilePaths, VirtualRaster<Raster<byte>> classificationTiles)
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             ParallelOptions parallelOptions = new()
@@ -124,7 +128,7 @@ namespace Mars.Clouds.Cmdlets
 
                     Treetops treetops = treetopLayer.GetTreetops(this.ClassNames.Length);
                     (double treetopTileXcentroid, double treetopTileYcentroid) = treetopLayer.GetCentroid();
-                    if (classificationTiles.TryGetNeighborhood8(treetopTileXcentroid, treetopTileYcentroid, 0, out VirtualRasterNeighborhood8<byte>? neighborhood))
+                    if (classificationTiles.TryGetNeighborhood8(treetopTileXcentroid, treetopTileYcentroid, this.ClassificationBandName, out VirtualRasterNeighborhood8<byte>? neighborhood))
                     {
                         // get classification counts if the treetop tile has a corresponding classification tile
                         // Some incomplete classification information may available for treetops with a classification within their radius.
@@ -199,8 +203,8 @@ namespace Mars.Clouds.Cmdlets
             treetopTilePaths.Sort(StringComparer.Ordinal);
 
             // load tiles and get treetop classifications
-            (VirtualRaster<byte> classificationTiles, TimeSpan classificationLoadTime) = this.LoadClassificationTiles(treetopTilePaths);
-            classificationTiles.BuildGrid();
+            (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan classificationLoadTime) = this.LoadClassificationTiles(treetopTilePaths);
+            classificationTiles.CreateTileGrid();
             (SortedList<string, Treetops> treetopsByTile, int tileFieldWidth, TimeSpan treetopLoadTime) = this.LoadTreetopTiles(treetopTilePaths, classificationTiles);
 
             // write merged and classified treetops

@@ -23,6 +23,16 @@ namespace Mars.Clouds.GdalExtensions
             this.Center = center;
         }
 
+        public (TBand value, byte mask) GetValueMaskZero(int xIndex, int yIndex)
+        {
+            if (this.TryGetValue(xIndex, yIndex, out TBand? value))
+            {
+                return (value, 1);
+            }
+
+            return (TBand.Zero, 0);
+        }
+
         public bool TryGetValue(int xIndex, int yIndex, [NotNullWhen(true)] out TBand? value)
         {
             value = default;
@@ -34,22 +44,22 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         return false;
                     }
-                    int northwestYindex = this.Northwest.YSize + yIndex;
-                    int northwestXindex = this.Northwest.XSize + xIndex;
+                    int northwestYindex = this.Northwest.SizeY + yIndex;
+                    int northwestXindex = this.Northwest.SizeX + xIndex;
                     value = this.Northwest[northwestXindex, northwestYindex];
                     if (this.Northwest.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (xIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.SizeX)
                 {
                     if (this.Northeast == null)
                     {
                         return false;
                     }
-                    int northeastYindex = this.Northeast.YSize + yIndex;
-                    int northeastXindex = xIndex - this.Center.XSize;
+                    int northeastYindex = this.Northeast.SizeY + yIndex;
+                    int northeastXindex = xIndex - this.Center.SizeX;
                     value = this.Northeast[northeastXindex, northeastYindex];
                     if (this.Northeast.IsNoData(value))
                     {
@@ -62,7 +72,7 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         return false;
                     }
-                    int northYindex = this.North.YSize + yIndex;
+                    int northYindex = this.North.SizeY + yIndex;
                     value = this.North[xIndex, northYindex];
                     if (this.North.IsNoData(value))
                     {
@@ -70,29 +80,29 @@ namespace Mars.Clouds.GdalExtensions
                     }
                 }
             }
-            else if (yIndex >= this.Center.YSize)
+            else if (yIndex >= this.Center.SizeY)
             {
-                int southYindex = yIndex - this.Center.YSize;
+                int southYindex = yIndex - this.Center.SizeY;
                 if (xIndex < 0)
                 {
                     if (this.Southwest == null)
                     {
                         return false;
                     }
-                    int westXindex = this.Southwest.XSize + xIndex;
+                    int westXindex = this.Southwest.SizeX + xIndex;
                     value = this.Southwest[westXindex, southYindex];
                     if (this.Southwest.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (xIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.SizeX)
                 {
                     if (this.Southeast == null)
                     {
                         return false;
                     }
-                    int eastXindex = xIndex - this.Center.XSize;
+                    int eastXindex = xIndex - this.Center.SizeX;
                     value = this.Southeast[eastXindex, southYindex];
                     if (this.Southeast.IsNoData(value))
                     {
@@ -120,20 +130,20 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         return false;
                     }
-                    int westXindex = this.West.XSize + xIndex;
+                    int westXindex = this.West.SizeX + xIndex;
                     value = this.West[westXindex, yIndex];
                     if (this.West.IsNoData(value))
                     {
                         return false;
                     }
                 }
-                else if (xIndex >= this.Center.XSize)
+                else if (xIndex >= this.Center.SizeX)
                 {
                     if (this.East == null)
                     {
                         return false;
                     }
-                    int eastXindex = xIndex - this.Center.XSize;
+                    int eastXindex = xIndex - this.Center.SizeX;
                     value = this.East[eastXindex, yIndex];
                     if (this.East.IsNoData(value))
                     {

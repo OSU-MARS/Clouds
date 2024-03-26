@@ -1,5 +1,6 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;
 using System;
 using System.Diagnostics;
@@ -16,12 +17,11 @@ namespace Mars.Clouds.Cmdlets
         public SwitchParameter CompressRasters { get; set; }
 
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate treetops within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each DSM must be a single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
-        [ValidateNotNullOrEmpty]
+        [ValidateNotNullOrWhiteSpace]
         public string? Dsm { get; set; }
 
-        [Parameter(HelpMessage = "Band number of DSM height values in surface raster. Default is 1.")]
-        [ValidateRange(1, 100)] // arbitrary upper bound
-        public int DsmBand { get; set; }
+        [Parameter(HelpMessage = "Name of band with DSM height values in surface raster. Default is \"dsm\".")]
+        public string? DsmBand { get; set; }
 
         [Parameter(Mandatory = true, Position = 2, HelpMessage = "1) path to write local maxima radii to as as a raster or 2,3) path to a directory to local maxima tiles to.")]
         [ValidateNotNullOrEmpty]
@@ -31,7 +31,7 @@ namespace Mars.Clouds.Cmdlets
         {
             this.CompressRasters = false;
             // this.Dsm is mandatory
-            this.DsmBand = 1;
+            this.DsmBand = "dsm";
             // this.LocalMaxima is mandatory
         }
 
@@ -43,9 +43,9 @@ namespace Mars.Clouds.Cmdlets
             localMaximaTile.Name = "localMaximaRadius";
 
             byte ringsCount = (byte)Ring.Rings.Count;
-            for (int tileYindex = 0; tileYindex < dsmTile.YSize; ++tileYindex) 
+            for (int tileYindex = 0; tileYindex < dsmTile.SizeY; ++tileYindex) 
             {
-                for (int tileXindex = 0; tileXindex < dsmTile.XSize; ++tileXindex) 
+                for (int tileXindex = 0; tileXindex < dsmTile.SizeX; ++tileXindex) 
                 {
                     float dsmZ = dsmTile[tileXindex, tileYindex];
                     if (dsmTile.IsNoData(dsmZ))
@@ -91,8 +91,7 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert((this.Dsm != null) && (this.LocalMaxima != null));
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            VirtualRaster<float> dsm = this.ReadVirtualRaster("Get-LocalMaxima", this.Dsm);
-            int dsmBandIndex = this.DsmBand - 1;
+            VirtualRaster<Raster<float>> dsm = this.ReadVirtualRaster<Raster<float>>("Get-LocalMaxima", this.Dsm);
 
             // find local maxima in all tiles
             string? mostRecentDsmTileName = null;
@@ -100,10 +99,10 @@ namespace Mars.Clouds.Cmdlets
             if (dsm.TileCount == 1)
             {
                 // single tile case
-                VirtualRasterNeighborhood8<float> dsmNeighborhood = dsm.GetNeighborhood8(0, dsmBandIndex);
+                VirtualRasterNeighborhood8<float> dsmNeighborhood = dsm.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, this.DsmBand);
                 Raster<byte> localMaximaTile = GetLocalMaxima.FindLocalMaxima(dsmNeighborhood);
 
-                string localMaximaTilePath = Directory.Exists(this.LocalMaxima) ? Path.Combine(this.LocalMaxima, dsm.TileNames[0] + Constant.File.GeoTiffExtension) : this.LocalMaxima;
+                string localMaximaTilePath = Directory.Exists(this.LocalMaxima) ? Path.Combine(this.LocalMaxima, dsm.GetTileName(0, 0) + Constant.File.GeoTiffExtension) : this.LocalMaxima;
                 localMaximaTile.Write(localMaximaTilePath, this.CompressRasters);
                 ++tilesCompleted;
             }
@@ -118,27 +117,24 @@ namespace Mars.Clouds.Cmdlets
                 // load all tiles
                 // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
                 // locality advantage.
-                ParallelOptions parallelOptions = new()
+                VirtualRasterEnumerator<Raster<float>> tileEnumerator = dsm.GetEnumerator();
+                ParallelTasks findLocalMaximaTasks = new(Int32.Min(this.MaxThreads, dsm.TileCount), () =>
                 {
-                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, dsm.TileCount)
-                };
-
-                Task findLocalMaximaTask = Task.Run(() =>
-                {
-                    Parallel.For(0, dsm.TileCount, (int tileIndex) =>
+                    while (tileEnumerator.MoveNextThreadSafe())
                     {
-                        VirtualRasterNeighborhood8<float> dsmNeighborhood = dsm.GetNeighborhood8(tileIndex, dsmBandIndex);
+                        (int tileIndexX, int tileIndexY) = tileEnumerator.GetGridIndices();
+                        VirtualRasterNeighborhood8<float> dsmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.DsmBand);
                         Raster<byte> localMaximaTile = GetLocalMaxima.FindLocalMaxima(dsmNeighborhood);
 
-                        string dsmTileName = dsm.TileNames[tileIndex];
+                        string dsmTileName = Tile.GetName(tileEnumerator.Current.FilePath);
                         string localMaximaTilePath = Path.Combine(this.LocalMaxima, dsmTileName + Constant.File.GeoTiffExtension);
                         localMaximaTile.Write(localMaximaTilePath, this.CompressRasters);
                         mostRecentDsmTileName = dsmTileName;
-                    });
+                    }
                 });
 
                 ProgressRecord progressRecord = new(0, "Get-LocalMaxima", "placeholder");
-                while (findLocalMaximaTask.Wait(Constant.DefaultProgressInterval) == false)
+                while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
                     float fractionComplete = (float)tilesCompleted / (float)dsm.TileCount;
                     progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding local maxima in " + mostRecentDsmTileName + "..." : "Finding treetops...";

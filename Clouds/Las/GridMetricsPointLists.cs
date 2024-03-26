@@ -8,8 +8,10 @@ namespace Mars.Clouds.Las
 {
     public class GridMetricsPointLists : Grid<PointListZirnc>
     {
+        public int NonNullCells { get; private set; }
+
         public GridMetricsPointLists(RasterBand cellMask, LasTileGrid lasGrid)
-            : base(cellMask.Crs, cellMask.Transform, cellMask.XSize, cellMask.YSize)
+            : base(cellMask.Crs, cellMask.Transform, cellMask.SizeX, cellMask.SizeY)
         {
             if ((this.Transform.ColumnRotation != 0.0) || (this.Transform.RowRotation != 0.0))
             {
@@ -19,6 +21,8 @@ namespace Mars.Clouds.Las
             {
                 throw new NotSupportedException("Grid cells are larger than point cloud tiles in at least one dimension. This is not currently supported by the simple calculations used to intersect grid cells and LiDAR tiles.");
             }
+
+            this.NonNullCells = 0;
 
             // metrics grid might extend beyond tile grid, in which areas metrics cells need not be created as no points are available
             Debug.Assert(this.Transform.CellHeight < 0.0);
@@ -76,7 +80,7 @@ namespace Mars.Clouds.Las
                     }
 
                     int cellIndex = this.ToCellIndex(metricsXindex, metricsYindex);
-                    this.Cells[cellIndex] = new(metricsXindex, metricsYindex, tilesIntersected);
+                    this.Data[cellIndex] = new(metricsXindex, metricsYindex, tilesIntersected);
                     ++this.NonNullCells;
                 }
             }

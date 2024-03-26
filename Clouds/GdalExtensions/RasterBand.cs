@@ -32,9 +32,23 @@ namespace Mars.Clouds.GdalExtensions
             this.Name = name;
         }
 
-        public int Cells
+        public static double GetDefaultNoDataValueAsDouble(DataType gdalType)
         {
-            get { return this.XSize * this.YSize; }
+            return gdalType switch
+            {
+                DataType.GDT_Byte => RasterBand.NoDataDefaultByte,
+                DataType.GDT_Float32 => RasterBand.NoDataDefaultFloat,
+                DataType.GDT_Float64 => RasterBand.NoDataDefaultDouble,
+                DataType.GDT_Int8 => RasterBand.NoDataDefaultSByte,
+                DataType.GDT_Int16 => RasterBand.NoDataDefaultInt16,
+                DataType.GDT_Int32 => RasterBand.NoDataDefaultInt32,
+                DataType.GDT_Int64 => RasterBand.NoDataDefaultInt64,
+                DataType.GDT_UInt16 => RasterBand.NoDataDefaultUInt16,
+                DataType.GDT_UInt32 => RasterBand.NoDataDefaultUInt32,
+                DataType.GDT_UInt64 => RasterBand.NoDataDefaultUInt64,
+                // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently reachable
+                _ => throw new NotSupportedException("Unhandled data type " + gdalType + ".")
+            };
         }
 
         public abstract DataType GetGdalDataType();
@@ -87,7 +101,7 @@ namespace Mars.Clouds.GdalExtensions
         public RasterBand(string name, Raster raster, TBand noDataValue)
             : base(name, raster)
         {
-            this.Data = new TBand[this.XSize * this.YSize];
+            this.Data = new TBand[this.SizeX * this.SizeY];
             this.HasNoDataValue = true;
             this.NoDataIsNaN = TBand.IsNaN(noDataValue);
             this.NoDataValue = noDataValue;
@@ -179,6 +193,17 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return GCHandle.Alloc(retypedData, GCHandleType.Pinned);
+        }
+
+        public (TBand value, byte mask) GetValueMaskZero(int xIndex, int yIndex)
+        {
+            TBand value = this[xIndex, yIndex];
+            if (this.IsNoData(value))
+            {
+                return (TBand.Zero, 0);
+            }
+
+            return (value, 1);
         }
 
         public bool IsNoData(TBand value)

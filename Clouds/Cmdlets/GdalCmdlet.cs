@@ -2,10 +2,10 @@
 using Mars.Clouds.GdalExtensions;
 using MaxRev.Gdal.Core;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
-using System.Reflection.Metadata.Ecma335;
 using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
@@ -47,60 +47,78 @@ namespace Mars.Clouds.Cmdlets
             return (directoryPath, searchPattern);
         }
 
-        protected static string[] GetExistingTilePaths(string? tileSearchPath, string defaultTileFileExtension)
+        protected static List<string> GetExistingTilePaths(List<string>? tileSearchPaths, string defaultTileFileExtension)
         {
-            ArgumentOutOfRangeException.ThrowIfNullOrWhiteSpace(tileSearchPath, nameof(tileSearchPath));
-
-            string? directoryPath;
-            string? fileSearchPattern;
-            if (tileSearchPath.Contains('*', StringComparison.Ordinal) || tileSearchPath.Contains('?', StringComparison.Ordinal))
+            ArgumentNullException.ThrowIfNull(tileSearchPaths, nameof(tileSearchPaths));
+            if (tileSearchPaths.Count < 1)
             {
-                // presence of wildcards indicates a set of files in some directory
-                directoryPath = Path.GetDirectoryName(tileSearchPath);
-                if (directoryPath == null)
+                throw new ArgumentNullException(nameof(tileSearchPaths), "No tile search paths were specified.");
+            }
+
+            List<string> tilePaths = [];
+            for (int pathIndex = 0; pathIndex < tileSearchPaths.Count; ++pathIndex)
+            {
+                string tileSearchPath = tileSearchPaths[pathIndex];
+                string? directoryPath = String.Empty;
+                string? fileSearchPattern = String.Empty;
+                bool pathSpecifiesSingleFile = false;
+                if (tileSearchPath.Contains('*', StringComparison.Ordinal) || tileSearchPath.Contains('?', StringComparison.Ordinal))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tileSearchPath), "Wildcarded tile search path '" + tileSearchPath + "' doesn't contain a directory path.");
+                    // presence of wildcards indicates a set of files in some directory
+                    directoryPath = Path.GetDirectoryName(tileSearchPath);
+                    fileSearchPattern = Path.GetFileName(tileSearchPath);
+                    fileSearchPattern ??= "*" + defaultTileFileExtension;
                 }
-                fileSearchPattern = Path.GetFileName(tileSearchPath);
-                if (fileSearchPattern == null)
+                else if (Directory.Exists(tileSearchPath))
                 {
+                    // if path indicates an existing directory, search it with the default extension
+                    directoryPath = tileSearchPath;
                     fileSearchPattern = "*" + defaultTileFileExtension;
                 }
-            }
-            else if (Directory.Exists(tileSearchPath))
-            {
-                // if path indicates an existing directory, search it with the default extension
-                directoryPath = tileSearchPath;
-                fileSearchPattern = "*" + defaultTileFileExtension;
-            }
-            else
-            {
-                if (File.Exists(tileSearchPath) == false)
+                else
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tileSearchPath), "Can't load tiles. Path '" + tileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
+                    if (File.Exists(tileSearchPath) == false)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Can't fully load tiles. Path '" + tileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
+                    }
+                    tilePaths.Add(tileSearchPath);
+                    pathSpecifiesSingleFile = true;
                 }
-                return [ tileSearchPath ];
+
+                if (pathSpecifiesSingleFile == false)
+                {
+                    if (String.IsNullOrWhiteSpace(directoryPath))
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Wildcarded tile search path '" + tileSearchPath + "' doesn't contain a directory path.");
+                    }
+
+                    string[] tilePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern);
+                    if (tilePathsInDirectory.Length == 0)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Can't load tiles. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
+                    }
+                    tilePaths.AddRange(tilePathsInDirectory);
+                }
             }
 
-            string[] tilePaths = Directory.GetFiles(directoryPath, fileSearchPattern);
-            if (tilePaths.Length == 0)
+            if (tilePaths.Count == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(tileSearchPath), "Can't load tiles. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
+                throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "No tiles loaded as no files matched search paths '" + String.Join("', '", tileSearchPaths) + "'.");
             }
             return tilePaths;
         }
 
-        protected VirtualRaster<float> ReadVirtualRaster(string cmdletName, string virtualRasterPath)
+        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IFileSerializable<TTile>
         {
-            VirtualRaster<float> vrt = new();
+            VirtualRaster<TTile> vrt = [];
 
-            string[] tilePaths = GdalCmdlet.GetExistingTilePaths(virtualRasterPath, Constant.File.GeoTiffExtension);
-            if (tilePaths.Length == 1)
+            List<string> tilePaths = GdalCmdlet.GetExistingTilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
+            if (tilePaths.Count == 1)
             {
                 // synchronous read for single tiles
                 string tilePath = tilePaths[0];
                 string tileName = Tile.GetName(tilePath);
-                Raster<float> tile = Raster<float>.Read(tilePath);
+                TTile tile = TTile.Read(tilePath);
                 vrt.Add(tileName, tile);
             }
             else
@@ -110,7 +128,7 @@ namespace Mars.Clouds.Cmdlets
                 // locality advantage.
                 ParallelOptions parallelOptions = new()
                 {
-                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, tilePaths.Length)
+                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, tilePaths.Count)
                 };
 
                 string? mostRecentDsmTileName = null;
@@ -118,12 +136,12 @@ namespace Mars.Clouds.Cmdlets
                 int tilesLoaded = 0;
                 Task loadTilesTask = Task.Run(() =>
                 {
-                    Parallel.For(0, tilePaths.Length, parallelOptions, (int tileIndex) =>
+                    Parallel.For(0, tilePaths.Count, parallelOptions, (int tileIndex) =>
                     {
                         // find treetops in tile
                         string tilePath = tilePaths[tileIndex];
                         string tileName = Tile.GetName(tilePath);
-                        Raster<float> tile = Raster<float>.Read(tilePath);
+                        TTile tile = TTile.Read(tilePath);
                         lock (vrt)
                         {
                             vrt.Add(tileName, tile);
@@ -137,8 +155,8 @@ namespace Mars.Clouds.Cmdlets
                 ProgressRecord progressRecord = new(0, cmdletName, "placeholder");
                 while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesLoaded / (float)tilePaths.Length;
-                    progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Loading tile " + mostRecentDsmTileName + "..." : "Loading tiles...";
+                    float fractionComplete = (float)tilesLoaded / (float)tilePaths.Count;
+                    progressRecord.StatusDescription = "Loading " + tilePaths.Count + " virtual raster tiles" + (mostRecentDsmTileName != null ? ": " + mostRecentDsmTileName + "..." : "...");
                     progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
                     progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                     this.WriteProgress(progressRecord);
@@ -147,7 +165,7 @@ namespace Mars.Clouds.Cmdlets
                 stopwatch.Stop();
             }
 
-            vrt.BuildGrid(); // unlike LasTileGrid, VirtualRaster<T> doesn't need snapping as it doesn't store tile sizes as doubles
+            vrt.CreateTileGrid(); // unlike LasTileGrid, VirtualRaster<T> doesn't need snapping as it doesn't store tile sizes as doubles
             return vrt;
         }
     }

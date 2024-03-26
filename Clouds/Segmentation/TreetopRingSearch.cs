@@ -1,12 +1,11 @@
 ﻿using Mars.Clouds.GdalExtensions;
-using Mars.Clouds.Las;
 using System;
 using System.Diagnostics;
 using System.IO;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopRingSearch(int dsmBandIndex, int dtmBandIndex) : TreetopSearch<TreetopRingSearchState>(dsmBandIndex, dtmBandIndex)
+    internal class TreetopRingSearch(string? dsmBandName, string? dtmBandName) : TreetopSearch<TreetopRingSearchState>(dsmBandName, dtmBandName)
     {
         protected override TreetopRingSearchState CreateSearchState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
         {
@@ -17,7 +16,7 @@ namespace Mars.Clouds.Segmentation
             }
             return new TreetopRingSearchState(dsmNeighborhood, dtmNeighborhood, ringDiagnosticsFilePath)
             {
-                MinimumCandidateHeight = this.MinimumHeight
+                MinimumCandidateHeight = this.MinimumTreetopHeight
             };
         }
 

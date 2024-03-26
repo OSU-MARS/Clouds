@@ -280,12 +280,12 @@ namespace Mars.Clouds.Las
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = image.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= image.XSize) || (yIndex >= image.YSize))
+                (int xIndex, int yIndex) = image.ToGridIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= image.SizeX) || (yIndex >= image.SizeY))
                 {
                     // point lies outside of the DSM tile and is therefore not of interest
-                    // If the DSM tile's extents are equal to or larger than the .las tile in all directions reaching this case is an error.
-                    // For now DSM tiles with smaller extents than the .las tile aren't supported.
+                    // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
+                    // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
                     throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside DSM tile extents (" + image.GetExtentString() + " .");
                 }
 
@@ -344,8 +344,8 @@ namespace Mars.Clouds.Las
                 this.BaseStream.ReadExactly(pointBytes);
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = scanMetrics.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= scanMetrics.XSize) || (yIndex >= scanMetrics.YSize))
+                (int xIndex, int yIndex) = scanMetrics.ToGridIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= scanMetrics.SizeX) || (yIndex >= scanMetrics.SizeY))
                 {
                     // point lies outside of the assigned metrics grid and is therefore not of interest
                     continue;
@@ -421,7 +421,12 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadPointsToGrid(LasTile tile, Grid<PointListZ> dsmGrid, bool dropGroundPoints)
+        private static UInt16 ReadPointSourceID(ReadOnlySpan<byte> pointBytes, byte pointFormat)
+        {
+            return pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+        }
+
+        public void ReadPointsToGrid(LasTile tile, Grid<PointListZs> dsmGrid)
         {
             LasHeader10 lasHeader = tile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
@@ -437,7 +442,9 @@ namespace Mars.Clouds.Las
             double yScale = lasHeader.YScaleFactor;
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            // for now, assume point size is small enough to stackalloc
+            // Perf tests suggest at most 1-2% advantage in using a larger buffer to call ReadExactly() less often.
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength];
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
@@ -446,23 +453,12 @@ namespace Mars.Clouds.Las
                 {
                     continue;
                 }
-                if (dropGroundPoints && (classification == PointClassification.Ground))
-                {
-                    continue;
-                }
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = dsmGrid.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmGrid.XSize) || (yIndex >= dsmGrid.YSize))
-                {
-                    // point lies outside of the DSM tile and is therefore not of interest
-                    // If the DSM tile's extents are equal to or larger than the .las tile in all directions reaching this case is an error.
-                    // For now DSM tiles with smaller extents than the .las tile aren't supported.
-                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmGrid.GetExtentString() + " .");
-                }
+                (int xIndex, int yIndex) = dsmGrid.ToInteriorGridIndices(x, y);
 
-                PointListZ? dsmCell = dsmGrid[xIndex, yIndex];
+                PointListZs? dsmCell = dsmGrid[xIndex, yIndex];
                 if (dsmCell == null)
                 {
                     dsmCell = new(xIndex, yIndex);
@@ -470,7 +466,33 @@ namespace Mars.Clouds.Las
                 }
 
                 float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                dsmCell.Z.Add(z);
+                if (classification == PointClassification.Ground)
+                {
+                    // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
+                    UInt32 groundPoints = dsmCell.GroundPoints;
+                    if (groundPoints == 0)
+                    {
+                        dsmCell.GroundMean = z;
+                    }
+                    else
+                    {
+                        dsmCell.GroundMean += z;
+                    }
+
+                    dsmCell.GroundPoints = groundPoints + 1;
+                }
+                else
+                {
+                    // for now, assume all non-ground point types are aerial (noise and withheld points are excluded above)
+                    // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
+                    //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
+                    //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
+                    // PointClassification.Water is currently also treated as non-ground, which is debatable
+                    dsmCell.AerialPoints.Add(z);
+
+                    UInt16 sourceID = LasReader.ReadPointSourceID(pointBytes, pointFormat);
+                    dsmCell.AerialSourceIDs.Add(sourceID);
+                }
             }
         }
 
@@ -532,8 +554,8 @@ namespace Mars.Clouds.Las
 
                 double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                 double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = metricsGrid.GetCellIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= metricsGrid.XSize) || (yIndex >= metricsGrid.YSize))
+                (int xIndex, int yIndex) = metricsGrid.ToGridIndices(x, y);
+                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= metricsGrid.SizeX) || (yIndex >= metricsGrid.SizeY))
                 {
                     // point lies outside of the ABA grid and is therefore not of interest
                     // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
@@ -646,9 +668,12 @@ namespace Mars.Clouds.Las
                 switch (userID)
                 {
                     case LasFile.LasfProjection:
-                        if (recordID == 2111)
+                        if (recordID == OgcMathTransformWktRecord.LasfProjectionRecordID)
                         {
-                            throw new NotImplementedException("OgcMathTransformWktRecord");
+                            byte[] wktBytes = new byte[recordLengthAfterHeader16]; // untested
+                            this.BaseStream.ReadExactly(wktBytes);
+                            OgcMathTransformWktRecord wkt = new(reserved, recordLengthAfterHeader16, description, wktBytes);
+                            vlr = wkt;
                         }
                         else if (recordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID)
                         {
@@ -668,13 +693,19 @@ namespace Mars.Clouds.Las
                             }
                             vlr = crs;
                         }
-                        else if (recordID == 34736)
+                        else if (recordID == GeoDoubleParamsTagRecord.LasfProjectionRecordID)
                         {
-                            throw new NotImplementedException("GeoDoubleParamsTagRecord");
+                            byte[] stringBytes = new byte[recordLengthAfterHeader16]; // untested
+                            this.BaseStream.ReadExactly(stringBytes);
+                            GeoDoubleParamsTagRecord crs = new(reserved, recordLengthAfterHeader16, description, stringBytes);
+                            vlr = crs;
                         }
-                        else if (recordID == 34737)
+                        else if (recordID == GeoAsciiParamsTagRecord.LasfProjectionRecordID)
                         {
-                            throw new NotImplementedException("GeoAsciiParamsTagRecord");
+                            byte[] stringBytes = new byte[recordLengthAfterHeader16]; // probably not too long for stackalloc, can be made switchable if needed
+                            this.BaseStream.ReadExactly(stringBytes);
+                            GeoAsciiParamsTagRecord crs = new(reserved, recordLengthAfterHeader16, description, stringBytes);
+                            vlr = crs;
                         }
                         break;
                     case LasFile.LasfSpec:
