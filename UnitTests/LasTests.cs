@@ -43,10 +43,13 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(dtmRaster.Crs.IsSame(lasTile.GetSpatialReference(), []) == 1);
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
-            Grid<PointListZs> dsmPoints = new(dtmTile.Crs, dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY);
             using LasReader pointReader = lasTile.CreatePointReader();
-            pointReader.ReadPointsToGrid(lasTile, dsmPoints);
-            DigitalSurfaceModel dsmRaster = new(dsmPoints, dtmTile, minimumLayerSeparation: 0.5F /* m */);
+            PointListXyzcs dsmPoints = pointReader.ReadPoints(lasTile);
+            Assert.IsTrue(dsmPoints.Count == 207617);
+
+            PointListGridZs? aerialPointZs = null;
+            PointListGridZs.CreateRecreateOrReset(dtmTile, newCellPointCapacity: 4, ref aerialPointZs);
+            DigitalSurfaceModel dsmRaster = new("dsmRaster ReadLasToDsm.tif", dsmPoints, dtmTile, aerialPointZs, minimumLayerSeparation: 0.5F /* m */);
             
             VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = [];
             dsmVirtualRaster.Add(Tile.GetName(TestConstant.DtmFileName), dsmRaster);
@@ -54,8 +57,8 @@ namespace Mars.Clouds.UnitTests
             VirtualRasterNeighborhood8<float> dsmNeighborhood = dsmVirtualRaster.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, bandName: "dsm");
             Binomial.Smooth3x3(dsmNeighborhood, dsmRaster.CanopyMaxima3);
 
-            Assert.IsTrue((dsmPoints.SizeX == dtmRaster.TileSizeInCellsX) && (dsmRaster.SizeX == dtmRaster.TileSizeInCellsX));
-            Assert.IsTrue((dsmPoints.SizeY == dtmRaster.TileSizeInCellsY) && (dsmRaster.SizeY == dtmRaster.TileSizeInCellsY));
+            Assert.IsTrue(dsmRaster.SizeX == dtmRaster.TileSizeInCellsX);
+            Assert.IsTrue(dsmRaster.SizeY == dtmRaster.TileSizeInCellsY);
 
             for (int cellIndex = 0; cellIndex < dsmRaster.Cells; ++cellIndex)
             {

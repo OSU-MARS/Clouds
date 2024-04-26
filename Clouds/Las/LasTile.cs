@@ -24,19 +24,19 @@ namespace Mars.Clouds.Las
         {
             // rough scaling with file size from https://github.com/dotnet/runtime/discussions/74405#discussioncomment-3488674
             int bufferSizeInKB;
-            if (this.FileSize > 512 * 1024 * 1024) // 512 MB
+            if (this.FileSize > 512 * 1024 * 1024) // > 512 MB
             {
                 bufferSizeInKB = 1024;
             }
-            else if (this.FileSize > 64 * 1024 * 1024) // 64 MB
+            else if (this.FileSize > 64 * 1024 * 1024) // > 64 MB
             {
                 bufferSizeInKB = 512;
             }
-            else if (this.FileSize > 8 * 1024 * 1024) // 8 MB
+            else if (this.FileSize > 8 * 1024 * 1024) // > 8 MB
             {
                 bufferSizeInKB = 256;
             }
-            else
+            else // ≤ 8 MB
             {
                 bufferSizeInKB = 128;
             }

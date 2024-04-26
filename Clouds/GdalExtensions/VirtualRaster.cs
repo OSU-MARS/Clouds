@@ -49,7 +49,7 @@ namespace Mars.Clouds.GdalExtensions
     // Also, indexing differs because tiles are sparse where grid is dense, so a grid index is not a tile index.
     public class VirtualRaster<TTile> : VirtualRaster, IEnumerable<TTile> where TTile : Raster
     {
-        private Grid<TTile?>? tileGrid;
+        private GridNullable<TTile?>? tileGrid;
         private string?[,]? tileNames;
         private readonly List<string> ungriddedTileNames;
         private readonly List<TTile> ungriddedTiles;
@@ -64,7 +64,7 @@ namespace Mars.Clouds.GdalExtensions
             this.ungriddedTiles = [];
         }
 
-        public VirtualRaster(LasTileGrid lasGrid, VirtualRaster dtm)
+        public VirtualRaster(LasTileGrid lasGrid)
         {
             this.tileGrid = new(lasGrid);
             this.tileNames = new string?[this.tileGrid.SizeX, this.tileGrid.SizeY];
@@ -72,10 +72,10 @@ namespace Mars.Clouds.GdalExtensions
             this.ungriddedTiles = [];
 
             this.Crs = lasGrid.Crs.Clone();
-            this.TileCellSizeX = dtm.TileCellSizeX;
-            this.TileCellSizeY = dtm.TileCellSizeY;
-            this.TileSizeInCellsX = dtm.TileSizeInCellsX;
-            this.TileSizeInCellsY = dtm.TileSizeInCellsY;
+            this.TileCellSizeX = Double.NaN; // no DTM information available, so no cell size information yet
+            this.TileCellSizeY = Double.NaN;
+            this.TileSizeInCellsX = -1;
+            this.TileSizeInCellsY = -1;
             this.VirtualRasterSizeInTilesX = lasGrid.SizeX;
             this.VirtualRasterSizeInTilesY = lasGrid.SizeY;
         }
@@ -109,14 +109,26 @@ namespace Mars.Clouds.GdalExtensions
 
         public (int tileIndexX, int tileIndexY) Add(string tileName, TTile tile)
         {
-            if (this.ungriddedTiles.Count == 0)
+            if ((this.tileGrid == null) && (this.ungriddedTiles.Count == 0))
             {
+                // if no CRS information was specified at construction, latch CRS of first tile added
                 this.Crs = tile.Crs;
                 double tileLinearUnits = tile.Crs.GetLinearUnits();
                 if (tileLinearUnits <= 0.0)
                 {
                     throw new ArgumentOutOfRangeException(nameof(tile), "Tile's unit size of " + tileLinearUnits + " m is zero or negative.");
                 }
+            }
+            else if (SpatialReferenceExtensions.IsSameCrs(tile.Crs, this.Crs) == false)
+            {
+                // all tiles must be in the same CRS
+                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have varying coordinate systems. Expected tile CRS to be " + this.Crs.GetName() + " but passed tile uses " + tile.Crs.GetName() + ".");
+            }
+
+            if (this.TileSizeInCellsX == -1)
+            {
+                // latch cell size first tile added
+                Debug.Assert(Double.IsNaN(this.TileCellSizeX) && Double.IsNaN(this.TileCellSizeY) && (this.TileSizeInCellsY == -1));
 
                 this.TileCellSizeX = tile.Transform.CellWidth;
                 this.TileCellSizeY = tile.Transform.CellHeight;
@@ -132,17 +144,15 @@ namespace Mars.Clouds.GdalExtensions
                     throw new ArgumentOutOfRangeException(nameof(tile), "Tile's size of " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsX + " cells is zero or negative.");
                 }
             }
-            else if (SpatialReferenceExtensions.IsSameCrs(tile.Crs, this.Crs) == false)
-            {
-                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have varying coordinate systems. Expected tile CRS to be " + this.Crs.GetName() + " but passed tile uses " + tile.Crs.GetName() + ".");
-            }
             else if ((this.TileCellSizeX != tile.Transform.CellWidth) || (this.TileCellSizeY != tile.Transform.CellHeight))
             {
+                // cell size must be the same across all tiles
                 throw new ArgumentOutOfRangeException(nameof(tile), "Tiles are of varying size. Expected " + this.TileCellSizeX + " by " + this.TileCellSizeY + " cells but passed tile has " + tile.Transform.CellWidth + " by " + tile.Transform.CellHeight + " cells.");
             }
 
             if ((tile.SizeX != this.TileSizeInCellsX) || (tile.SizeY != this.TileSizeInCellsY))
             {
+                // tile size must be the same across all tiles => tile size in cells must be the same
                 throw new ArgumentOutOfRangeException(nameof(tile), "Tiles are of varying size. Expected " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsY + " cells but passed tile is " + tile.SizeX + " by " + tile.SizeY + " cells.");
             }
 

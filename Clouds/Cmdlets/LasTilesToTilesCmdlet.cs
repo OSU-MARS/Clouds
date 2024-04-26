@@ -9,26 +9,15 @@ namespace Mars.Clouds.Cmdlets
 {
     public class LasTilesToTilesCmdlet : LasTilesCmdlet
     {
-        [Parameter(HelpMessage = "Size of a DSM cell or orthoimage pixel in the point clouds' CRS units. Must be an integer multiple of the tile size. Default is 0.5 m for metric point clouds and 1.5 feet for point clouds with English units.")]
-        public double CellSize { get; set; }
-
         [Parameter(HelpMessage = "Whether or not to compress output rasters (DSM or orthoimages). Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
         protected LasTilesToTilesCmdlet()
         {
-            this.CellSize = -1.0;
             this.CompressRasters = false;
         }
 
-        private static string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, TileReadWrite tileReadWrite)
-        {
-            string status = tileReadWrite.TilesLoaded + (tileReadWrite.TilesLoaded == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
-                            tileReadWrite.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
-            return status;
-        }
-
-        protected (LasTileGrid lasGrid, int tileSizeX, int tileSizeY) ReadLasHeadersAndCellSize(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
         {
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
             if ((lasGrid.NonNullCells > 1) && (outputPathIsDirectory == false))
@@ -36,26 +25,7 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when " + nameof(this.Las) + " indicates multiple files.");
             }
 
-            if (this.CellSize < 0.0)
-            {
-                double crsLinearUnits = lasGrid.Crs.GetLinearUnits();
-                this.CellSize = crsLinearUnits == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
-            }
-
-            int outputTileSizeX = (int)(lasGrid.Transform.CellWidth / this.CellSize);
-            if (lasGrid.Transform.CellWidth - outputTileSizeX * this.CellSize != 0.0)
-            {
-                string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
-            }
-            int outputTileSizeY = (int)(Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize);
-            if (Double.Abs(lasGrid.Transform.CellHeight) - outputTileSizeY * this.CellSize != 0.0)
-            {
-                string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
-            }
-
-            return (lasGrid, outputTileSizeX, outputTileSizeY);
+            return lasGrid;
         }
 
         protected void ReadLasTiles<TTile, TReadWrite>(LasTileGrid lasGrid, Func<LasTile, TReadWrite, TTile> readTile, TReadWrite tileReadWrite) where TReadWrite : TileReadWrite<TTile>
@@ -120,7 +90,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected void WaitForLasReadTileWriteTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadWrite tileReadWrite)
         {
-            ProgressRecord readWriteProgress = new(0, cmdletName, LasTilesToTilesCmdlet.GetLasReadTileWriteStatusDescription(lasGrid, tileReadWrite));
+            ProgressRecord readWriteProgress = new(0, cmdletName, tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid));
             this.WriteProgress(readWriteProgress);
 
             while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
@@ -140,8 +110,11 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                float fractionComplete = 0.5F * (float)(tileReadWrite.TilesLoaded + tileReadWrite.TilesWritten) / (float)lasGrid.NonNullCells;
-                readWriteProgress.StatusDescription = LasTilesToTilesCmdlet.GetLasReadTileWriteStatusDescription(lasGrid, tileReadWrite);
+                // for now, assume processing and write is negligible compared to read time
+                // It's desirable to calculate a more accurate estimate based on monitoring tile read and compute rates but this is not
+                // currently implemented.
+                float fractionComplete = (float)tileReadWrite.TilesLoaded / (float)lasGrid.NonNullCells;
+                readWriteProgress.StatusDescription = tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid);
                 readWriteProgress.PercentComplete = (int)(100.0F * fractionComplete);
                 readWriteProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileReadWrite.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
                 this.WriteProgress(readWriteProgress);

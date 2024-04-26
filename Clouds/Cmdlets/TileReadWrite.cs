@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using Mars.Clouds.Las;
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
@@ -21,6 +22,13 @@ namespace Mars.Clouds.Cmdlets
         public int GetNextTileWriteIndex()
         {
             return Interlocked.Increment(ref this.tileWriteIndex);
+        }
+
+        public virtual string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid)
+        {
+            string status = this.TilesLoaded + (this.TilesLoaded == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
+                            this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
+            return status;
         }
     }
 

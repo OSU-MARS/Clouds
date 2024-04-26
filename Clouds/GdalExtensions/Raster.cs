@@ -291,9 +291,9 @@ namespace Mars.Clouds.GdalExtensions
             return band;
         }
 
-        public static Raster<TBand> Read(string rasterPath)
+        private static Dataset OpenForRead(string rasterPath)
         {
-            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
+            Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
             (DataType dataType, long totalCells) = Raster.GetBandProperties(rasterDataset);
 
             DataType expectedDataType = RasterBand.GetGdalDataType<TBand>();
@@ -306,10 +306,42 @@ namespace Mars.Clouds.GdalExtensions
                 throw new NotSupportedException("Raster '" + rasterPath + "' has " + totalCells + " cells, which exceeds the maximum supported size of " + Array.MaxLength + " cells.");
             }
 
-            return new Raster<TBand>(rasterDataset)
+            return rasterDataset;
+        }
+
+        public static Raster<TBand> Read(string rasterPath)
+        {
+            using Dataset rasterDataset = Raster<TBand>.OpenForRead(rasterPath);
+            Raster<TBand> raster = new(rasterDataset);
+            Debug.Assert(String.Equals(rasterPath, rasterPath, StringComparison.OrdinalIgnoreCase));
+            return raster;
+        }
+
+        public static RasterBand<TBand> ReadBand(string rasterPath, string? bandName)
+        {
+            using Dataset rasterDataset = Raster<TBand>.OpenForRead(rasterPath);
+            if (rasterDataset.RasterCount < 1)
             {
-                FilePath = rasterPath
-            };
+                throw new ArgumentOutOfRangeException(nameof(rasterPath), "Raster '" + rasterPath + "' contains no bands.");
+            }
+
+            if (bandName == null)
+            {
+                Band gdalBand = rasterDataset.GetRasterBand(1);
+                return new RasterBand<TBand>(rasterDataset, gdalBand);
+            }
+
+            for (int bandIndex = 0; bandIndex < rasterDataset.RasterCount; ++bandIndex)
+            {
+                int gdalBandIndex = bandIndex + 1;
+                Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                if (String.Equals(gdalBand.GetDescription(), bandName, StringComparison.Ordinal))
+                {
+                    return new RasterBand<TBand>(rasterDataset, gdalBand);
+                }
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(bandName), "Raster '" + rasterPath + "' does not contain a band named '" + bandName + "'.");
         }
 
         protected void SetNoDataOnAllBands(TBand noDataValue)

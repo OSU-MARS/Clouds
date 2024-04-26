@@ -1,5 +1,7 @@
 ﻿using OSGeo.GDAL;
+using OSGeo.OSR;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -23,11 +25,18 @@ namespace Mars.Clouds.GdalExtensions
         public bool HasNoDataValue { get; protected set; }
         public string Name { get; set; }
 
+        protected RasterBand(Dataset rasterDataset, Band gdalBand)
+            : base(rasterDataset.GetSpatialRef(), new GridGeoTransform(rasterDataset), gdalBand.XSize, gdalBand.YSize, cloneCrsAndTransform: false)
+        {
+            this.NoDataIsNaN = false;
+            this.HasNoDataValue = false;
+            this.Name = gdalBand.GetDescription();
+        }
+
         protected RasterBand(string name, Raster raster)
             : base(raster, cloneCrsAndTransform: false) // RasterBands all share same CRS and geotransform by reference
         {
             this.NoDataIsNaN = false;
-
             this.HasNoDataValue = false;
             this.Name = name;
         }
@@ -81,21 +90,40 @@ namespace Mars.Clouds.GdalExtensions
         public TBand[] Data { get; private init; }
         public TBand NoDataValue { get; private set; }
 
+        public RasterBand(Dataset rasterDataset, Band gdalBand)
+            : base(rasterDataset, gdalBand)
+        {
+            DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
+            if (gdalBand.DataType != gdalDataType)
+            {
+                string[] sourceFiles = gdalBand.GetDataset().GetFileList();
+                string message = "A RasterBand<" + typeof(TBand).Name + "> cannot be loaded " + (sourceFiles.Length > 0 ? "from '" + sourceFiles[0] + "'" : String.Empty) + " because band '" + gdalBand.GetDescription() + "' is of type " + gdalBand.DataType + ".";
+                throw new NotSupportedException(message);
+            }
+
+            this.SetNoDataValue(gdalBand);
+            this.Data = new TBand[gdalBand.XSize * gdalBand.YSize];
+
+            // for now, load all raster data on creation
+            // In some use cases or failure paths it's desirable to load the band lazily but this isn't currently supported.
+            // See https://stackoverflow.com/questions/15958830/c-sharp-generics-cast-generic-type-to-value-type for discussion of
+            // C# generics' limitations in recognizing TBand[] as float[], int[], ...
+            GCHandle dataPin = GCHandle.Alloc(this.Data, GCHandleType.Pinned);
+            try
+            {
+                CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: this.SizeX, ySize: this.SizeY, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.SizeX, buf_ySize: this.SizeY, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
+            }
+            finally
+            {
+                dataPin.Free();
+            }
+        }
+
         public RasterBand(Band gdalBand, Raster raster)
             : this(gdalBand.GetDescription(), raster)
         {
-            gdalBand.GetNoDataValue(out double noDataValue, out int hasNoDataValue);
-            
-            this.HasNoDataValue = hasNoDataValue != 0;
-            if (this.HasNoDataValue)
-            {                
-                this.NoDataValue = TBand.CreateChecked(noDataValue);
-            }
-            else
-            {
-                this.NoDataValue = RasterBand<TBand>.GetDefaultNoDataValue();
-            }
-            this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
+            this.SetNoDataValue(gdalBand);
         }
 
         public RasterBand(string name, Raster raster, TBand noDataValue)
@@ -222,6 +250,23 @@ namespace Mars.Clouds.GdalExtensions
                 return this.IsNoData(this[xIndex, yIndex]);
             }
             return false;
+        }
+
+        [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
+        private void SetNoDataValue(Band gdalBand)
+        {
+            gdalBand.GetNoDataValue(out double noDataValue, out int hasNoDataValue);
+
+            this.HasNoDataValue = hasNoDataValue != 0;
+            if (this.HasNoDataValue)
+            {
+                this.NoDataValue = TBand.CreateChecked(noDataValue);
+            }
+            else
+            {
+                this.NoDataValue = RasterBand<TBand>.GetDefaultNoDataValue();
+            }
+            this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
         }
 
         public void SetNoDataValue(TBand noDataValue)

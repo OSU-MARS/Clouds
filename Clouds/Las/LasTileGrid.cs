@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
-    public class LasTileGrid : Grid<LasTile>
+    public class LasTileGrid : GridNullable<LasTile>
     {
         public int NonNullCells { get; protected set; }
 

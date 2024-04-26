@@ -17,11 +17,11 @@ $gridMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\grid metr
 
 # DSM generation, single tile
 $tile = "s04200w06810" # "s04230w06810" # "s04020w07050"
-Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\$tile.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM\$tile.tif" -Snap -Verbose
+Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\$tile.tif" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
 # DSM generation, 3x3 group of tiles
 $tiles = "s042?0w068?0"
-Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tiles.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM\$tiles.tif" -Snap -Verbose
+Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tiles.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
 # DSM generation, all on forest and buffer tiles
 Get-Dsm -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM3" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose

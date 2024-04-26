@@ -15,6 +15,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(16, 64)] // could also use [ValidateSet] but string conversion is required
         public int BitDepth { get; set; }
 
+        [Parameter(HelpMessage = "Size of an orthoimage pixel in the point clouds' CRS units. Must be an integer multiple of the tile size. Default is 0.5 m for metric point clouds and 1.5 feet for point clouds with English units.")]
+        public double CellSize { get; set; }
+
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to write image to as a GeoTIFF or 2,3) path to a directory to write image tiles to.")]
         [ValidateNotNullOrEmpty]
         public string? Image { get; set; }
@@ -22,6 +25,7 @@ namespace Mars.Clouds.Cmdlets
         public GetOrthoimages() 
         {
             this.BitDepth = 16;
+            this.CellSize = -1.0;
             this.MaxThreads = 8; // for now, default to a single read thread and seven write threads
         }
 
@@ -39,8 +43,9 @@ namespace Mars.Clouds.Cmdlets
 
             string cmdletName = "Get-Orthoimages";
             bool imagePathIsDirectory = Directory.Exists(this.Image);
-            (LasTileGrid lasGrid, int imageTileSizeX, int imageTileSizeY) = this.ReadLasHeadersAndCellSize(cmdletName, nameof(this.Image), imagePathIsDirectory);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Image), imagePathIsDirectory);
 
+            (int imageTileSizeX, int imageTileSizeY) = this.SetCellSize(lasGrid);
             TileReadWrite<ImageRaster<UInt64>> imageReadWrite = new(this.MaxTiles, imageTileSizeX, imageTileSizeY, imagePathIsDirectory);
 
             // start single reader and multiple writers
@@ -64,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
             this.WaitForLasReadTileWriteTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
 
             string elapsedTimeFormat = imageReadWrite.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("#,#,#,0") + " pixels in " + imageReadWrite.TilesLoaded + " point cloud tiles in " + imageReadWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / imageReadWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesLoaded + " point cloud tiles in " + imageReadWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / imageReadWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 
@@ -76,6 +81,30 @@ namespace Mars.Clouds.Cmdlets
             pointReader.ReadPointsToImage(lasTile, imageTile);
 
             return imageTile;
+        }
+
+        private (int tileSizeX, int tileSizeY) SetCellSize(LasTileGrid lasGrid)
+        {
+            if (this.CellSize < 0.0)
+            {
+                double crsLinearUnits = lasGrid.Crs.GetLinearUnits();
+                this.CellSize = crsLinearUnits == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
+            }
+
+            int outputTileSizeX = (int)(lasGrid.Transform.CellWidth / this.CellSize);
+            if (lasGrid.Transform.CellWidth - outputTileSizeX * this.CellSize != 0.0)
+            {
+                string units = lasGrid.Crs.GetLinearUnitsName();
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+            }
+            int outputTileSizeY = (int)(Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize);
+            if (Double.Abs(lasGrid.Transform.CellHeight) - outputTileSizeY * this.CellSize != 0.0)
+            {
+                string units = lasGrid.Crs.GetLinearUnitsName();
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+            }
+
+            return (outputTileSizeX, outputTileSizeY);
         }
 
         private int WriteTile(string tileName, ImageRaster<UInt64> imageTile, TileReadWrite<ImageRaster<UInt64>> imageReadWrite)

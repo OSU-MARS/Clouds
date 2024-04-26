@@ -160,7 +160,7 @@ namespace Mars.Clouds.Cmdlets
 
             stopwatch.Stop();
             string tileOrTiles = dsmTilePaths.Count > 1 ? "tiles" : "tile";
-            this.WriteVerbose(dsmTilePaths.Count + " " + tileOrTiles + " and " + treetopCandidates.ToString("#,#,#,0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
+            this.WriteVerbose(dsmTilePaths.Count + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
         }
     }

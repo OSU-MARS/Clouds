@@ -26,7 +26,7 @@ namespace Mars.Clouds.Cmdlets
 
         static LasTilesCmdlet()
         {
-            LasTilesCmdlet.ProgressUpdateInterval = TimeSpan.FromSeconds(10.0);
+            LasTilesCmdlet.ProgressUpdateInterval = TimeSpan.FromSeconds(5.0);
         }
 
         protected LasTilesCmdlet() 

@@ -106,15 +106,23 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
         }
 
+        public bool IsSameExtent(Extent otherExtent)
+        {
+            (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
+            // for now, use exact equality
+            return (thisXmin == otherExtent.XMin) && (thisXmax == otherExtent.XMax) && (thisYmin == otherExtent.YMin) && (thisYmax == otherExtent.YMax);
+        }
+
         //public bool IsSameExtent(Grid other)
         //{
         //    (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
         //    (double otherXmin, double otherXmax, double otherYmin, double otherYmax) = other.GetExtent();
 
-        //    // for now use exact equality
+        //    // for now, use exact equality
         //    return (thisXmin == otherXmin) && (thisXmax == otherXmax) && (thisYmin == otherYmin) && (thisYmax == otherYmax);
         //}
 
+        /// <remarks>Does not check CRS.</remarks>
         public bool IsSameExtentAndResolution(Grid other)
         {
             if ((this.SizeX != other.SizeX) || (this.SizeY != other.SizeY) || 
@@ -134,9 +142,7 @@ namespace Mars.Clouds.GdalExtensions
         // needs testing with nonzero row and column rotations
         public (int xIndex, int yIndex) ToInteriorGridIndices(double x, double y)
         {
-            double yIndexFractional = (y - this.Transform.OriginY - this.Transform.ColumnRotation / this.Transform.CellWidth * (x - this.Transform.OriginX)) / (this.Transform.CellHeight - this.Transform.ColumnRotation * this.Transform.RowRotation / this.Transform.CellWidth);
-            double xIndexFractional = (x - this.Transform.OriginX - yIndexFractional * this.Transform.RowRotation) / this.Transform.CellWidth;
-
+            (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);
             int xIndex = (int)xIndexFractional;
             int yIndex = (int)yIndexFractional;
 
@@ -199,9 +205,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public (int xIndex, int yIndex) ToGridIndices(double x, double y)
         {
-            double yIndexFractional = (y - this.Transform.OriginY - this.Transform.ColumnRotation / this.Transform.CellWidth * (x - this.Transform.OriginX)) / (this.Transform.CellHeight - this.Transform.ColumnRotation * this.Transform.RowRotation / this.Transform.CellWidth);
-            double xIndexFractional = (x - this.Transform.OriginX - yIndexFractional * this.Transform.RowRotation) / this.Transform.CellWidth;
-
+            (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);
             int xIndex = (int)xIndexFractional;
             int yIndex = (int)yIndexFractional;
 
@@ -241,51 +245,37 @@ namespace Mars.Clouds.GdalExtensions
         }
     }
 
-    public class Grid<TCell> : Grid where TCell : class?
+    public class Grid<TCell> : Grid where TCell : class
     {
-        protected TCell?[] Data { get; private init; }
+        protected TCell[] Data { get; private init; }
 
         public Grid(Grid extent)
-            : base(extent, cloneCrsAndTransform: true)
+            : this(extent, cloneCrsAndTransform: true)
         {
-            this.Data = new TCell?[extent.Cells];
+        }
+
+        public Grid(Grid extent, bool cloneCrsAndTransform)
+            : base(extent, cloneCrsAndTransform)
+        {
+            this.Data = new TCell[this.Cells];
         }
 
         public Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
             : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
         {
-            this.Data = new TCell?[xSizeInCells * ySizeInCells];
+            this.Data = new TCell[this.Cells];
         }
 
-        public TCell? this[int cellIndex]
+        public TCell this[int cellIndex]
         {
             get { return this.Data[cellIndex]; }
             set { this.Data[cellIndex] = value; }
         }
 
-        public TCell? this[int xIndex, int yIndex]
+        public TCell this[int xIndex, int yIndex]
         {
             get { return this[this.ToCellIndex(xIndex, yIndex)]; }
             set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }
-        }
-
-        /// <returns><see cref="bool"/> array whose values are true where cells are null</returns>
-        public bool[,] GetUnpopulatedCellMap()
-        {
-            bool[,] cellMap = new bool[this.SizeX, this.SizeY];
-            for (int yIndex = 0; yIndex < this.SizeY; ++yIndex)
-            {
-                for (int xIndex = 0; xIndex < this.SizeX; ++xIndex) 
-                {
-                    TCell? value = this[xIndex, yIndex];
-                    if (value == null)
-                    {
-                        cellMap[xIndex, yIndex] = true;
-                    }
-                }
-            }
-
-            return cellMap;
         }
     }
 }

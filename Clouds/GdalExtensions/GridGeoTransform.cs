@@ -7,22 +7,12 @@ namespace Mars.Clouds.GdalExtensions
     public class GridGeoTransform
     {
         // https://gdal.org/tutorials/geotransforms_tut.html
-        public double CellHeight { get; set; } // north-south resolution, negative if north up
-        public double CellWidth { get; set; } // east-west resolution
-        public double ColumnRotation { get; init; } // zero if north up 
-        public double OriginX { get; set; }
-        public double OriginY { get; set; }
-        public double RowRotation { get; init; } // zero if north up
-
-        public GridGeoTransform()
-        {
-            this.CellHeight = Double.NaN;
-            this.CellWidth = Double.NaN;
-            this.ColumnRotation = 0.0;
-            this.OriginX = Double.NaN;
-            this.OriginY = Double.NaN;
-            this.RowRotation = 0.0;
-        }
+        public double CellHeight { get; private set; } // north-south resolution, negative if north up
+        public double CellWidth { get; private set; } // east-west resolution
+        public double ColumnRotation { get; private set; } // zero if north up 
+        public double OriginX { get; private set; }
+        public double OriginY { get; private set; }
+        public double RowRotation { get; private set; } // zero if north up
 
         public GridGeoTransform(Dataset rasterDataset)
         {
@@ -102,10 +92,20 @@ namespace Mars.Clouds.GdalExtensions
             this.ColumnRotation = other.ColumnRotation;
         }
 
+        public void Copy(GridGeoTransform other)
+        {
+            this.OriginX = other.OriginX;
+            this.OriginY = other.OriginY;
+            this.CellHeight = other.CellHeight;
+            this.CellWidth = other.CellWidth;
+            this.RowRotation = other.RowRotation;
+            this.ColumnRotation = other.ColumnRotation;
+        }
+
         public static bool Equals(GridGeoTransform transform, GridGeoTransform other)
         {
             // for now, require exact equality
-            // TODO: if needed, allow for cell height to differ in sign
+            // If needed, allow for cell height to differ in sign.
             return (transform.OriginX == other.OriginX) &&
                    (transform.OriginY == other.OriginY) &&
                    (transform.CellHeight == other.CellHeight) &&
@@ -148,6 +148,19 @@ namespace Mars.Clouds.GdalExtensions
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
             double y = this.OriginY + xIndexFractional * this.ColumnRotation + yIndexFractional * this.CellHeight;
             return (x, y);
+        }
+
+        public (double xIndexFractional, double yIndexFractional) ToFractionalIndices(double x, double y)
+        {
+            if (this.ColumnRotation != 0.0)
+            {
+                double yIndexFractional = (y - this.OriginY - this.ColumnRotation / this.CellWidth * (x - this.OriginX)) / (this.CellHeight - this.ColumnRotation * this.RowRotation / this.CellWidth);
+                double xIndexFractional = (x - this.OriginX - yIndexFractional * this.RowRotation) / this.CellWidth;
+                return (xIndexFractional, yIndexFractional);
+            }
+
+            Debug.Assert(this.RowRotation == 0.0);
+            return ((x - this.OriginX) / this.CellWidth, (y - this.OriginY) / this.CellHeight);
         }
     }
 }

@@ -86,7 +86,7 @@ namespace Mars.Clouds.Cmdlets
             metricsRead.Stopwatch.Stop();
 
             string elapsedTimeFormat = metricsRead.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("#,#,#,0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + metricsRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / metricsRead.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + metricsRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / metricsRead.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 

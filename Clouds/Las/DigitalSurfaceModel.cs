@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using OSGeo.GDAL;
 using System;
 using System.Collections.Generic;
@@ -22,12 +23,20 @@ namespace Mars.Clouds.Las
         public RasterBand<UInt16> SourceIDLayer1 { get; private init; }
         public RasterBand<UInt16> SourceIDLayer2 { get; private init; }
 
-        public DigitalSurfaceModel(Grid<PointListZs> tilePoints, RasterBand<float> dtmTile, float minimumLayerSeparation)
-            : base(tilePoints)
+        public DigitalSurfaceModel(string filePath, PointListXyzcs tilePoints, RasterBand<float> dtmTile, PointListGridZs aerialPointZs, float minimumLayerSeparation)
+            : base(dtmTile)
         {
-            if (tilePoints.IsSameExtentAndResolution(dtmTile) == false)
+            // tilePoints must be in the same CRS as the DTM but can have any extent equal to or smaller than the DSM and DTM tiles
+            // If the points extend beyond the DSM/DTM tile then ToInteriorGridIndices() will throw while points are being read.
+            if (SpatialReferenceExtensions.IsSameCrs(tilePoints.Crs, dtmTile.Crs) == false)
             {
-                throw new NotSupportedException("Point grid and DTM tile extents aren't matched. LAS extent " + tilePoints.GetExtentString() + ", DTM extent " + dtmTile.GetExtentString() + ", DSM extent " + this.GetExtent() + ".");
+                string tileName = Tile.GetName(filePath);
+                throw new NotSupportedException(tileName + ": the point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + tilePoints.Crs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
+            }
+            if (dtmTile.IsSameExtentAndResolution(aerialPointZs.Z) == false)
+            {
+                string tileName = Tile.GetName(filePath);
+                throw new NotSupportedException(tileName + ": DTM tiles and aerial point list grid are currently required to be aligned. The point list grid extent is (" + aerialPointZs.Z.GetExtentString() + ") while the DTM extent is (" + dtmTile.GetExtentString() + ").");
             }
 
             this.Surface = new("dsm", this, RasterBand.NoDataDefaultFloat);
@@ -42,6 +51,51 @@ namespace Mars.Clouds.Las
             this.SourceIDSurface = new("sourceIDsurface", this, 0); // leave at default of zero as source IDs 1-65535 are valid
             this.SourceIDLayer1 = new("sourceIDlayer1", this, 0);
             this.SourceIDLayer2 = new("sourceIDlayer2", this, 0);
+
+            // build aerial point lists and accumulate ground points
+            double xOffset = tilePoints.XOffset;
+            double yOffset = tilePoints.YOffset;
+            float zOffset = tilePoints.ZOffset;
+            double xScale = tilePoints.XScaleFactor;
+            double yScale = tilePoints.YScaleFactor;
+            float zScale = tilePoints.ZScaleFactor;
+            for (int pointIndex = 0; pointIndex < tilePoints.Count; ++pointIndex)
+            {
+                // TODO: Can x and y be transformed to cell indices relative to the tile origin with integer math?
+                double x = xOffset + xScale * tilePoints.X[pointIndex];
+                double y = yOffset + yScale * tilePoints.Y[pointIndex];
+                (int xIndex, int yIndex) = this.ToInteriorGridIndices(x, y);
+
+                PointClassification classification = tilePoints.Classification[pointIndex];
+                float z = zOffset + zScale * tilePoints.Z[pointIndex];
+                if (classification == PointClassification.Ground)
+                {
+                    // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
+                    UInt32 groundPoints = this.GroundPoints[xIndex, yIndex];
+                    if (groundPoints == 0)
+                    {
+                        this.Ground[xIndex, yIndex] = z;
+                    }
+                    else
+                    {
+                        this.Ground[xIndex, yIndex] += z;
+                    }
+
+                    this.GroundPoints[xIndex, yIndex] = groundPoints + 1;
+                }
+                else
+                {
+                    // for now, assume all non-ground point types are aerial (noise and withheld points are excluded above)
+                    // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
+                    //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
+                    //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
+                    // PointClassification.Water is currently also treated as non-ground, which is debatable
+                    aerialPointZs.Z[xIndex, yIndex].Add(z);
+
+                    UInt16 sourceID = tilePoints.SourceID[pointIndex];
+                    aerialPointZs.SourceID[xIndex, yIndex].Add(sourceID);
+                }
+            }
 
             // find layers, set default DSM as the highest z in each cell, and set default CHM
             // This loop also sorts each cell's points from highest to lowest z.
@@ -60,70 +114,52 @@ namespace Mars.Clouds.Las
                 }
                 this.Terrain[cellIndex] = dtmZ;
 
-                PointListZs? cellPoints = tilePoints[cellIndex];
-                if (cellPoints == null)
+                UInt32 nGround = this.GroundPoints[cellIndex];
+                if (nGround > 0)
                 {
-                    this.Surface[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.CanopyMaxima3[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.CanopyHeight[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.Layer1[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.Layer2[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.Ground[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    // leave point counts at zero
-                    // leave source IDs at zero
-                    // no cell point list to clear
-                    continue;
-                }
-
-                if (cellPoints.GroundPoints == 0)
-                {
-                    this.Ground[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    // leave ground points at zero
+                    this.Ground[cellIndex] /= nGround;
                 }
                 else
                 {
-                    this.Ground[cellIndex] = cellPoints.GroundMean;
-                    this.GroundPoints[cellIndex] = cellPoints.GroundPoints;
+                    this.Ground[cellIndex] = RasterBand.NoDataDefaultFloat;
                 }
 
-                int aerialPointCount = cellPoints.AerialPoints.Count;
-                if (aerialPointCount == 0)
+                List<float> aerialPointsZ = aerialPointZs.Z[cellIndex];
+                this.AerialPoints[cellIndex] = (UInt32)aerialPointsZ.Count;
+                if (aerialPointsZ.Count == 0)
                 {
+                    // should the digital surface and canopy maxima models be set to ground height, if available?
+                    // should the canopy height model be set to zero?
                     this.Surface[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.CanopyMaxima3[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.CanopyHeight[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.Layer1[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.Layer2[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    this.Ground[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.Terrain[cellIndex] = RasterBand.NoDataDefaultFloat;
                     // leave aerial point count at zero
-                    continue;
-                }
-                else
-                {
-                    // maximum z value for DSM obtained below
-                    this.AerialPoints[cellIndex] = (UInt32)aerialPointCount;
+                    // leave source IDs at zero
+                    continue; // nothing else to do
                 }
 
-                if (aerialPoints.Length < aerialPointCount)
+                if (aerialPoints.Length < aerialPointsZ.Count)
                 {
-                    int sizeIncreaseFactor = Int32.Max(2, aerialPointCount / aerialPoints.Length + 1);
+                    int sizeIncreaseFactor = Int32.Max(2, aerialPointsZ.Count / aerialPoints.Length + 1);
                     aerialPoints = new float[sizeIncreaseFactor * aerialPoints.Length];
                     aerialPointSortIndices = new int[sizeIncreaseFactor * aerialPoints.Length];
                 }
-                
-                cellPoints.AerialPoints.CopyTo(0, aerialPoints, 0, aerialPointCount);
-                for (int pointIndex = 0; pointIndex < aerialPointCount; ++pointIndex)
+
+                aerialPointsZ.CopyTo(0, aerialPoints, 0, aerialPointsZ.Count);
+                for (int pointIndex = 0; pointIndex < aerialPointsZ.Count; ++pointIndex)
                 {
                     aerialPointSortIndices[pointIndex] = pointIndex;
                 }
-                Array.Sort(aerialPoints, aerialPointSortIndices, 0, aerialPointCount); // ascending unstable introsort
+                Array.Sort(aerialPoints, aerialPointSortIndices, 0, aerialPointsZ.Count); // ascending unstable introsort
 
-                float zMax = aerialPoints[aerialPointCount - 1];
+                float zMax = aerialPoints[aerialPointsZ.Count - 1];
                 float zPrevious = zMax;
                 maxIndexByLayer.Clear();
                 maxZbyLayer.Clear();
-                for (int pointIndex = aerialPointCount - 2; pointIndex >= 0; --pointIndex)
+                for (int pointIndex = aerialPointsZ.Count - 2; pointIndex >= 0; --pointIndex)
                 {
                     float z = aerialPoints[pointIndex];
                     float zDelta = zPrevious - z;
@@ -136,31 +172,32 @@ namespace Mars.Clouds.Las
                     zPrevious = z;
                 }
 
+                List<UInt16> aerialPointsSourceID = aerialPointZs.SourceID[cellIndex];
                 this.Surface[cellIndex] = zMax;
-                this.SourceIDSurface[cellIndex] = cellPoints.AerialSourceIDs[aerialPointSortIndices[aerialPointCount - 1]];
+                this.SourceIDSurface[cellIndex] = aerialPointsSourceID[aerialPointSortIndices[aerialPointsZ.Count - 1]];
                 this.CanopyHeight[cellIndex] = zMax - dtmZ;
 
                 if (maxZbyLayer.Count > 0)
                 {
                     this.Layer1[cellIndex] = maxZbyLayer[0];
-                    this.SourceIDLayer1[cellIndex] = cellPoints.AerialSourceIDs[aerialPointSortIndices[maxIndexByLayer[0]]];
+                    this.SourceIDLayer1[cellIndex] = aerialPointsSourceID[aerialPointSortIndices[maxIndexByLayer[0]]];
 
                     if (maxZbyLayer.Count > 1)
                     {
                         this.Layer2[cellIndex] = maxZbyLayer[1];
-                        this.SourceIDLayer2[cellIndex] = cellPoints.AerialSourceIDs[aerialPointSortIndices[maxIndexByLayer[1]]];
+                        this.SourceIDLayer2[cellIndex] = aerialPointsSourceID[aerialPointSortIndices[maxIndexByLayer[1]]];
                     }
                     else
                     {
                         this.Layer2[cellIndex] = RasterBand.NoDataDefaultFloat;
-                        // leave source ID as zero
+                        // leave layer 2 source ID as zero
                     }
                 }
                 else
                 {
                     this.Layer1[cellIndex] = RasterBand.NoDataDefaultFloat;
                     this.Layer2[cellIndex] = RasterBand.NoDataDefaultFloat;
-                    // leave source IDs as zero
+                    // leave both layers' source IDs as zero
                 }
             }
 

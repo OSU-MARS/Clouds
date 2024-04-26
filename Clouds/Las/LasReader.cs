@@ -8,6 +8,13 @@ namespace Mars.Clouds.Las
 {
     public class LasReader : IDisposable
     {
+        // basic perf profile on tiles cached in memory: ReadPoints() for xyzcs, 5950X, DDR4-3200, .NET 8, 9 tiles totaling 28.4 GB
+        // batch size, points  read speed, GB/s
+        // 1                   1.7
+        // 2                   1.9
+        // 5, 10, 100, 1000    2.0
+        private const int ReadExactSizeInPoints = 8;
+
         private bool isDisposed;
 
         public Stream BaseStream { get; private init; }
@@ -35,6 +42,30 @@ namespace Mars.Clouds.Las
 
                 this.isDisposed = true;
             }
+        }
+
+        private static int EstimateCellInitialPointCapacity(LasTile tile, Grid metricsGrid)
+        {
+            double cellArea = metricsGrid.Transform.GetCellArea();
+            double tileArea = tile.GridExtent.GetArea();
+            UInt64 tilePoints = tile.Header.GetNumberOfPoints();
+
+            // edge case: guard against overallocation when tile is smaller than cell
+            if (tileArea <= cellArea)
+            {
+                return (int)tilePoints; // for now, assume tile is completely enclosed within cell
+            }
+
+            // find nearest power of two that's less than mean number of points per cell 
+            // Minimum is List<T>'s default capacity of four.
+            int meanPointsPerCell = (int)(tilePoints * cellArea / tileArea);
+            int cellInitialPointCapacity = 4;
+            for (int nextPowerOfTwo = 2 * cellInitialPointCapacity; nextPowerOfTwo < meanPointsPerCell; nextPowerOfTwo *= 2)
+            {
+                cellInitialPointCapacity = nextPowerOfTwo;
+            }
+
+            return cellInitialPointCapacity;
         }
 
         private void MoveToPoints(LasTile tile)
@@ -426,74 +457,49 @@ namespace Mars.Clouds.Las
             return pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
         }
 
-        public void ReadPointsToGrid(LasTile tile, Grid<PointListZs> dsmGrid)
+        public PointListXyzcs ReadPoints(LasTile lasTile)
         {
-            LasHeader10 lasHeader = tile.Header;
+            LasHeader10 lasHeader = lasTile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(tile);
+            PointListXyzcs tilePoints = new(lasTile);
+            this.MoveToPoints(lasTile);
 
             // read points
-            // See performance notes in ReadPointsToGrid().
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
-            float zOffset = (float)lasHeader.ZOffset;
-            float zScale = (float)lasHeader.ZScaleFactor;
-            // for now, assume point size is small enough to stackalloc
-            // Perf tests suggest at most 1-2% advantage in using a larger buffer to call ReadExactly() less often.
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength];
-            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
+
+            int destinationPointIndex = 0;
+            Span<byte> pointReadBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            for (UInt64 sourcePointIndex = 0; sourcePointIndex < numberOfPoints; sourcePointIndex += LasReader.ReadExactSizeInPoints)
             {
-                this.BaseStream.ReadExactly(pointBytes);
-                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
-                if (notNoiseOrWithheld == false)
-                {
-                    continue;
-                }
+                UInt64 pointsRemainingToRead = numberOfPoints - sourcePointIndex;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
+                int bytesToRead = pointsToRead * lasHeader.PointDataRecordLength;
+                this.BaseStream.ReadExactly(pointReadBuffer[..bytesToRead]);
 
-                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = dsmGrid.ToInteriorGridIndices(x, y);
-
-                PointListZs? dsmCell = dsmGrid[xIndex, yIndex];
-                if (dsmCell == null)
+                // BinaryPrimitives.ReadInt32LittleEndian(), BitConverter.ToInt32(), and shifting bytes all bench to near identical performance
+                // since batch contains eight points Avx2.GatherVector256() and Store() could be used in the typical case no points
+                // are noise or withheld
+                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += lasHeader.PointDataRecordLength)
                 {
-                    dsmCell = new(xIndex, yIndex);
-                    dsmGrid[xIndex, yIndex] = dsmCell;
-                }
-
-                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                if (classification == PointClassification.Ground)
-                {
-                    // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
-                    UInt32 groundPoints = dsmCell.GroundPoints;
-                    if (groundPoints == 0)
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer[batchOffset..];
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                    if (notNoiseOrWithheld == false)
                     {
-                        dsmCell.GroundMean = z;
-                    }
-                    else
-                    {
-                        dsmCell.GroundMean += z;
+                        continue;
                     }
 
-                    dsmCell.GroundPoints = groundPoints + 1;
-                }
-                else
-                {
-                    // for now, assume all non-ground point types are aerial (noise and withheld points are excluded above)
-                    // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
-                    //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
-                    //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
-                    // PointClassification.Water is currently also treated as non-ground, which is debatable
-                    dsmCell.AerialPoints.Add(z);
-
-                    UInt16 sourceID = LasReader.ReadPointSourceID(pointBytes, pointFormat);
-                    dsmCell.AerialSourceIDs.Add(sourceID);
+                    tilePoints.Classification[destinationPointIndex] = classification;
+                    tilePoints.X[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                    tilePoints.Y[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                    tilePoints.Z[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                    tilePoints.SourceID[destinationPointIndex] = LasReader.ReadPointSourceID(pointBytes, pointFormat);
+                    ++destinationPointIndex;
                 }
             }
+
+            tilePoints.Count = destinationPointIndex; // noise or withheld points result in unused capacity at ends of arrays
+            return tilePoints;
         }
 
         public void ReadPointsToGrid(LasTile tile, Grid<PointListZirnc> metricsGrid)
@@ -504,11 +510,7 @@ namespace Mars.Clouds.Las
 
             // set cell capacity to a reasonable fraction of the tile's average density
             // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
-            double cellArea = metricsGrid.Transform.GetCellArea();
-            double tileArea = tile.GridExtent.GetArea();
-            UInt64 tilePoints = lasHeader.GetNumberOfPoints();
-            double nominalMeanPointsPerCell = tilePoints * cellArea / tileArea;
-            int cellInitialPointCapacity = Int32.Min((int)(0.35 * nominalMeanPointsPerCell), (int)tilePoints); // edge case: guard against overallocation when tile is smaller than cell
+            int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(tile, metricsGrid);
             (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = metricsGrid.GetIntersectingCellIndices(tile.GridExtent);
             for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
             {
