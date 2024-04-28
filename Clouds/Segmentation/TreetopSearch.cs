@@ -24,15 +24,15 @@ namespace Mars.Clouds.Segmentation
             this.MinimumTreetopHeight = Single.NaN;
         }
 
-        public void AddTile(string tileName, string dsmTilePath, string dtmTilePath)
+        public void AddTile(string dsmTilePath, string dtmTilePath)
         {
-            DigitalSurfaceModel dsmTile = DigitalSurfaceModel.Read(dsmTilePath);
-            Raster<float> dtmTile = Raster<float>.Read(dtmTilePath);
+            DigitalSurfaceModel dsmTile = DigitalSurfaceModel.Read(dsmTilePath, loadData: true);
+            Raster<float> dtmTile = Raster<float>.Read(dtmTilePath, readData: true);
 
             lock (this.Dsm)
             {
-                this.Dsm.Add(tileName, dsmTile);
-                this.Dtm.Add(tileName,dtmTile);
+                this.Dsm.Add(dsmTile);
+                this.Dtm.Add(dtmTile);
             }
         }
 
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Segmentation
             {
                 throw new NotSupportedException("The DSM and DTM are currently required to be in the same CRS. The DSM CRS is '" + this.Dsm.Crs.GetName() + "' while the DTM CRS is " + this.Dtm.Crs.GetName() + ".");
             }
-            if (this.Dsm.IsSameSpatialResolutionAndExtent(this.Dtm) == false)
+            if (this.Dsm.IsSameExtentAndSpatialResolution(this.Dtm) == false)
             {
                 throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must be of the same size (width and height in cells) and have the same cell size (width and height in meters or feet). DSM cell size (" + this.Dsm.TileCellSizeX + ", " + this.Dsm.TileCellSizeY + "), DTM cell size (" + this.Dtm.TileCellSizeX + ", " + this.Dtm.TileCellSizeY + " " + this.Dtm.Crs.GetLinearUnitsPlural() + "). DSM tile size (" + this.Dsm.TileSizeInCellsX + ", " + this.Dsm.TileSizeInCellsY + "), DTM tile size (" + this.Dtm.TileSizeInCellsX + ", " + this.Dtm.TileSizeInCellsY + ") cells.");
             }
@@ -55,7 +55,7 @@ namespace Mars.Clouds.Segmentation
             {
                 throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must have the same origin. The DSM origin (" + this.Dsm.TileTransform.OriginX + ", " + this.Dsm.TileTransform.OriginY + ") is offset from the DTM origin (" + this.Dtm.TileTransform.OriginX + ", " + this.Dtm.TileTransform.OriginY + ").");
             }
-            if (this.Dsm.IsSameSpatialResolutionAndExtent(this.Dsm) == false)
+            if (this.Dsm.IsSameExtentAndSpatialResolution(this.Dsm) == false)
             {
                 throw new NotSupportedException("Since DTM resampling is not currently implemented, DSM and DTM rasters must have the same extent and cell size.");
             }

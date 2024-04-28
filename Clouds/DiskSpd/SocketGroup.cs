@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mars.Clouds.Extensions;
+using System;
 using System.Xml;
 
 namespace Mars.Clouds.DiskSpd
@@ -24,8 +25,8 @@ namespace Mars.Clouds.DiskSpd
             switch (reader.Name)
             {
                 case "Group":
-                    this.Group = XmlSerializable.ReadAttributeAsInt32(reader, "Group");
-                    this.Processors = XmlSerializable.ReadAttributeAsUInt32Hex(reader, "Processors");
+                    this.Group = reader.ReadAttributeAsInt32("Group");
+                    this.Processors = reader.ReadAttributeAsUInt32Hex("Processors");
                     reader.Read();
                     break;
                 default:

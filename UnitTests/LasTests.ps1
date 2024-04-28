@@ -23,8 +23,8 @@ Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las
 $tiles = "s042?0w068?0"
 Get-Dsm -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tiles.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
-# DSM generation, all on forest and buffer tiles
-Get-Dsm -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM3" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
+# DSM generation, all on forest and buffer tiles from 3.5 drive
+Get-Dsm -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
 # orthoimage generation, single tile
 $tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"

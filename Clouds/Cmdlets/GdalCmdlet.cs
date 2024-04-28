@@ -108,7 +108,7 @@ namespace Mars.Clouds.Cmdlets
             return tilePaths;
         }
 
-        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IFileSerializable<TTile>
+        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IRasterSerializable<TTile>
         {
             VirtualRaster<TTile> vrt = [];
 
@@ -116,10 +116,8 @@ namespace Mars.Clouds.Cmdlets
             if (tilePaths.Count == 1)
             {
                 // synchronous read for single tiles
-                string tilePath = tilePaths[0];
-                string tileName = Tile.GetName(tilePath);
-                TTile tile = TTile.Read(tilePath);
-                vrt.Add(tileName, tile);
+                TTile tile = TTile.Read(tilePaths[0], readData: true);
+                vrt.Add(tile);
             }
             else
             {
@@ -140,15 +138,14 @@ namespace Mars.Clouds.Cmdlets
                     {
                         // find treetops in tile
                         string tilePath = tilePaths[tileIndex];
-                        string tileName = Tile.GetName(tilePath);
-                        TTile tile = TTile.Read(tilePath);
+                        TTile tile = TTile.Read(tilePath, readData: true);
                         lock (vrt)
                         {
-                            vrt.Add(tileName, tile);
+                            vrt.Add(tile);
                             ++tilesLoaded;
                         }
 
-                        mostRecentDsmTileName = tileName;
+                        mostRecentDsmTileName = Tile.GetName(tilePath);
                     });
                 });
 

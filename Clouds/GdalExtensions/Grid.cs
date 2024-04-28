@@ -20,8 +20,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (cloneCrsAndTransform)
             {
-                crs.ExportToWkt(out string wkt, []);
-                this.Crs = new(wkt);
+                this.Crs = crs.Clone();
                 this.Transform = new(transform);
             }
             else
@@ -106,24 +105,8 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
         }
 
-        public bool IsSameExtent(Extent otherExtent)
-        {
-            (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
-            // for now, use exact equality
-            return (thisXmin == otherExtent.XMin) && (thisXmax == otherExtent.XMax) && (thisYmin == otherExtent.YMin) && (thisYmax == otherExtent.YMax);
-        }
-
-        //public bool IsSameExtent(Grid other)
-        //{
-        //    (double thisXmin, double thisXmax, double thisYmin, double thisYmax) = this.GetExtent();
-        //    (double otherXmin, double otherXmax, double otherYmin, double otherYmax) = other.GetExtent();
-
-        //    // for now, use exact equality
-        //    return (thisXmin == otherXmin) && (thisXmax == otherXmax) && (thisYmin == otherYmin) && (thisYmax == otherYmax);
-        //}
-
         /// <remarks>Does not check CRS.</remarks>
-        public bool IsSameExtentAndResolution(Grid other)
+        public bool IsSameExtentAndSpatialResolution(Grid other)
         {
             if ((this.SizeX != other.SizeX) || (this.SizeY != other.SizeY) || 
                 (GridGeoTransform.Equals(this.Transform, other.Transform) == false))

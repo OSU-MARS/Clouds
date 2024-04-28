@@ -1,10 +1,10 @@
 ﻿### Overview
 A research codebase with an ad hoc collection of PowerShell cmdlets for working with remotely sensed data, primarily point clouds.
 
-- Get-Dsm: get digital surface, canopy maxima, and canopy height models from a set of point cloud tiles with supporting information
-- Get-GridMetrics: get z, intensity, and other common grid metrics from a set of point cloud tiles
-- Get-Orthoimages: get 16 bit RGB+NIR orthoimages with LiDAR intensity bands from point clouds
-- Get-TreeTops: find treetop candidates in a digital surface or canopy height model
+- `Get-Dsm`: get digital surface, canopy maxima, and canopy height models from a set of point cloud tiles with supporting information
+- `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
+- `Get-Orthoimages`: get 16 bit RGB+NIR orthoimages with LiDAR intensity bands from point clouds
+- `Get-TreeTops`: find treetop candidates in a digital surface or canopy height model
 
 The cmdlets are multithreaded at the tile level with defaults set favoring use cases with point cloud datasets are large enough to be stored
 on 3.5 inch drives and don't fit in memory while DSMs and DTMs (digital surface and terrain models) are stored on faster drives (NVMe, SSD). 
@@ -15,7 +15,9 @@ directories are searched for data tiles .las and .tif are the default file exten
 DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3 or newer processors with 12–16 cores and 64–128 GB of DDR are 
 assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most such processing tasks fitting within 
 64 GB DDR, though 96 or 128 GB is preferable. Tile processing rates depend on drive and processor core capabilities but .las read speeds can 
-exceed 2.0 GB/s per thread. AVX, AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently supported.
+exceed 2.0 GB/s per thread. AVX, AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently utilized. QGIS
+(as of the 3.34 LTR) is slow to work with larger virtual rasters, which Clouds can't really do anything about, though using `Get-Vrt` to generate
+.vrt files with a minimal set of bands and tiles offers a mitigation.
 
 Code is currently pre-alpha and provided as is. Typically, the head commit should compile and pass unit tests but this isn't guaranteed. 
 APIs are volatile and subject to breaking changes.
@@ -23,19 +25,20 @@ APIs are volatile and subject to breaking changes.
 ### Supporting cmdlets
 Supporting tools are
 
-- Get-LocalMaxima: get local maxima radii in a DSM (or DTM)
-- Get-ScanMetrics: similar to Get-GridMetrics but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
-- Get-TreeSize: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
-- Get-LasInfo: read a .las or .laz file's header
+- `Get-LocalMaxima`: get local maxima radii in a DSM (or DTM)
+- `Get-ScanMetrics`: similar to `Get-GridMetrics` but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
+- `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
+- `Get-LasInfo`: read a .las or .laz file's header
+- `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 
 ### Dataset structure
 A LiDAR dataset is assumed to consist of
 
 - .las point cloud tiles
 - .tif digital terrain models
-- .tif raster tiles generated from the point cloud tiles at fairly high resolution (typically 10 cm to 1 m, Get-Dsm, Get-Orthoimages)
-- .tif single rasters covering the study area at lower resolution (typically 10–30 m, Get-GridMetrics, Get-ScanMetrics)
-- .gpkg vector tiles of treetops located in a digital surface model (Get-TreeTops)
+- .tif raster tiles generated from the point cloud tiles at fairly high resolution (typically 10 cm to 1 m, `Get-Dsm`, `Get-Orthoimages`)
+- .tif single rasters covering the study area at lower resolution (typically 10–30 m, `Get-GridMetrics`, `Get-ScanMetrics`)
+- .gpkg vector tiles of treetops located in a digital surface model (`Get-TreeTops`)
 
 It's assumed all of the tiles use the same coordinate reference system, are aligned with the coordinate system, are the same size, and
 provided gapless, non-overlapping coverage of the study area. Grid metrics, scan metrics, orthoimagery, and the digital terrain model (DTM)
@@ -49,14 +52,18 @@ avoid collapses observed with tools such as QGIS which, as version 3.28.15 (Janu
 100 GB virtual rasters with a dozen bands. Subsequent processing, such as treetop identification, may load bands from both data and
 diagnostic raster tiles.
 
-### Limitations
-Currently each rasterization cmdlet performs its own independent read of point cloud tiles. With 3.5 inch drives this likely means tile
-processing bottlenecks on the drive. Scripting cmdlets sequences and letting them running unattended mitigates read speed limitations. 
-However, the redundant reads still accumulate towards drives' annual workload rate limits.
+### No data values
+No data values are detected and ignored for all rasters and, in general, propagate. For example, a no data value in either the digital 
+surface or digital terrain model results in a no data value for the canopy height model. Generation of pit free surface models or other
+types of no data filling is therefore not required, though alternate approaches fitting canopy models ([Paris and Bruzzone 2015](https://doi.org/10.1109/TGRS.2014.2324016)) 
+will likely be beneficial on sparse point clouds. NaN (not a number) is used as the default no data value for floating point bands. For
+signed integer bands the most negative value (-128, -32,768, -2,147,483,648, or -9,223,372,036,854,775,808) is the default no data and,
+for unsigned integers, the most positive value is used (255, 65,535, 4,294,967,295, or 18,446,744,073,709,551,615).
 
-GeoTIFFs with different datatypes in different bands are perhaps best described as semi-supported within the [OSGEO](https://www.osgeo.org/) 
-toolset. Currently GeoTIFFs are written with all bands being of the same type using GDAL's default no data profile that requires all bands
-have the same no data value. Investigation is needed to assess use of other profiles and heterogenous band types.
+No data values can differ among tiles of virtual rasters, often necessarily so when tiles are sharded into files of different data types 
+or when tile data types are heterogenous. If raster bands are converted to wider types (for example, bytes to 16 bit unsigned integers) 
+no data values are left unchanged but, on conversion to narrower types, no data values are propagated. When it is unavoidable, data is 
+altered slightly to allow propagation, most commonly by changing 65535 in image data to 65534.
 
 ### Dependencies
 Clouds is a .NET 8.0 assembly which includes C# cmdlets for PowerShell Core. It therefore makes use of both the System.Management.Automation
@@ -68,12 +75,32 @@ Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks i
 write transactions on large GeoPackages.
 
 Clouds is developed using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/) 
-edition. Clouds is only tested on Windows 10 but should run on any .NET supported platform.
+edition. Clouds is only tested on Windows 10 22H2 but should run on any .NET supported platform.
 
 ### Limitations
-Current constraints are
+Currently, each rasterization cmdlet performs its own independent read of point cloud tiles. With 3.5 inch drives this likely means tile
+processing bottlenecks on the drive. Scripting cmdlets sequences and letting them running unattended mitigates read speed limitations. 
+However, the redundant reads still accumulate towards drives' annual workload rate limits.
 
+GeoTIFFs with different datatypes in different bands are perhaps best described as semi-supported within the [OSGEO](https://www.osgeo.org/) 
+toolset. Currently GeoTIFFs are written with all bands being of the same type using GDAL's default no data profile that requires all bands
+have the same no data value. Investigation is needed to assess use of other GeoTIFF profiles, heterogenous band types within GeoTIFFs, and
+raster formats with more complete support for mixed band types.
+
+Virtual rasters are traversed rowwise. This is unimportant when output tile generation uses only data from a single corresponding source tile.
+When outputs need to consider data in adjacent tiles, currently entire rows are unlocked and freed. Memory use therefore scales with the
+width of the study area, which is helpful to areas that are longer north-south than they are east-west, neutral to square areas, and 
+disadvantageous to areas which are wide east-west. More intelligent unlocking, freeing, and the ability to traverse wide areas columnwise
+have not been implemented.
+
+Also,
+
+- Supported raster data types are real values (8, 16, 32, and 64 bit signed and unsigned integers, single and double precision floating point).
+  While GDAL also supports complex values and two other cell types, Clouds does not.
 - The user has to know what thread counts to specify for optimal performance. Thread selection is automatable but requires performance 
-  characterization and drive capability identification.
-- There's not a way to attach multiple outputs to a single .las file read, likely resulting in longer runtimes and greater drive workload 
-  rates due a given .las file being read multiple times by different cmdlets.
+  characterization and drive capability identification that is not currently implemented.
+- QGIS sometimes modifies virtual rasters (.vrts) by adding or updatating band metadata and approximate histograms when a project is closed. 
+  When QGIS does this it also either inserts `BlockYSize="1"` attributes on all the tiles listed in the .vrt or overwrites existing 
+  `BlockYSize` values with 1, dramatically reducing performance for virtual rasters composed of GeoTIFF tiles. Clouds can't do much about 
+  this QGIS-GDAL issue but a quick repair is to use find/replace in a text editor remove `BlockYSize` attributes or set them to the tiles'
+  y size in cells.

@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <Platforms>x64</Platforms>
     <RootNamespace>Mars.$(MSBuildProjectName)</RootNamespace>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -18,7 +19,11 @@
   <ItemGroup>
     <PackageReference Include="MaxRev.Gdal.Core" Version="3.8.3.286" />
     <PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="3.8.3.259" />
-    <PackageReference Include="System.Management.Automation" Version="7.4.1" />
+    <PackageReference Include="System.Management.Automation" Version="7.4.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="$(MSBuildProjectName).UnitTests" />
+  </ItemGroup>
+  
 </Project>

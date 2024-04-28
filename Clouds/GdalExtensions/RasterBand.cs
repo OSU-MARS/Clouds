@@ -1,5 +1,4 @@
 ﻿using OSGeo.GDAL;
-using OSGeo.OSR;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
@@ -61,6 +60,7 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public abstract DataType GetGdalDataType();
+        public abstract double GetNoDataValueAsDouble();
         public abstract GCHandle GetPinnedDataHandle<TOutput>(TOutput noDataValue) where TOutput : INumber<TOutput>;
 
         public static DataType GetGdalDataType<TBand>() where TBand : INumber<TBand>
@@ -83,35 +83,13 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public abstract bool IsNoData(int xIndex, int yIndex);
-    }
 
-    public class RasterBand<TBand> : RasterBand where TBand : INumber<TBand>
-    {
-        public TBand[] Data { get; private init; }
-        public TBand NoDataValue { get; private set; }
-
-        public RasterBand(Dataset rasterDataset, Band gdalBand)
-            : base(rasterDataset, gdalBand)
+        protected static void ReadData<TBand>(Band gdalBand, TBand[] data)
         {
-            DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
-            if (gdalBand.DataType != gdalDataType)
-            {
-                string[] sourceFiles = gdalBand.GetDataset().GetFileList();
-                string message = "A RasterBand<" + typeof(TBand).Name + "> cannot be loaded " + (sourceFiles.Length > 0 ? "from '" + sourceFiles[0] + "'" : String.Empty) + " because band '" + gdalBand.GetDescription() + "' is of type " + gdalBand.DataType + ".";
-                throw new NotSupportedException(message);
-            }
-
-            this.SetNoDataValue(gdalBand);
-            this.Data = new TBand[gdalBand.XSize * gdalBand.YSize];
-
-            // for now, load all raster data on creation
-            // In some use cases or failure paths it's desirable to load the band lazily but this isn't currently supported.
-            // See https://stackoverflow.com/questions/15958830/c-sharp-generics-cast-generic-type-to-value-type for discussion of
-            // C# generics' limitations in recognizing TBand[] as float[], int[], ...
-            GCHandle dataPin = GCHandle.Alloc(this.Data, GCHandleType.Pinned);
+            GCHandle dataPin = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
-                CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: this.SizeX, ySize: this.SizeY, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.SizeX, buf_ySize: this.SizeY, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
                 GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
             }
             finally
@@ -119,14 +97,88 @@ namespace Mars.Clouds.GdalExtensions
                 dataPin.Free();
             }
         }
+    }
 
-        public RasterBand(Band gdalBand, Raster raster)
-            : this(gdalBand.GetDescription(), raster)
+    public class RasterBand<TBand> : RasterBand where TBand : IMinMaxValue<TBand>, INumber<TBand>
+    {
+        public TBand[] Data { get; private init; }
+        public TBand NoDataValue { get; private set; }
+
+        public RasterBand(Dataset rasterDataset, Band gdalBand, bool readData)
+            : base(rasterDataset, gdalBand)
+        {
+            DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
+            if ((gdalBand.DataType != thisDataType) && (DataTypeExtensions.IsExactlyExpandable(gdalBand.DataType, thisDataType) == false))
+            {
+                // debatable if this error should be thrown when loadData is false
+                // For now, assume it's preferable not to defer detection.
+                string[] sourceFiles = gdalBand.GetDataset().GetFileList();
+                string message = "A RasterBand<" + typeof(TBand).Name + "> cannot be loaded " + (sourceFiles.Length > 0 ? "from '" + sourceFiles[0] + "'" : String.Empty) + " because band '" + gdalBand.GetDescription() + "' is of type " + gdalBand.DataType + ".";
+                throw new NotSupportedException(message);
+            }
+
+            this.SetNoDataValue(gdalBand);
+
+            if (readData)
+            {
+                this.Data = new TBand[this.Cells];
+                if (gdalBand.DataType == thisDataType)
+                {
+                    RasterBand.ReadData(gdalBand, this.Data);
+                }
+                else
+                {
+                    // no data values are left unchanged
+                    switch (gdalBand.DataType) 
+                    {
+                        case DataType.GDT_Byte:
+                            byte[] bufferUInt8 = new byte[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferUInt8);
+                            DataTypeExtensions.Convert(bufferUInt8, this.Data);
+                            break;
+                        case DataType.GDT_Int8:
+                            sbyte[] bufferInt8 = new sbyte[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferInt8);
+                            DataTypeExtensions.Convert(bufferInt8, this.Data);
+                            break;
+                        case DataType.GDT_Int16:
+                            Int16[] bufferInt16 = new Int16[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferInt16);
+                            DataTypeExtensions.Convert(bufferInt16, this.Data);
+                            break;
+                        case DataType.GDT_Int32:
+                            Int32[] bufferInt32 = new Int32[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferInt32);
+                            DataTypeExtensions.Convert(bufferInt32, this.Data);
+                            break;
+                        case DataType.GDT_UInt16:
+                            UInt16[] bufferUInt16 = new UInt16[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferUInt16);
+                            DataTypeExtensions.Convert(bufferUInt16, this.Data);
+                            break;
+                        case DataType.GDT_UInt32:
+                            UInt32[] bufferUInt32 = new UInt32[this.Cells];
+                            RasterBand.ReadData(gdalBand, bufferUInt32);
+                            DataTypeExtensions.Convert(bufferUInt32, this.Data);
+                            break;
+                        default:
+                            throw new NotSupportedException("Cannot expand band source data type " + gdalBand.DataType + " to " + thisDataType + ".");
+                    }
+                }
+            }
+            else
+            {
+                this.Data = [];
+            }
+        }
+
+        public RasterBand(Raster raster, Band gdalBand)
+            : this(raster, gdalBand.GetDescription())
         {
             this.SetNoDataValue(gdalBand);
         }
 
-        public RasterBand(string name, Raster raster, TBand noDataValue)
+        public RasterBand(Raster raster, string name, TBand noDataValue)
             : base(name, raster)
         {
             this.Data = new TBand[this.SizeX * this.SizeY];
@@ -135,8 +187,8 @@ namespace Mars.Clouds.GdalExtensions
             this.NoDataValue = noDataValue;
         }
 
-        public RasterBand(string name, Raster raster)
-            : this(name, raster, RasterBand<TBand>.GetDefaultNoDataValue())
+        public RasterBand(Raster raster, string name)
+            : this(raster, name, RasterBand<TBand>.GetDefaultNoDataValue())
         {
             // change this.HasNoDataValue back to false as the caller did not specify a no data value
             // Leave default no data value in case caller sets HasNoDataValue but not NoDataValue.
@@ -177,6 +229,16 @@ namespace Mars.Clouds.GdalExtensions
         public override DataType GetGdalDataType()
         {
             return RasterBand.GetGdalDataType<TBand>();
+        }
+
+        public override double GetNoDataValueAsDouble()
+        {
+            if (this.HasNoDataValue)
+            {
+                return Double.CreateChecked(this.NoDataValue);
+            }
+
+            throw new InvalidOperationException("No data value requested but band does not have a no data value.");
         }
 
         public override GCHandle GetPinnedDataHandle<TOutput>(TOutput outputNoDataValue)
@@ -274,6 +336,31 @@ namespace Mars.Clouds.GdalExtensions
             this.HasNoDataValue = true;
             this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
+        }
+
+        public bool TryGetMaximumValue(out TBand maximumValue)
+        {
+            maximumValue = TBand.MinValue;
+            if (this.HasNoDataValue)
+            {
+                maximumValue = this.NoDataValue;
+            }
+
+            for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
+            {
+                TBand value = this[cellIndex];
+                if (this.IsNoData(value))
+                {
+                    continue;
+                }
+
+                if (this.IsNoData(maximumValue) || (value > maximumValue))
+                {
+                    maximumValue = value;
+                }
+            }
+
+            return this.IsNoData(maximumValue) == false;
         }
     }
 }

@@ -10,6 +10,16 @@ namespace Mars.Clouds.GdalExtensions
             return crs.GetLinearUnits() == 1.0 ? "m" : "feet";
         }
 
+        public static string GetWkt(this SpatialReference crs)
+        {
+            if (crs.ExportToWkt(out string wkt, []) != OgrError.NONE)
+            {
+                throw new InvalidOperationException("Exporting CRS '" + crs.GetName() + "' to well known text failed.");
+            }
+
+            return wkt;
+        }
+
         public static bool IsSameCrs(SpatialReference crs1, SpatialReference crs2)
         {
             if (crs1.IsSameGeogCS(crs2) != 1)

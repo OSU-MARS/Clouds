@@ -5,7 +5,7 @@ using System.Numerics;
 
 namespace Mars.Clouds.Las
 {
-    public class ImageRaster<TPixel> : Raster<TPixel> where TPixel : INumber<TPixel>
+    public class ImageRaster<TPixel> : Raster<TPixel> where TPixel : IMinMaxValue<TPixel>, INumber<TPixel>
     {
         // first returns
         public RasterBand<TPixel> Red { get; private init; }

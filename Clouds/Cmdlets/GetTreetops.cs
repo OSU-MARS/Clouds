@@ -69,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 // single tile case
                 string dsmTilePath = dsmTilePaths[0];
-                treetopSearch.AddTile(Tile.GetName(dsmTilePath), dsmTilePath, this.Dtm);
+                treetopSearch.AddTile(dsmTilePath, this.Dtm);
                 treetopSearch.BuildGrids();
                 treetopCandidates += treetopSearch.FindTreetops(0, 0, this.Treetops);
             }
@@ -100,7 +100,7 @@ namespace Mars.Clouds.Cmdlets
                         string dsmTileFileName = Path.GetFileName(dsmTilePath);
                         string dtmTilePath = Path.Combine(this.Dtm, dsmTileFileName);
                         string tileName = Tile.GetName(dsmTilePath);
-                        treetopSearch.AddTile(tileName, dsmTilePath, dtmTilePath);
+                        treetopSearch.AddTile(dsmTilePath, dtmTilePath);
 
                         mostRecentDsmTileName = tileName;
                         Interlocked.Increment(ref tilesLoaded);

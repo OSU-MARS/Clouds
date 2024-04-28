@@ -14,27 +14,22 @@ namespace Mars.Clouds.GdalExtensions
         public double OriginY { get; private set; }
         public double RowRotation { get; private set; } // zero if north up
 
+        public GridGeoTransform()
+        {
+            this.CellHeight = Double.NaN;
+            this.CellWidth = Double.NaN;
+            this.ColumnRotation = Double.NaN;
+            this.OriginX = Double.NaN;
+            this.OriginY = Double.NaN;
+            this.RowRotation = Double.NaN;
+        }
+
         public GridGeoTransform(Dataset rasterDataset)
         {
             // https://gdal.org/api/gdaldataset_cpp.html#classGDALDataset_1a5101119705f5fa2bc1344ab26f66fd1d
             double[] padfTransform = new double[6];
             rasterDataset.GetGeoTransform(padfTransform);
-            this.OriginX = padfTransform[0];
-            this.CellWidth = padfTransform[1];
-            this.RowRotation = padfTransform[2];
-            this.OriginY = padfTransform[3];
-            this.ColumnRotation = padfTransform[4];
-            this.CellHeight = padfTransform[5];
-
-            if ((Double.IsFinite(this.OriginX) == false) ||
-                (Double.IsFinite(this.OriginY) == false) ||
-                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
-                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
-                (Double.IsFinite(this.ColumnRotation) == false) ||
-                (Double.IsFinite(this.RowRotation) == false))
-            {
-                throw new ArgumentOutOfRangeException(nameof(rasterDataset));
-            }
+            this.SetTransform(padfTransform);
         }
 
         public GridGeoTransform(double originX, double originY, double cellWidth, double cellHeight)
@@ -148,6 +143,40 @@ namespace Mars.Clouds.GdalExtensions
             // Yprojected = padfTransform[3] + pixelIndexX * padfTransform[4] + pixelIndexY * padfTransform[5];
             double y = this.OriginY + xIndexFractional * this.ColumnRotation + yIndexFractional * this.CellHeight;
             return (x, y);
+        }
+
+        public void SetCellSize(double width, double height)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(width, 0.0, nameof(width));
+            ArgumentOutOfRangeException.ThrowIfEqual(height, 0.0, nameof(width));
+
+            this.CellWidth = width;
+            this.CellHeight = height;
+        }
+
+        public void SetTransform(ReadOnlySpan<double> padfTransform)
+        {
+            if (padfTransform.Length != 6)
+            {
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform array has length " + padfTransform.Length + " rather than 6.");
+            }
+
+            this.OriginX = padfTransform[0];
+            this.CellWidth = padfTransform[1];
+            this.RowRotation = padfTransform[2];
+            this.OriginY = padfTransform[3];
+            this.ColumnRotation = padfTransform[4];
+            this.CellHeight = padfTransform[5];
+
+            if ((Double.IsFinite(this.OriginX) == false) ||
+                (Double.IsFinite(this.OriginY) == false) ||
+                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
+                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
+                (Double.IsFinite(this.ColumnRotation) == false) ||
+                (Double.IsFinite(this.RowRotation) == false))
+            {
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform contains non-finite numbers, a negative cell height, or a negative cell width.");
+            }
         }
 
         public (double xIndexFractional, double yIndexFractional) ToFractionalIndices(double x, double y)

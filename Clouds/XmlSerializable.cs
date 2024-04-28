@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Globalization;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
@@ -11,40 +10,6 @@ namespace Mars.Clouds
         XmlSchema? IXmlSerializable.GetSchema()
         {
             return null;
-        }
-
-        protected static float ReadAttributeAsFloat(XmlReader reader, string attributeName)
-        {
-            string? attributeValue = reader.GetAttribute(attributeName);
-            if (attributeValue == null)
-            {
-                throw new XmlException("Element " + reader.Name + " does not have a " + attributeName + " attribute.");
-            }
-            return Single.Parse(attributeValue);
-        }
-        
-        protected static Int32 ReadAttributeAsInt32(XmlReader reader, string attributeName)
-        {
-            string? attributeValue = reader.GetAttribute(attributeName);
-            if (attributeValue == null)
-            {
-                throw new XmlException("Element " + reader.Name + " does not have a " + attributeName + " attribute.");
-            }
-            return Int32.Parse(attributeValue);
-        }
-
-        protected static UInt32 ReadAttributeAsUInt32Hex(XmlReader reader, string attributeName)
-        {
-            string? attributeValue = reader.GetAttribute(attributeName);
-            if (attributeValue == null)
-            {
-                throw new XmlException("Element " + reader.Name + " does not have a " + attributeName + " attribute.");
-            }
-            if (attributeValue.StartsWith("0x") == false)
-            {
-                throw new XmlException("Element " + reader.Name + "'s " + attributeName + " attribute does not start with '0x'.");
-            }
-            return UInt32.Parse(attributeValue[2..], NumberStyles.HexNumber);
         }
 
         public void ReadXml(XmlReader reader)

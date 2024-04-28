@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 
@@ -12,9 +12,9 @@ namespace Mars.Clouds.Cmdlets
 
         [Parameter(Mandatory = true, HelpMessage = "Path at which to begin enumeration of directory sizes.")]
         [ValidateNotNullOrEmpty]
-        public string? Path { get; set; }
+        public string Path { get; set; }
 
-        [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 256 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
+        [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 512 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
         public EnumerationOptions EnumerationOptions { get; set; }
 
         public GetTreeSize()
@@ -26,6 +26,7 @@ namespace Mars.Clouds.Cmdlets
                 BufferSize = 512 * 1024,
                 IgnoreInaccessible = true
             };
+            this.Path = String.Empty;
         }
 
         private void EnumerateDirectoryFilesAndSubdirectories(DirectoryInfo directoryInfo)
@@ -79,10 +80,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            Debug.Assert(this.Path != null);
-
             this.EnumerateDirectoryFilesAndSubdirectories(new DirectoryInfo(this.Path));
-
             this.WriteObject(this.directorySizes);
         }
 

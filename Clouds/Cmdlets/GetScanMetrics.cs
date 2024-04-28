@@ -23,7 +23,7 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert(String.IsNullOrEmpty(this.Cells) == false);
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset);
+            Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
 
             string cmdletName = "Get-GridMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();

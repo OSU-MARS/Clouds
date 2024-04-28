@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mars.Clouds.Extensions;
+using System;
 using System.Xml;
 
 namespace Mars.Clouds.DiskSpd
@@ -44,18 +45,18 @@ namespace Mars.Clouds.DiskSpd
             switch (reader.Name)
             {
                 case "Bucket":
-                    this.SampleMillisecond = XmlSerializable.ReadAttributeAsInt32(reader, "SampleMillisecond");
-                    this.Read = XmlSerializable.ReadAttributeAsInt32(reader, "Read");
-                    this.Write = XmlSerializable.ReadAttributeAsInt32(reader, "Write");
-                    this.Total = XmlSerializable.ReadAttributeAsInt32(reader, "Total");
-                    this.ReadMinLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "ReadMinLatencyMilliseconds");
-                    this.ReadMaxLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "ReadMaxLatencyMilliseconds");
-                    this.ReadAvgLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "ReadAvgLatencyMilliseconds");
-                    this.ReadLatencyStdDev = XmlSerializable.ReadAttributeAsFloat(reader, "ReadLatencyStdDev");
-                    this.WriteMinLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "WriteMinLatencyMilliseconds");
-                    this.WriteMaxLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "WriteMaxLatencyMilliseconds");
-                    this.WriteAvgLatencyMilliseconds = XmlSerializable.ReadAttributeAsFloat(reader, "WriteAvgLatencyMilliseconds");
-                    this.WriteLatencyStdDev = XmlSerializable.ReadAttributeAsFloat(reader, "WriteLatencyStdDev");
+                    this.SampleMillisecond = reader.ReadAttributeAsInt32("SampleMillisecond");
+                    this.Read = reader.ReadAttributeAsInt32("Read");
+                    this.Write = reader.ReadAttributeAsInt32("Write");
+                    this.Total = reader.ReadAttributeAsInt32("Total");
+                    this.ReadMinLatencyMilliseconds = reader.ReadAttributeAsFloat("ReadMinLatencyMilliseconds");
+                    this.ReadMaxLatencyMilliseconds = reader.ReadAttributeAsFloat("ReadMaxLatencyMilliseconds");
+                    this.ReadAvgLatencyMilliseconds = reader.ReadAttributeAsFloat("ReadAvgLatencyMilliseconds");
+                    this.ReadLatencyStdDev = reader.ReadAttributeAsFloat("ReadLatencyStdDev");
+                    this.WriteMinLatencyMilliseconds = reader.ReadAttributeAsFloat("WriteMinLatencyMilliseconds");
+                    this.WriteMaxLatencyMilliseconds = reader.ReadAttributeAsFloat("WriteMaxLatencyMilliseconds");
+                    this.WriteAvgLatencyMilliseconds = reader.ReadAttributeAsFloat("WriteAvgLatencyMilliseconds");
+                    this.WriteLatencyStdDev = reader.ReadAttributeAsFloat("WriteLatencyStdDev");
                     reader.Read();
                     break;
                 default:

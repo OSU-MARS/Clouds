@@ -78,10 +78,10 @@ namespace Mars.Clouds.Cmdlets
                         return; // treetop tile has no corresponding classification tile
                     }
 
-                    Raster<byte> classificationTile = Raster<byte>.Read(classificationTilePath);
+                    Raster<byte> classificationTile = Raster<byte>.Read(classificationTilePath, readData: true);
                     lock (classificationTiles)
                     {
-                        classificationTiles.Add(treetopTileName, classificationTile);
+                        classificationTiles.Add(classificationTile);
                         ++tilesLoaded;
                     }
                 });
@@ -121,7 +121,7 @@ namespace Mars.Clouds.Cmdlets
                     using DataSource? treetopTile = Ogr.Open(treetopTilePath, update: 0);
                     using TreetopLayer treetopLayer = TreetopLayer.Open(treetopTile);
                     SpatialReference tileCrs = treetopLayer.GetSpatialReference();
-                    if (tileCrs.IsSame(classificationTiles.Crs, []) != 1)
+                    if (SpatialReferenceExtensions.IsSameCrs(tileCrs, classificationTiles.Crs) == false)
                     {
                         throw new NotSupportedException("Tile '" + treetopTilePath + "' does not have the same coordinate system ('" + tileCrs.GetName() + "') as other tiles ('" + classificationTiles.Crs.GetName() + "').");
                     }

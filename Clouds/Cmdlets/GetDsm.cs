@@ -17,7 +17,7 @@ namespace Mars.Clouds.Cmdlets
     {
         private const int DsmCreationTimeoutInMs = 1000;
 
-        [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to write DSM to as a GeoTIFF or 2,3) path to a directory to write DSM tiles to. The DSM's cell sizes and positions will be the same as the DTM's.")]
+        [Parameter(Mandatory = true, Position = 1, HelpMessage = "Path to write DSM to as a GeoTIFF or path to a directory to write DSM tiles to. The DSM's cell sizes and positions will be the same as the DTM's.")]
         [ValidateNotNullOrWhiteSpace]
         public string? Dsm { get; set; }
 
@@ -85,7 +85,7 @@ namespace Mars.Clouds.Cmdlets
                         int dsmTileIndexY;
                         lock (dsmReadCreateWrite.Dsm)
                         {
-                            (dsmTileIndexX, dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(lasTile.Name, dsmTileToAdd);
+                            (dsmTileIndexX, dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTileToAdd);
                         }
                     }
                     catch (Exception exception)
@@ -186,8 +186,9 @@ namespace Mars.Clouds.Cmdlets
             //
             // Basic perf timings (5950X):
             //   unconstrained single threaded read => 2.0 GB/s
-            //   3.5 inch hard drive @ 250 MB/s => TBD worker threads
-            int workerThreads = Int32.Min(this.MaxThreads - this.ReadThreads, lasGrid.NonNullCells);
+            //   3.5 inch hard drive @ 250 MB/s => single reader, one, maybe two worker threads
+            // For now, drop to a minimum of two workers unless -MaxThreads constrains to a single worker.
+            int workerThreads = Int32.Min(Int32.Min(lasGrid.NonNullCells, this.MaxThreads - this.ReadThreads), Int32.Max(25 - (int)(1.5F * lasGrid.NonNullCells), 2));
             Task[] dsmTasks = new Task[this.ReadThreads + workerThreads];
             for (int readThread = 0; readThread < this.ReadThreads; ++readThread)
             {
