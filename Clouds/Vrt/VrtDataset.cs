@@ -60,7 +60,7 @@ namespace Mars.Clouds.Vrt
             this.ReadXml(reader);
         }
 
-        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> bands) where TTile : Raster
+        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> bands, List<RasterBandStatistics>? statisticsByBand) where TTile : Raster
         {
             if ((vrt.TileCount == 0) || (bands.Count == 0))
             {
@@ -68,12 +68,17 @@ namespace Mars.Clouds.Vrt
                 // Debatable whether requesting bands be appended from a VirtualRaster<T> without any tiles is an error.
                 return; 
             }
+            if ((statisticsByBand != null) && (statisticsByBand.Count != bands.Count)) 
+            {
+                throw new ArgumentOutOfRangeException(nameof(statisticsByBand), statisticsByBand.Count + " sets of statistics were provided for " + bands.Count + " bands.");
+            }
 
             // add bands
-            for (int bandAddIndex = 0; bandAddIndex < bands.Count; ++bandAddIndex) 
+            for (int bandIndex = 0; bandIndex < bands.Count; ++bandIndex) 
             {
-                string bandName = bands[bandAddIndex];
-                DataType vrtBandDataType = vrt.BandDataTypes[bandAddIndex];
+                // create band
+                string bandName = bands[bandIndex];
+                DataType vrtBandDataType = vrt.BandDataTypes[bandIndex];
                 VrtRasterBand band = new()
                 {
                     Band = this.Bands.Count + 1,
@@ -82,7 +87,16 @@ namespace Mars.Clouds.Vrt
                     NoDataValue = RasterBand.GetDefaultNoDataValueAsDouble(vrtBandDataType), // TODO: how to check if band should not have a no data value?
                     ColorInterpretation = VrtRasterBand.GetColorInterpretation(bandName)
                 };
-                // for now, no metadata or histograms
+
+                if (statisticsByBand != null)
+                {
+                    // add band statistics to metadata
+                    RasterBandStatistics bandStatistics = statisticsByBand[bandIndex];
+                    band.Metadata.Add(bandStatistics);
+
+                    // define crude histogram from band statistics
+                    band.Histograms.Add(new(bandStatistics));
+                }
 
                 // add sources
                 for (int tileIndexY = 0; tileIndexY < vrt.VirtualRasterSizeInTilesX; ++tileIndexY)
@@ -102,7 +116,7 @@ namespace Mars.Clouds.Vrt
                         int tileBandIndex = tile.GetBandIndex(bandName);
                         if (tileBandIndex == -1)
                         {
-                            throw new ArgumentOutOfRangeException(nameof(bands), "Band '" + bands[bandAddIndex] + "' is not present in virtual raster.");
+                            throw new ArgumentOutOfRangeException(nameof(bands), "Band '" + bands[bandIndex] + "' is not present in virtual raster.");
                         }
 
                         string relativePathToTile = Path.GetRelativePath(vrtDatasetDirectory, tile.FilePath);
@@ -186,6 +200,20 @@ namespace Mars.Clouds.Vrt
                 default:
                     throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
+        }
+
+        public void WriteXml(string vrtFilePath)
+        {
+            // GDAL 3.8.5 (and QGIS 3.34) don't quite follow XML standard when writing .vrt files
+            // Standard XML is interoperable with GDAL but the settings here are used to produce .vrts which look like GDAL's.
+            XmlWriterSettings vrtSettings = new()
+            {
+                OmitXmlDeclaration = true,
+                Indent = true
+                // GDAL uses IndentChars default of two spaces
+            };
+            using XmlWriter writer = XmlWriter.Create(vrtFilePath, vrtSettings);
+            this.WriteXml(writer);
         }
 
         public void WriteXml(XmlWriter writer)

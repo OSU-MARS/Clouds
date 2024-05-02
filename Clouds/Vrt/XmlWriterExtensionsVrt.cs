@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Globalization;
 using System.Text;
 using System.Xml;
@@ -32,12 +33,12 @@ namespace Mars.Clouds.Vrt
             writer.WriteElementString(localName, value ? "1" : "0");
         }
 
-        public static void WriteElementCsv(this XmlWriter writer, string localName, double[] values)
+        public static void WriteElementCsv<TValue>(this XmlWriter writer, string localName, TValue[] values) where TValue : IConvertible
         {
             writer.WriteElementDelimited(localName, values, ',');
         }
 
-        private static void WriteElementDelimited(this XmlWriter writer, string localName, double[] values, char delimiter)
+        private static void WriteElementDelimited<TValue>(this XmlWriter writer, string localName, TValue[] values, char delimiter) where TValue : IConvertible
         {
             StringBuilder valuesAsString = new();
             for (int valueIndex = 0; valueIndex < values.Length - 1; ++valueIndex)
@@ -60,7 +61,7 @@ namespace Mars.Clouds.Vrt
             writer.WriteElementString(localName, valueAsString);
         }
 
-        public static void WriteElementPipe(this XmlWriter writer, string localName, double[] values)
+        public static void WriteElementPipe<TValue>(this XmlWriter writer, string localName, TValue[] values) where TValue : IConvertible
         {
             writer.WriteElementDelimited(localName, values, '|');
         }

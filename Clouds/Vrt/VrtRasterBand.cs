@@ -41,7 +41,8 @@ namespace Mars.Clouds.Vrt
                 return colorInterpretation;
             }
 
-            return ColorInterpretation.Gray; // absent any other general default
+            // QGIS (3.28 LTR) displays other color interpretations in parenthesis after band names, which is unlikely to be meaningful
+            return ColorInterpretation.Unknown;
         }
 
         protected override void ReadStartElement(XmlReader reader)
@@ -105,9 +106,12 @@ namespace Mars.Clouds.Vrt
             writer.WriteAttribute("dataType", this.DataType);
             writer.WriteAttributeDoubleOrNan("band", this.Band);
             writer.WriteElementString("Description", this.Description);
-            writer.WriteElementDoubleOrNaN("NoDataValue", this.NoDataValue);
             this.Metadata.WriteXml(writer);
-            writer.WriteElementString("ColorInterp", this.ColorInterpretation);
+            writer.WriteElementDoubleOrNaN("NoDataValue", this.NoDataValue);
+            if (this.ColorInterpretation != ColorInterpretation.Unknown)
+            {
+                writer.WriteElementString("ColorInterp", this.ColorInterpretation);
+            }
             if (this.Histograms.Count > 0)
             {
                 writer.WriteStartElement("Histograms");

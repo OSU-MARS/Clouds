@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using System;
 using System.Xml;
 
@@ -16,10 +17,20 @@ namespace Mars.Clouds.Vrt
         public HistogramItem()
         {
             this.Approximate = false;
-            this.BucketCount = -1;
+            this.BucketCount = 0;
             this.BucketCounts = [];
             this.Maximum = Double.NaN;
             this.Minimum = Double.NaN;
+            this.IncludeOutOfRange = false;
+        }
+
+        public HistogramItem(RasterBandStatistics statistics)
+        {
+            this.Approximate = statistics.GetDataFraction() < 1.0;
+            this.BucketCount = 1;
+            this.BucketCounts = [ (int)Int64.Min(Int32.MaxValue, statistics.CellsSampled - statistics.NoDataCells) ];
+            this.Maximum = statistics.Maximum;
+            this.Minimum = statistics.Minimum;
             this.IncludeOutOfRange = false;
         }
 
@@ -60,12 +71,21 @@ namespace Mars.Clouds.Vrt
 
         public void WriteXml(XmlWriter writer)
         {
+            if (this.BucketCount != this.BucketCounts.Length)
+            {
+                throw new InvalidOperationException("Histogram is set for " + this.BucketCount + " buckets but counts are defined for " + this.BucketCounts.Length + " buckets.");
+            }
+
             writer.WriteStartElement("HistItem");
             writer.WriteElementString("HistMin", this.Minimum);
             writer.WriteElementString("HistMax", this.Maximum);
             writer.WriteElementString("BucketCount", this.BucketCount);
             writer.WriteElementBinary("IncludeOutOfRange", this.IncludeOutOfRange);
             writer.WriteElementBinary("Approximate", this.Approximate);
+            if (this.BucketCounts.Length > 0)
+            {
+                writer.WriteElementPipe("HistCounts", this.BucketCounts);
+            }
 
             writer.WriteEndElement();
         }

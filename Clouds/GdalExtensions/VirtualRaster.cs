@@ -260,7 +260,7 @@ namespace Mars.Clouds.GdalExtensions
             this.ungriddedTiles.Clear();
         }
 
-        public VrtDataset CreateDataset(string vrtDatasetDirectory, List<string> bands)
+        public VrtDataset CreateDataset(string vrtDatasetDirectory, List<string> bands, List<RasterBandStatistics>? bandStatistics)
         {
             Debug.Assert(this.tileGrid != null);
 
@@ -269,13 +269,13 @@ namespace Mars.Clouds.GdalExtensions
                 RasterXSize = (UInt32)(this.VirtualRasterSizeInTilesX * this.TileSizeInCellsX),
                 RasterYSize = (UInt32)(this.VirtualRasterSizeInTilesY * this.TileSizeInCellsY)
             };
-            vrtDataset.Srs.DataAxisToSrsAxisMapping = this.Crs.IsVertical() == 1 ? [1, 2, 3] : [1, 2];
+            vrtDataset.Srs.DataAxisToSrsAxisMapping = this.Crs.IsVertical() == 1 ? [ 1, 2, 3 ] : [ 1, 2 ];
             vrtDataset.Srs.WktGeogcsOrProj = this.Crs.GetWkt();
 
             vrtDataset.GeoTransform.Copy(this.tileGrid.Transform); // copies tile x and y size as cell size
             vrtDataset.GeoTransform.SetCellSize(this.TileCellSizeX, this.TileCellSizeY);
 
-            vrtDataset.AppendBands(vrtDatasetDirectory, this, bands);
+            vrtDataset.AppendBands(vrtDatasetDirectory, this, bands, bandStatistics);
             return vrtDataset;
         }
 
@@ -425,12 +425,47 @@ namespace Mars.Clouds.GdalExtensions
             return (tileIndexX, tileIndexY);
         }
 
-        public (int xIndex, int yIndex) ToGridIndices(int tileIndex)
+        public RasterBandStatistics SampleBandStatistics(string bandName, float bandSamplingFraction)
         {
-            Debug.Assert(tileIndex >= 0);
-            int yIndex = tileIndex / this.VirtualRasterSizeInTilesX;
-            int xIndex = tileIndex - this.VirtualRasterSizeInTilesX * yIndex;
-            return (xIndex, yIndex);
+            RasterBandStatistics bandStatistics = new();
+
+            int tileCounter = 0;
+            int tileSamplingInterval = (int)(1.0F / bandSamplingFraction + 0.5F);
+            for (int tileYindex = 0; tileYindex < this.VirtualRasterSizeInTilesY; ++tileYindex)
+            {
+                for (int tileXindex = 0; tileXindex < this.VirtualRasterSizeInTilesX; ++tileXindex)
+                {
+                    TTile? tile = this[tileXindex, tileYindex];
+                    if (tile == null)
+                    {
+                        continue;
+                    }
+
+                    ++tileCounter;
+                    if (tileCounter % tileSamplingInterval != 1)
+                    {
+                        continue;
+                    }
+
+                    RasterBand band = tile.GetBand(bandName);
+                    bool bandDataPreviouslyRead = band.HasData;
+                    if (bandDataPreviouslyRead == false)
+                    {
+                        // not ideal as tile may be expanded to virtual raster's band type
+                        // It would be more efficient to compute statistics over the tile's data without expansion.
+                        using Dataset tileDataset = Gdal.Open(tile.FilePath, Access.GA_ReadOnly);
+                        band.ReadData(tileDataset);
+                    }
+                    bandStatistics.Add(band.GetStatistics());
+                    if (bandDataPreviouslyRead == false)
+                    {
+                        band.ReleaseData();
+                    }
+                }
+            }
+
+            bandStatistics.OnAdditionComplete();
+            return bandStatistics;
         }
 
         public void SetRowToNull(int yIndex)
@@ -441,6 +476,14 @@ namespace Mars.Clouds.GdalExtensions
             {
                 this.tileGrid[xIndex, yIndex] = null;
             }
+        }
+
+        public (int xIndex, int yIndex) ToGridIndices(int tileIndex)
+        {
+            Debug.Assert(tileIndex >= 0);
+            int yIndex = tileIndex / this.VirtualRasterSizeInTilesX;
+            int xIndex = tileIndex - this.VirtualRasterSizeInTilesX * yIndex;
+            return (xIndex, yIndex);
         }
 
         public bool TryGetNeighborhood8<TBand>(double x, double y, string? bandName, [NotNullWhen(true)] out VirtualRasterNeighborhood8<TBand>? neighborhood) where TBand : IMinMaxValue<TBand>, INumber<TBand>

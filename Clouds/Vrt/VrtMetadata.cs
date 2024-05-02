@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using System;
 using System.Collections.Generic;
 using System.Xml;
@@ -10,13 +11,15 @@ namespace Mars.Clouds.Vrt
         // not implemented: @domain, @format
 
         // well known metadata keys
-        // See also the GDAL raster data model.
-        public const string MetadataStatisticsApproximate = "STATISTICS_APPROXIMATE";
-        public const string MetadataStatisticsMaximum = "STATISTICS_MAXIMUM";
-        public const string MetadataStatisticsMean = "STATISTICS_MEAN";
-        public const string MetadataStatisticsMinimum = "STATISTICS_MINIMUM";
-        public const string MetadataStatisticsStddev = "STATISTICS_STDDEV";
-        public const string MetadataStatisticsValidPercent = "STATISTICS_VALID_PERCENT";
+        // See also the GDAL raster data model, https://gdal.org/user/raster_data_model.html.
+        public const string OgrBooleanYes = "YES";
+        public const string OgrBooleanNo = "NO";
+        public const string StatisticsApproximate = "STATISTICS_APPROXIMATE";
+        public const string StatisticsMaximum = "STATISTICS_MAXIMUM";
+        public const string StatisticsMean = "STATISTICS_MEAN";
+        public const string StatisticsMinimum = "STATISTICS_MINIMUM";
+        public const string StatisticsStdDev = "STATISTICS_STDDEV";
+        public const string StatisticsValidPercent = "STATISTICS_VALID_PERCENT";
 
         private readonly Dictionary<string, object> metadataItems;
 
@@ -36,16 +39,26 @@ namespace Mars.Clouds.Vrt
             get { return this.metadataItems.Count; }
         }
 
+        public void Add(RasterBandStatistics statistics)
+        {
+            this.metadataItems.Add(VrtMetadata.StatisticsApproximate, VrtMetadata.OgrBooleanYes);
+            this.metadataItems.Add(VrtMetadata.StatisticsMaximum, statistics.Maximum);
+            this.metadataItems.Add(VrtMetadata.StatisticsMean, statistics.Mean);
+            this.metadataItems.Add(VrtMetadata.StatisticsMinimum, statistics.Minimum);
+            this.metadataItems.Add(VrtMetadata.StatisticsStdDev, statistics.StandardDeviation);
+            this.metadataItems.Add(VrtMetadata.StatisticsValidPercent, 100.0 * statistics.GetDataFraction());
+        }
+
         private static object ParseMetadataValue(string key, string value)
         {
             return key switch
             {
-                VrtMetadata.MetadataStatisticsApproximate => VrtMetadata.ParseOgrBoolean(value),
-                VrtMetadata.MetadataStatisticsMaximum => Double.Parse(value),
-                VrtMetadata.MetadataStatisticsMean => Double.Parse(value),
-                VrtMetadata.MetadataStatisticsMinimum => Double.Parse(value),
-                VrtMetadata.MetadataStatisticsStddev => Double.Parse(value),
-                VrtMetadata.MetadataStatisticsValidPercent => Double.Parse(value),
+                VrtMetadata.StatisticsApproximate => VrtMetadata.ParseOgrBoolean(value),
+                VrtMetadata.StatisticsMaximum => Double.Parse(value),
+                VrtMetadata.StatisticsMean => Double.Parse(value),
+                VrtMetadata.StatisticsMinimum => Double.Parse(value),
+                VrtMetadata.StatisticsStdDev => Double.Parse(value),
+                VrtMetadata.StatisticsValidPercent => Double.Parse(value),
                 _ => throw new NotSupportedException("Unhandled .vrt raster band metadata key '" + key + "'.")
             };
         }

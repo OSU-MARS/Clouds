@@ -4,14 +4,26 @@ $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native') # f
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
-# .vrt from single directory with all tile bands
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing"
-Get-Vrt -TilePaths $vrtDirectory -Vrt ([System.IO.Path]::Combine($vrtDirectory, "Get-Vrt test dsm cmm3 chm.vrt"))
+# .vrts from single directory with primary bands
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+Get-Vrt -Bands "dsm" -TilePaths $vrtDirectory -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm.vrt"))
+Get-Vrt -Bands "cmm3" -TilePaths $vrtDirectory -Vrt ([System.IO.Path]::Combine($vrtDirectory, "cmm3.vrt"))
+Get-Vrt -TilePaths $vrtDirectory -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm.vrt"))
 
-# .vrt with mixed primary and diangostic bands
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing"
-Get-Vrt -Bands ("dsm", "chm", "sourceIDsurface") -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "Get-Vrt test dsm chm sourceIDsurface.vrt"))
+# .vrts from single directory with diagnostic bands
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+Get-Vrt -Bands "sourceIDsurface" -TilePaths ([System.IO.Path]::Combine($vrtDirectory, "sourceID")) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "sourceIDsurface.vrt"))
+
+# .vrts with mixed primary and diangostic bands
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+Get-Vrt -Bands ("dsm", "chm", "sourceIDsurface") -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm chm sourceIDsurface.vrt"))
+Get-Vrt -Bands ("dsm", "cmm3", "chm", "sourceIDsurface") -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm sourceIDsurface.vrt"))
+
+# .vrts with diagnostic bands
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+Get-Vrt -Bands ("nAerial", "nGround") -TilePaths ([System.IO.Path]::Combine($vrtDirectory, "nPoints")) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "nAerial nGround.vrt"))
+Get-Vrt -Bands ("layer1", "layer2", "ground", "sourceIDlayer1", "sourceIDlayer2") -TilePaths (([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "layer12 ground sourceID12.vrt"))
 
 # .vrt with all primary and diangostic bands
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing"
-Get-Vrt -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "Get-Vrt test DSM all.vrt"))
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+Get-Vrt -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt"))

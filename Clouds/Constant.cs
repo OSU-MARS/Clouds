@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Xml;
 
 namespace Mars.Clouds
 {
@@ -21,7 +22,9 @@ namespace Mars.Clouds
         public static class Simd128
         {
             public const byte BlendA0B123 = 0b00001110; // blendps, vpblendd
-            public const byte CircularUp1 = (0x3 << 0) | (0x0 << 2) | (0x1 << 4) | (0x2 << 6); // pshufd, shufps
+            public const int Circular32Up1 = (0x3 << 0) | (0x0 << 2) | (0x1 << 4) | (0x2 << 6); // pshufd, shufps
+            public const int Circular32Up2 = (0x2 << 0) | (0x3 << 2) | (0x0 << 4) | (0x1 << 6); // pshufd, shufps
+            public const int Circular32Up3 = (0x1 << 6) | (0x2 << 0) | (0x3 << 2) | (0x0 << 4); // pshufd, shufps
             public const byte ExtractUpper64 = 0b00000001; // pextrq
         }
     }
