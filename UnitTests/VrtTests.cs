@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Vrt;
+﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Vrt;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OSGeo.GDAL;
 using System;
@@ -112,6 +113,16 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue((source1.SourceFilename.RelativeToVrt == source1copy.SourceFilename.RelativeToVrt) && String.Equals(source1.SourceFilename.Filename, source1copy.SourceFilename.Filename, StringComparison.Ordinal) && (source1.SourceBand == source1copy.SourceBand));
             Assert.IsTrue((source1.SourceRectangle.XOffset == source1copy.SourceRectangle.XOffset) && (source1.SourceRectangle.YOffset == source1copy.SourceRectangle.YOffset) && (source1.SourceRectangle.XSize == source1copy.SourceRectangle.XSize) && (source1.SourceRectangle.YSize == source1copy.SourceRectangle.YSize));
             Assert.IsTrue((source1.DestinationRectangle.XOffset == source1copy.DestinationRectangle.XOffset) && (source1.DestinationRectangle.YOffset == source1copy.DestinationRectangle.YOffset) && (source1.DestinationRectangle.XSize == source1copy.DestinationRectangle.XSize) && (source1.DestinationRectangle.YSize == source1copy.DestinationRectangle.YSize));
+        }
+
+        [TestMethod]
+        public void WriteBandStatistics()
+        {
+            TileStatisticsTable statsTable = new();
+            statsTable.Add("tile", "band", new());
+
+            MemoryStream stream = new();
+            statsTable.Write(stream);
         }
 
         private static void VerifyVrt(VrtExpectation expected, VrtDataset actual)

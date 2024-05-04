@@ -206,7 +206,7 @@ namespace Mars.Clouds.GdalExtensions
             return (tileIndexX, tileIndexY);
         }
 
-        public void CreateTileGrid()
+        public (int[] tileIndexX, int[] tileIndexY) CreateTileGrid()
         {
             if (this.tileGrid != null)
             {
@@ -252,15 +252,18 @@ namespace Mars.Clouds.GdalExtensions
             
             this.tileGrid = new(this.Crs, tileTransform, this.VirtualRasterSizeInTilesX, this.VirtualRasterSizeInTilesY);
 
+            int[] tileIndexX = new int[this.ungriddedTiles.Count];
+            int[] tileIndexY = new int[this.ungriddedTiles.Count];
             for (int tileIndex = 0; tileIndex < this.ungriddedTiles.Count; ++tileIndex)
             {
-                this.PlaceTileInGrid(this.ungriddedTiles[tileIndex]);
+                (tileIndexX[tileIndex], tileIndexY[tileIndex]) = this.PlaceTileInGrid(this.ungriddedTiles[tileIndex]);
             }
 
             this.ungriddedTiles.Clear();
+            return (tileIndexX, tileIndexY);
         }
 
-        public VrtDataset CreateDataset(string vrtDatasetDirectory, List<string> bands, List<RasterBandStatistics>? bandStatistics)
+        public VrtDataset CreateDataset(string vrtDatasetDirectory, List<string> bands, GridNullable<RasterBandStatistics[]>? bandStatistics)
         {
             Debug.Assert(this.tileGrid != null);
 
@@ -423,49 +426,6 @@ namespace Mars.Clouds.GdalExtensions
             this.tileGrid[tileIndexX, tileIndexY] = tile;
 
             return (tileIndexX, tileIndexY);
-        }
-
-        public RasterBandStatistics SampleBandStatistics(string bandName, float bandSamplingFraction)
-        {
-            RasterBandStatistics bandStatistics = new();
-
-            int tileCounter = 0;
-            int tileSamplingInterval = (int)(1.0F / bandSamplingFraction + 0.5F);
-            for (int tileYindex = 0; tileYindex < this.VirtualRasterSizeInTilesY; ++tileYindex)
-            {
-                for (int tileXindex = 0; tileXindex < this.VirtualRasterSizeInTilesX; ++tileXindex)
-                {
-                    TTile? tile = this[tileXindex, tileYindex];
-                    if (tile == null)
-                    {
-                        continue;
-                    }
-
-                    ++tileCounter;
-                    if (tileCounter % tileSamplingInterval != 1)
-                    {
-                        continue;
-                    }
-
-                    RasterBand band = tile.GetBand(bandName);
-                    bool bandDataPreviouslyRead = band.HasData;
-                    if (bandDataPreviouslyRead == false)
-                    {
-                        // not ideal as tile may be expanded to virtual raster's band type
-                        // It would be more efficient to compute statistics over the tile's data without expansion.
-                        using Dataset tileDataset = Gdal.Open(tile.FilePath, Access.GA_ReadOnly);
-                        band.ReadData(tileDataset);
-                    }
-                    bandStatistics.Add(band.GetStatistics());
-                    if (bandDataPreviouslyRead == false)
-                    {
-                        band.ReleaseData();
-                    }
-                }
-            }
-
-            bandStatistics.OnAdditionComplete();
-            return bandStatistics;
         }
 
         public void SetRowToNull(int yIndex)

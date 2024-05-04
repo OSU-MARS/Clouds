@@ -41,12 +41,14 @@ namespace Mars.Clouds.Vrt
 
         public void Add(RasterBandStatistics statistics)
         {
-            this.metadataItems.Add(VrtMetadata.StatisticsApproximate, VrtMetadata.OgrBooleanYes);
+            double dataFraction = statistics.GetDataFraction();
+            string approximate = statistics.IsApproximate ? VrtMetadata.OgrBooleanYes : VrtMetadata.OgrBooleanNo; 
+            this.metadataItems.Add(VrtMetadata.StatisticsApproximate, approximate);
             this.metadataItems.Add(VrtMetadata.StatisticsMaximum, statistics.Maximum);
             this.metadataItems.Add(VrtMetadata.StatisticsMean, statistics.Mean);
             this.metadataItems.Add(VrtMetadata.StatisticsMinimum, statistics.Minimum);
             this.metadataItems.Add(VrtMetadata.StatisticsStdDev, statistics.StandardDeviation);
-            this.metadataItems.Add(VrtMetadata.StatisticsValidPercent, 100.0 * statistics.GetDataFraction());
+            this.metadataItems.Add(VrtMetadata.StatisticsValidPercent, 100.0 * dataFraction);
         }
 
         private static object ParseMetadataValue(string key, string value)

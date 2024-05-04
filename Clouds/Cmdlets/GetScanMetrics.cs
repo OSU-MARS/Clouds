@@ -33,24 +33,21 @@ namespace Mars.Clouds.Cmdlets
             ScanMetricsRaster scanMetrics = new(cellDefinitions);
             Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, scanMetrics, tileRead), tileRead.CancellationTokenSource.Token);
 
-            ProgressRecord gridMetricsProgress = new(0, cmdletName, "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
-            this.WriteProgress(gridMetricsProgress);
-
+            TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
+            this.WriteProgress(scanMetricsProgress);
             while (readPoints.Wait(LasTilesCmdlet.ProgressUpdateInterval) == false)
             {
-                float fractionComplete = (float)tileRead.TilesLoaded / (float)lasGrid.NonNullCells;
-                gridMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...";
-                gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
-                gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileRead.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                this.WriteProgress(gridMetricsProgress);
+                scanMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...";
+                scanMetricsProgress.Update(tileRead.TilesLoaded, lasGrid.NonNullCells);
+                this.WriteProgress(scanMetricsProgress);
             }
 
             scanMetrics.OnPointAdditionComplete();
             this.WriteObject(scanMetrics);
-            tileRead.Stopwatch.Stop();
-
-            string elapsedTimeFormat = tileRead.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + tileRead.TilesLoaded + " tiles in " + tileRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            
+            scanMetricsProgress.Stopwatch.Stop();
+            string elapsedTimeFormat = scanMetricsProgress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
+            this.WriteVerbose("Calculated metrics for " + tileRead.TilesLoaded + " tiles in " + scanMetricsProgress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
             base.ProcessRecord();
         }
 

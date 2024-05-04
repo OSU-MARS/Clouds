@@ -87,14 +87,12 @@ namespace Mars.Clouds.Cmdlets
                 });
             });
 
-            ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
+            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
             while (loadClassificationVrt.Wait(Constant.DefaultProgressInterval) == false)
             {
-                float fractionComplete = (float)tilesLoaded / (float)treetopTilePaths.Count;
-                progressRecord.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
-                progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                this.WriteProgress(progressRecord);
+                progress.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
+                progress.Update(tilesLoaded, treetopTilePaths.Count);
+                this.WriteProgress(progress);
             }
 
             stopwatch.Stop();
@@ -154,14 +152,12 @@ namespace Mars.Clouds.Cmdlets
             });
 
             TimeSpan progressInterval = TimeSpan.FromSeconds(2.0);
-            ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
+            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
             while (loadAndClassifyTreetops.Wait(progressInterval) == false)
             {
-                float fractionComplete = (float)tilesLoaded / (float)treetopTilePaths.Count;
-                progressRecord.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
-                progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                this.WriteProgress(progressRecord);
+                progress.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
+                progress.Update(tilesLoaded, treetopTilePaths.Count);
+                this.WriteProgress(progress);
             }
 
             stopwatch.Stop();
@@ -209,20 +205,17 @@ namespace Mars.Clouds.Cmdlets
 
             // write merged and classified treetops
             // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
-            Stopwatch stopwatch = Stopwatch.StartNew();
             int totalTreetops = 0;
             using DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, []);
             TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
-            ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
+            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)
             {
                 if (tileIndex % 10 == 0)
                 {
-                    float fractionComplete = (float)tileIndex / (float)treetopsByTile.Count;
-                    progressRecord.StatusDescription = "Adding treetops to " + this.Merge + " (tile " + tileIndex + " of " + treetopsByTile.Count + ")...";
-                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                    this.WriteProgress(progressRecord);
+                    progress.StatusDescription = "Adding treetops to " + this.Merge + " (tile " + tileIndex + " of " + treetopsByTile.Count + ")...";
+                    progress.Update(tileIndex, treetopsByTile.Count);
+                    this.WriteProgress(progress);
                 }
 
                 Treetops treetops = treetopsByTile.Values[tileIndex];
@@ -230,10 +223,10 @@ namespace Mars.Clouds.Cmdlets
                 totalTreetops += treetops.Count;
             }
 
-            progressRecord.StatusDescription = "Completing write of " + totalTreetops.ToString("#,#,0") + " treetops to " + this.Merge + "...";
-            progressRecord.PercentComplete = 0;
-            progressRecord.SecondsRemaining = -1;
-            this.WriteProgress(progressRecord);
+            progress.StatusDescription = "Completing write of " + totalTreetops.ToString("#,#,0") + " treetops to " + this.Merge + "...";
+            progress.PercentComplete = 0;
+            progress.SecondsRemaining = -1;
+            this.WriteProgress(progress);
             // explicitly dispose merged treetop layer to trigger write transaction commit and then flush the write cache to file
             // CLR doesn't have to Dispose() when a using() { } ends and tends not to, so relying using() and not synchronously waiting
             // on the flush creates problems with reporting incomplete execution times and the cmdlet appearing to have exited while the
@@ -241,8 +234,8 @@ namespace Mars.Clouds.Cmdlets
             mergedTreetopLayer.Dispose();
             mergedTreetopFile.FlushCache(); // GDAL write speeds are only ~10 MB/s max
 
-            stopwatch.Stop();
-            TimeSpan writeTime = stopwatch.Elapsed;
+            progress.Stopwatch.Stop();
+            TimeSpan writeTime = progress.Stopwatch.Elapsed;
             TimeSpan totalTime = classificationLoadTime + treetopLoadTime + writeTime;
             string elapsedTimeFormat = totalTime.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
             this.WriteVerbose("Merged " + totalTreetops.ToString("#,#,0") + " treetops in " + totalTime.ToString(elapsedTimeFormat) + " (classification raster load " + classificationLoadTime.ToString("mm\\:ss") + ", treetop load and class counting " + treetopLoadTime.ToString("mm\\:ss") + ").");

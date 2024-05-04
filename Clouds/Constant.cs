@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Xml;
 
 namespace Mars.Clouds
 {
@@ -9,9 +8,11 @@ namespace Mars.Clouds
 
         public static class File
         {
+            public const int DefaultBufferSize = 128 * 1024; // 128k
             public const string GeoPackageExtension = ".gpkg";
             public const string GeoTiffExtension = ".tif";
             public const string LasExtension = ".las";
+            public const string XlsxExtension = ".xlsx";
         }
 
         public static class Las

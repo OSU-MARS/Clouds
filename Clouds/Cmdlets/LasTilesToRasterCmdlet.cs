@@ -16,9 +16,9 @@ namespace Mars.Clouds.Cmdlets
             // this.Cells is mandatory
         }
 
-        protected void WaitForTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadToRaster tileRead)
+        protected TimedProgressRecord WaitForTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadToRaster tileRead)
         {
-            ProgressRecord gridMetricsProgress = new(0, cmdletName, "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
+            TimedProgressRecord gridMetricsProgress = new(cmdletName, "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
             this.WriteProgress(gridMetricsProgress);
 
             while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
@@ -34,12 +34,12 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                float fractionComplete = (float)tileRead.RasterCellsCompleted / (float)tileRead.RasterCells;
                 gridMetricsProgress.StatusDescription = "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
-                gridMetricsProgress.PercentComplete = (int)(100.0F * fractionComplete);
-                gridMetricsProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileRead.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                gridMetricsProgress.Update(tileRead.RasterCellsCompleted, tileRead.RasterCells);
                 this.WriteProgress(gridMetricsProgress);
             }
+
+            return gridMetricsProgress;
         }
 
         protected class TileReadToRaster : TileRead

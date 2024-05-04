@@ -40,18 +40,13 @@ namespace Mars.Clouds.Cmdlets
         {
             List<string> lasTilePaths = GdalCmdlet.GetExistingTilePaths(this.Las, Constant.File.LasExtension);
 
-            Stopwatch stopwatch = new();
-            stopwatch.Start();
-
             List<LasTile> lasTiles = new(lasTilePaths.Count);
-            ProgressRecord tileIndexProgress = new(0, cmdletName, "placeholder"); // can't pass null or empty statusDescription
+            TimedProgressRecord tileIndexProgress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
             for (int tileIndex = 0; tileIndex < lasTilePaths.Count; tileIndex++)
             {
                 // tile load status
-                float fractionComplete = (float)tileIndex / (float)lasTilePaths.Count;
                 tileIndexProgress.StatusDescription = "Reading point cloud tile header " + tileIndex + " of " + lasTilePaths.Count + "...";
-                tileIndexProgress.PercentComplete = (int)(100.0F * fractionComplete);
-                tileIndexProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                tileIndexProgress.Update(tileIndex, lasTilePaths.Count);
                 this.WriteProgress(tileIndexProgress);
 
                 // create tile by reading header and variable length records

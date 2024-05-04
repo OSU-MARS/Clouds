@@ -26,7 +26,7 @@ namespace Mars.Clouds.Vrt
 
         public HistogramItem(RasterBandStatistics statistics)
         {
-            this.Approximate = statistics.GetDataFraction() < 1.0;
+            this.Approximate = statistics.IsApproximate;
             this.BucketCount = 1;
             this.BucketCounts = [ (int)Int64.Min(Int32.MaxValue, statistics.CellsSampled - statistics.NoDataCells) ];
             this.Maximum = statistics.Maximum;

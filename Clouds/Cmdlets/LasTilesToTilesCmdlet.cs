@@ -88,9 +88,9 @@ namespace Mars.Clouds.Cmdlets
             }
         }
 
-        protected void WaitForLasReadTileWriteTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadWrite tileReadWrite)
+        protected TimedProgressRecord WaitForLasReadTileWriteTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadWrite tileReadWrite)
         {
-            ProgressRecord readWriteProgress = new(0, cmdletName, tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid));
+            TimedProgressRecord readWriteProgress = new(cmdletName, tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid));
             this.WriteProgress(readWriteProgress);
 
             while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
@@ -113,14 +113,12 @@ namespace Mars.Clouds.Cmdlets
                 // for now, assume processing and write is negligible compared to read time
                 // It's desirable to calculate a more accurate estimate based on monitoring tile read and compute rates but this is not
                 // currently implemented.
-                float fractionComplete = (float)tileReadWrite.TilesLoaded / (float)lasGrid.NonNullCells;
                 readWriteProgress.StatusDescription = tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid);
-                readWriteProgress.PercentComplete = (int)(100.0F * fractionComplete);
-                readWriteProgress.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(tileReadWrite.Stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
+                readWriteProgress.Update(tileReadWrite.TilesLoaded, lasGrid.NonNullCells);
                 this.WriteProgress(readWriteProgress);
             }
 
-            tileReadWrite.Stopwatch.Stop();
+            return readWriteProgress;
         }
 
         protected void WriteTiles<TTile, TReadWrite>(Func<string, TTile, TReadWrite, int> writeTile, TReadWrite tileReadWrite) where TTile : Grid where TReadWrite : TileReadWrite<TTile>

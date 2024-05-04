@@ -133,18 +133,15 @@ namespace Mars.Clouds.Cmdlets
                     }
                 });
 
-                ProgressRecord progressRecord = new(0, "Get-LocalMaxima", "placeholder");
+                TimedProgressRecord progress = new("Get-LocalMaxima", "placeholder");
                 while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesCompleted / (float)dsm.TileCount;
-                    progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding local maxima in " + mostRecentDsmTileName + "..." : "Finding treetops...";
-                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                    this.WriteProgress(progressRecord);
+                    progress.StatusDescription = mostRecentDsmTileName != null ? "Finding local maxima in " + mostRecentDsmTileName + "..." : "Finding treetops...";
+                    progress.Update(tilesCompleted, dsm.TileCount);
+                    this.WriteProgress(progress);
                 }
             }
 
-            stopwatch.Stop();
             string tileOrTiles = dsm.TileCount > 1 ? "tiles" : "tile";
             this.WriteVerbose(dsm.TileCount + " " + tileOrTiles + " in " + stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();

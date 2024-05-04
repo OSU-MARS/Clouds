@@ -29,12 +29,19 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 16 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
         public EnumerationOptions EnumerationOptions { get; set; }
 
-        [Parameter(HelpMessage = "Asymptotic fraction of tiles to load for computing approximate band statistics. This is quantized to every nth tile in the raster, declining as 1/n, with a default asymptote of every fourth tile (fraction = 0.25). Bands in the first tile are always sampled for fractions greater than zero.")]
+        [Parameter(HelpMessage = "Minimum fraction of tiles to load for computing approximate virtual raster band statistics, default is 0.333 (every third tile). Bands in the first tile are always sampled for fractions greater than zero.")]
         [ValidateRange(0.0F, 1.0F)]
-        public float SamplingFraction { get; set; }
+        public float MinSamplingFraction { get; set; }
+
+        [Parameter(HelpMessage = "Minimum number of tiles to load for computing virtual raster band statistics. Default is 10 to ensure adequate sampling of small virtual rasters, which results in exact statistics (sampling fraction = 1.0) for 10 or fewer tiles and increases sampling above the minimum (-MinSamplingFraction) for up to 30 tiles.")]
+        [ValidateRange(0, Int32.MaxValue)]
+        public int MinTilesSampled { get; set; }
 
         [Parameter(HelpMessage = "Frequency at which the status of virtual raster loading and .vrt generation is updated. Default is one second.")]
         public TimeSpan ProgressInterval { get; set; }
+
+        [Parameter(HelpMessage = "If set, a .xlsx is created alongside the .vrt with band statistics for each tile (overall statistics for each band are included in the .vrt).")]
+        public SwitchParameter Stats { get; set; }
 
         public GetVrt()
         {
@@ -45,68 +52,139 @@ namespace Mars.Clouds.Cmdlets
                 IgnoreInaccessible = true
             };
             this.ProgressInterval = TimeSpan.FromSeconds(1.0);
-            this.SamplingFraction = 0.25F;
+            this.MinSamplingFraction = 1.0F / 3.0F;
+            this.MinTilesSampled = 10;
             this.TilePaths = [];
+            this.Stats = false;
             this.Vrt = String.Empty;
         }
 
-        private (VirtualRaster<Raster>[] vrts, List<string>[] bandsByVrtIndex) AssembleVrts()
+        private VirtualRasterBandsAndStatistics AssembleVrts()
         {
             Debug.Assert(this.TilePaths.Count > 0);
 
-            List<string>[] bandsByVrtIndex = new List<string>[this.TilePaths.Count];
-            VirtualRaster<Raster>[] vrts = new VirtualRaster<Raster>[this.TilePaths.Count];
+            // find all tiles
+            VirtualRasterBandsAndStatistics vrtBandsAndStats = new(this.TilePaths.Count);
+            RasterBandStatistics[][][] statisticsByUngriddedTileIndex = new RasterBandStatistics[this.TilePaths.Count][][];
+            List<string>[] tilePathsByVrtIndex = new List<string>[this.TilePaths.Count];
+            int tileCountAcrossAllVrts = 0;
+            for (int vrtIndex = 0; vrtIndex < this.TilePaths.Count; ++vrtIndex)
+            {
+                string vrtPath = this.TilePaths[vrtIndex];
+                bool vrtPathIsDirectory = Directory.Exists(vrtPath);
+                string? vrtDirectoryPath = vrtPathIsDirectory ? vrtPath : Path.GetDirectoryName(vrtPath);
+                if (vrtDirectoryPath == null)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(vrtPath), "Virtual raster path '" + vrtPath + "' does not contain a directory.");
+                }
+                if (Directory.Exists(vrtDirectoryPath) == false)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(vrtPath), "Directory indicated by virtual raster path '" + vrtPath + "' does not exist.");
+                }
 
-            int readThreads = Int32.Min(this.TilePaths.Count, this.MaxThreads);
-            int tilesRead = 0;
-            int vrtReadIndex = -1;
+                string? vrtSearchPattern = vrtPathIsDirectory ? "*" + Constant.File.GeoTiffExtension : Path.GetFileName(vrtPath);
+                if (vrtSearchPattern == null)
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), "Tile path '" + vrtPath + "' is not a directory but also does not appear to contain a search pattern (or specify an individual file).");
+                }
+
+                List<string> tilePaths = Directory.EnumerateFiles(vrtDirectoryPath, vrtSearchPattern, this.EnumerationOptions).ToList();
+                if (tilePaths.Count < 1)
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), "-" + nameof(this.TilePaths) + " does not specify any virtual raster tiles.");
+                }
+
+                tileCountAcrossAllVrts += tilePaths.Count;
+                statisticsByUngriddedTileIndex[vrtIndex] = new RasterBandStatistics[tilePaths.Count][];
+                tilePathsByVrtIndex[vrtIndex] = tilePaths;
+                vrtBandsAndStats.Vrts[vrtIndex] = [];
+            }
+
+            // read tiles: get metadata for virtual raster position, read data and calculate band statistics if sampled
+            int readThreads = Int32.Min(tileCountAcrossAllVrts, this.MaxThreads);
+            int tileMetadataReadsCompleted = 0;
+            int tileReadsInitiated = -1;
             int vrtsRead = 0;
             ParallelTasks readVrts = new(readThreads, () =>
             {
-                for (int vrtIndex = Interlocked.Increment(ref vrtReadIndex); vrtIndex < vrts.Length; vrtIndex = Interlocked.Increment(ref vrtReadIndex))
+                TileEnumerator tileEnumerator = new(tilePathsByVrtIndex, this.MinTilesSampled, this.MinSamplingFraction);
+                for (int tileReadIndex = Interlocked.Increment(ref tileReadsInitiated); tileReadIndex < tileCountAcrossAllVrts; tileReadIndex = Interlocked.Increment(ref tileReadsInitiated))
                 {
-                    VirtualRaster<Raster> vrt = this.LoadVrt(this.TilePaths[vrtIndex]);
-                    vrts[vrtIndex] = vrt;
-
-                    if (this.Bands.Count > 0)
+                    // find tile matching this index
+                    if (tileEnumerator.TryMoveTo(tileReadIndex) == false)
                     {
-                        List<string> bandsFromVrt = [];
-                        for (int bandIndex = 0; bandIndex < this.Bands.Count; ++bandIndex)
+                        continue; // shouldn't be reachable
+                    }
+
+                    using Dataset tileDataset = Gdal.Open(tileEnumerator.Current, Access.GA_ReadOnly);
+                    Raster tile = Raster.Read(tileDataset, readData: false);
+
+                    int vrtIndex = tileEnumerator.VrtIndex;
+                    VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
+
+                    List<string> bandsToSampleInVrt;
+                    int ungriddedTileIndexInVrt;
+                    lock (vrt)
+                    {
+                        ungriddedTileIndexInVrt = vrt.TileCount;
+                        vrt.Add(tile);
+
+                        // intersection between -Bands and virtual raster has to be found somewhere
+                        // Intersection can't occur until a tile's been added to the virtual raster so that it knows what its bands
+                        // are. Intersection also needs to be thread safe, which could be done by each worker writing an intersection
+                        // for every virtual raster it hits the array of band names. Since a lock has to be taken to add a tile to a
+                        // virtual raster and GetBandsInVrt() modifies only the passed virtual raster index it's slightly cleaner to
+                        // intersect once within the lock.
+                        bandsToSampleInVrt = this.GetBandsInVrt(vrtBandsAndStats, vrtIndex);
+
+                        ++tileMetadataReadsCompleted;
+                        vrtsRead = Int32.Max(vrtsRead, tileEnumerator.VrtIndex);
+                    }
+
+                    if (tileEnumerator.SampleTile)
+                    {
+                        RasterBandStatistics[] tileStatistics = new RasterBandStatistics[bandsToSampleInVrt.Count];
+                        for (int bandIndex = 0; bandIndex < bandsToSampleInVrt.Count; ++bandIndex)
                         {
-                            string bandName = this.Bands[bandIndex];
-                            if (vrt.BandNames.Contains(bandName, StringComparer.Ordinal))
+                            string bandName = bandsToSampleInVrt[bandIndex];
+                            RasterBand band = tile.GetBand(bandName);
+                            bool bandDataPreviouslyRead = band.HasData;
+                            if (bandDataPreviouslyRead == false)
                             {
-                                bandsFromVrt.Add(bandName);
+                                band.ReadData(tileDataset);
                             }
-                        }
-                        bandsByVrtIndex[vrtIndex] = bandsFromVrt;
-                    }
-                    else
-                    {
-                        bandsByVrtIndex[vrtIndex] = vrt.BandNames;
-                    }
+                            tileStatistics[bandIndex] = band.GetStatistics();
+                            if (bandDataPreviouslyRead == false)
+                            {
+                                band.ReleaseData();
+                            }
 
-                    lock (vrts)
-                    {
-                        tilesRead += vrt.TileCount;
-                        ++vrtsRead;
+                        }
+
+                        // VirtualRaster.CreateTileGrid() returns tile xy indices in the order in which tiles were added to the raster
+                        // Tile statistics needed to be placed in the same order for transfer to the statistics grid.
+                        statisticsByUngriddedTileIndex[vrtIndex][ungriddedTileIndexInVrt] = tileStatistics;
                     }
                 }
             });
 
-            ProgressRecord progress = new(0, "Get-Vrt", "0 tiles read from 0 of " + vrts.Length + " directories...");
+            VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
+            TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters..."));
             this.WriteProgress(progress);
             while (readVrts.WaitAll(this.ProgressInterval) == false)
             {
-                progress.StatusDescription = tilesRead + " tiles read from " + vrtsRead + " of " + vrts.Length + " directories...";
-                progress.PercentComplete = (int)(100.0F * (float)vrtsRead / (float)vrts.Length);
+                progress.StatusDescription = tileMetadataReadsCompleted + " tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters...");
+                progress.Update(tileMetadataReadsCompleted, tileCountAcrossAllVrts); // likely optimistic by band sampling time
                 this.WriteProgress(progress);
             }
 
+            // check virtual rasters for consistency with each other
             VirtualRaster<Raster>? previousVrt = null;
             for (int vrtIndex = 0; vrtIndex < vrts.Length; ++vrtIndex)
             {
-                VirtualRaster<Raster> vrt = this.LoadVrt(this.TilePaths[vrtIndex]);
+                VirtualRaster<Raster> vrt = vrts[vrtIndex];
+                (int[] tileIndexX, int[] tileIndexY) = vrt.CreateTileGrid();
+
                 if (previousVrt != null)
                 {
                     // for now, require that tile sets be exactly matched
@@ -119,14 +197,39 @@ namespace Mars.Clouds.Cmdlets
                         throw new NotSupportedException("Virtual raster '" + this.TilePaths[vrtIndex - 1] + "' and '" + this.TilePaths[vrtIndex] + "' differ in spatial extent or resolution. Sizes are " + previousVrt.VirtualRasterSizeInTilesX + " by " + previousVrt.VirtualRasterSizeInTilesY + " and " + vrt.VirtualRasterSizeInTilesX + " by " + vrt.VirtualRasterSizeInTilesY + " tiles with tiles being " + previousVrt.TileCellSizeX + " by " + previousVrt.TileSizeInCellsY + " and " + vrt.TileSizeInCellsX + " by " + vrt.TileSizeInCellsY + " cells, respectively.");
                     }
                 }
+
+                Debug.Assert(vrtBandsAndStats.BandsByVrtIndex[vrtIndex] != null);
+
+                GridNullable<RasterBandStatistics[]>? vrtStats = null;
+                if (this.MinSamplingFraction > 0.0F)
+                {
+                    vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.VirtualRasterSizeInTilesX, vrt.VirtualRasterSizeInTilesY);
+                    RasterBandStatistics[]?[] bandStatisticsForVrt = statisticsByUngriddedTileIndex[vrtIndex];
+                    Debug.Assert(bandStatisticsForVrt.Length == vrt.TileCount);
+
+                    for (int ungriddedTileIndex = 0; ungriddedTileIndex < bandStatisticsForVrt.Length; ++ungriddedTileIndex)
+                    {
+                        RasterBandStatistics[]? bandStatisticsForTile = bandStatisticsForVrt[ungriddedTileIndex];
+                        if (bandStatisticsForTile != null) // not all tiles are sampled for statistics
+                        {
+                            Debug.Assert(vrtStats[tileIndexX[ungriddedTileIndex], tileIndexY[ungriddedTileIndex]] == null);
+                            vrtStats[tileIndexX[ungriddedTileIndex], tileIndexY[ungriddedTileIndex]] = bandStatisticsForTile;
+                        }
+                    }
+                }
+
+                vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex] = vrtStats;
             }
 
-            return (vrts, bandsByVrtIndex);
+            return vrtBandsAndStats;
         }
 
-        // could be merged into AssembleVrts()
-        private (VirtualRaster<Raster> firstVrt, int firstVrtIndex) CheckBands(VirtualRaster<Raster>[] vrts, List<string>[] bandsByVrtIndex)
+        // could be merged into AssembleVrts() but it's unclear doing so would be helpful
+        private int CheckBands(VirtualRasterBandsAndStatistics vrtBandsAndStats)
         {
+            VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
+            List<string>[] bandsByVrtIndex = vrtBandsAndStats.BandsByVrtIndex;
+
             if (this.Bands.Count > 0)
             {
                 int bandsFound = 0;
@@ -152,71 +255,87 @@ namespace Mars.Clouds.Cmdlets
             {
                 if (bandsByVrtIndex[vrtIndex].Count > 0)
                 {
-                    return (vrts[vrtIndex], vrtIndex);
+                    return vrtIndex;
                 }
             }
 
             throw new ParameterOutOfRangeException(nameof(this.Bands), "Either the virtual raster tiles specified by -" + nameof(this.TilePaths) + " contain no bands or -" + nameof(this.Bands) + " specifies none of the bands present in the tiles.");
         }
 
-        private List<RasterBandStatistics>?[] MaybeEstimateBandStatistics(VirtualRaster<Raster>[] vrts, List<string>[] bandsByVrtIndex, int firstVrtIndex)
+        private TileStatisticsTable CreateTileStatisticsTable(VirtualRasterBandsAndStatistics vrtBandsAndStats)
         {
-            List<RasterBandStatistics>?[] statisticsByVrtIndex = new List<RasterBandStatistics>?[vrts.Length];
-            if (this.SamplingFraction <= 0.0F)
+            TileStatisticsTable statsTable = new();
+            for (int vrtIndex = 0; vrtIndex < vrtBandsAndStats.Vrts.Length; ++vrtIndex)
             {
-                return statisticsByVrtIndex;
+                GridNullable<RasterBandStatistics[]>? statsGrid = vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex];
+                if (statsGrid == null)
+                {
+                    continue;
+                }
+
+                VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
+                List<string> bandNames = vrtBandsAndStats.BandsByVrtIndex[vrtIndex];
+                for (int tileIndexY = 0; tileIndexY < statsGrid.SizeY; ++tileIndexY)
+                {
+                    for (int tileIndexX = 0; tileIndexX < statsGrid.SizeX; ++tileIndexX)
+                    {
+                        RasterBandStatistics[]? tileStatistics = statsGrid[tileIndexX, tileIndexY];
+                        if (tileStatistics == null)
+                        {
+                            continue;
+                        }
+
+                        Raster? tile = vrt[tileIndexX, tileIndexY];
+                        if (tile == null)
+                        {
+                            throw new InvalidOperationException("Statistics are present for virtual raster '" + this.TilePaths[vrtIndex] + "' tile at (" + tileIndexX + ", " + tileIndexY + ") but no tile is present at the same location in the virtual raster.");
+                        }
+
+                        Debug.Assert(tileStatistics.Length == bandNames.Count);
+
+                        string tileName = Tile.GetName(tile.FilePath);
+                        for (int bandIndex = 0; bandIndex < tileStatistics.Length; ++bandIndex)
+                        {
+                            string bandName = bandNames[bandIndex];
+                            statsTable.Add(tileName, bandName, tileStatistics[bandIndex]);
+                        }
+                    }
+                }
             }
 
-            int bandsToEstimate = 0;
-            int vrtsWithBands = vrts.Length - firstVrtIndex;
-            for (int vrtCountingIndex = 0; vrtCountingIndex < vrts.Length; ++vrtCountingIndex)
+            return statsTable;
+        }
+
+        private List<string> GetBandsInVrt(VirtualRasterBandsAndStatistics vrtBandsAndStats, int vrtIndex)
+        {
+            List<string>?[] bandsByVrtIndex = vrtBandsAndStats.BandsByVrtIndex;
+
+            List<string>? bandsToSampleInVrt = bandsByVrtIndex[vrtIndex];
+            if (bandsToSampleInVrt == null)
             {
-                int bandsForVrt = bandsByVrtIndex[vrtCountingIndex].Count;
-                if (bandsForVrt == 0)
+                VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
+                if (this.Bands.Count > 0)
                 {
-                    --vrtsWithBands;
+                    bandsToSampleInVrt = [];
+                    for (int bandIndex = 0; bandIndex < this.Bands.Count; ++bandIndex)
+                    {
+                        string bandName = this.Bands[bandIndex];
+                        if (vrt.BandNames.Contains(bandName, StringComparer.Ordinal))
+                        {
+                            bandsToSampleInVrt.Add(bandName);
+                        }
+                    }
                 }
                 else
                 {
-                    bandsToEstimate += bandsForVrt;
+                    bandsToSampleInVrt = vrt.BandNames;
                 }
-            }
-            Debug.Assert(bandsToEstimate > 0); // .vrt would be empty; this should be caught earlier
 
-            int statisticsThreads = Int32.Min(vrts.Length - firstVrtIndex, this.MaxThreads);
-            int vrtEstimationIndex = firstVrtIndex - 1; // since Interlocked.Increment() is called
-            int bandsCompleted = 0;
-            ParallelTasks estimateStatistics = new(statisticsThreads, () =>
-            {
-                for (int vrtIndex = Interlocked.Increment(ref vrtEstimationIndex); vrtIndex < vrts.Length; vrtIndex = Interlocked.Increment(ref vrtEstimationIndex))
-                {
-                    VirtualRaster<Raster> vrt = vrts[vrtIndex];
-                    Debug.Assert(vrt.TileCount > 0); // should be checked earlier
-                    float tileCountAdjustedSamplingFraction = Single.Max(1.0F / vrt.TileCount, this.SamplingFraction);
-
-                    List<string> bandNames = bandsByVrtIndex[vrtIndex];
-                    List<RasterBandStatistics> statisticsForVrt = new(bandNames.Count);
-                    for (int bandIndex = 0; bandIndex < bandNames.Count; ++bandIndex)
-                    {
-                        string bandName = bandNames[bandIndex];
-                        RasterBandStatistics bandStatistics = vrt.SampleBandStatistics(bandName, tileCountAdjustedSamplingFraction);
-                        statisticsForVrt.Add(bandStatistics);
-                        Interlocked.Increment(ref bandsCompleted);
-                    }
-
-                    statisticsByVrtIndex[vrtIndex] = statisticsForVrt;
-                }
-            });
-
-            ProgressRecord progress = new(0, "Get-Vrt", "Estimated statistics for " + bandsCompleted + " of " + bandsToEstimate + " bands in " + vrtsWithBands + (vrtsWithBands == 1 ? " virtual raster..." : " virtual rasters..."));
-            this.WriteProgress(progress);
-            while (estimateStatistics.WaitAll(this.ProgressInterval) == false)
-            {
-                progress.StatusDescription = "Estimated statistics for " + bandsCompleted + " of " + bandsToEstimate + " bands in " + vrtsWithBands + (vrtsWithBands == 1 ? " virtual raster..." : " virtual rasters...");
-                progress.PercentComplete = (int)(100.0F * (float)bandsCompleted / (float)bandsToEstimate);
+                bandsByVrtIndex[vrtIndex] = bandsToSampleInVrt;
             }
 
-            return statisticsByVrtIndex;
+            Debug.Assert(bandsToSampleInVrt != null);
+            return bandsToSampleInVrt;
         }
 
         protected override void ProcessRecord()
@@ -226,17 +345,14 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.Vrt), "-" + nameof(this.Vrt) + " does not contain a directory path.");
             }
-            if ((this.SamplingFraction > 0.0F) && (Fma.IsSupported == false))
+            if ((this.MinSamplingFraction > 0.0F) && (Fma.IsSupported == false))
             {
-                throw new ParameterOutOfRangeException(nameof(this.SamplingFraction), "Estimation of band statistics requires at least AVX2 and, potentially, FMA instructions. -" + nameof(this.SamplingFraction) + " = 0.0F can be used to disable statistics and circumvent this restriction on older processors.");
+                throw new ParameterOutOfRangeException(nameof(this.MinSamplingFraction), "Estimation of band statistics requires at least AVX2 and, potentially, FMA instructions. -" + nameof(this.MinSamplingFraction) + " = 0.0F can be used to disable statistics and circumvent this restriction on older processors.");
             }
 
             // read tile metadata, checking inputs for spatial and band data type consistency
-            (VirtualRaster<Raster>[] vrts, List<string>[] bandsByVrtIndex) = this.AssembleVrts();
-            (VirtualRaster<Raster> firstVrt, int firstVrtIndex) = this.CheckBands(vrts, bandsByVrtIndex);
-
-            // get band statistics
-            List<RasterBandStatistics>?[] bandStatistics = this.MaybeEstimateBandStatistics(vrts, bandsByVrtIndex, firstVrtIndex);
+            VirtualRasterBandsAndStatistics vrtBandsAndStats = this.AssembleVrts();
+            int firstVrtIndex = this.CheckBands(vrtBandsAndStats);
 
             // create and write .vrt
             // Incremental progress is not shown for dataset generation as time spent is negligible at 2000+ tiles. Runtime is dominated
@@ -244,46 +360,42 @@ namespace Mars.Clouds.Cmdlets
             ProgressRecord progress = new(0, "Get-Vrt", "Creating and writing .vrt...");
             this.WriteProgress(progress);
 
-            VrtDataset vrtDataset = firstVrt.CreateDataset(vrtDatasetDirectory, bandsByVrtIndex[firstVrtIndex], bandStatistics[firstVrtIndex]);
+            VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
+            VrtDataset vrtDataset = vrts[firstVrtIndex].CreateDataset(vrtDatasetDirectory, vrtBandsAndStats.BandsByVrtIndex[firstVrtIndex], vrtBandsAndStats.StatisticsByVrtIndex[firstVrtIndex]);
             for (int vrtIndex = firstVrtIndex + 1; vrtIndex < vrts.Length; ++vrtIndex)
             {
-                vrtDataset.AppendBands(vrtDatasetDirectory, vrts[vrtIndex], bandsByVrtIndex[vrtIndex], bandStatistics[vrtIndex]);
+                vrtDataset.AppendBands(vrtDatasetDirectory, vrts[vrtIndex], vrtBandsAndStats.BandsByVrtIndex[vrtIndex], vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex]);
             }
 
             vrtDataset.WriteXml(this.Vrt);
+
+            if (this.Stats)
+            {
+                // create and write .xlsx
+                progress.StatusDescription = "Creating and writing .xlsx...";
+                this.WriteProgress(progress);
+
+                string statsFilePath = PathExtensions.ReplaceExtension(this.Vrt, Constant.File.XlsxExtension);
+                TileStatisticsTable statsTable = this.CreateTileStatisticsTable(vrtBandsAndStats);
+                using FileStream stream = new(statsFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, Constant.File.DefaultBufferSize); // SpreadsheetDocument.Create() requires read as well as write
+                statsTable.Write(stream);
+            }
+
             base.ProcessRecord();
         }
 
-        private VirtualRaster<Raster> LoadVrt(string vrtPath)
+        private class VirtualRasterBandsAndStatistics
         {
-            bool vrtPathIsDirectory = Directory.Exists(vrtPath);
-            string? vrtDirectoryPath = vrtPathIsDirectory ? vrtPath : Path.GetDirectoryName(vrtPath);
-            if (vrtDirectoryPath == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(vrtPath), "Virtual raster path '" + vrtPath + "' does not contain a directory.");
-            }
-            if (Directory.Exists(vrtDirectoryPath) == false)
-            {
-                throw new ArgumentOutOfRangeException(nameof(vrtPath), "Directory indicated by virtual raster path '" + vrtPath + "' does not exist.");
-            }
+            public List<string>[] BandsByVrtIndex { get; private init; }
+            public GridNullable<RasterBandStatistics[]>?[] StatisticsByVrtIndex { get; private init; }
+            public VirtualRaster<Raster>[] Vrts { get; private init; }
 
-            string? vrtSearchPattern = vrtPathIsDirectory ? "*" + Constant.File.GeoTiffExtension : Path.GetFileName(vrtPath);
-            IEnumerable<string> tilePaths = vrtSearchPattern != null ? Directory.EnumerateFiles(vrtDirectoryPath, vrtSearchPattern) : Directory.EnumerateFiles(vrtDirectoryPath);
-            VirtualRaster<Raster> vrt = [];
-            foreach (string tilePath in tilePaths)
+            public VirtualRasterBandsAndStatistics(int capacity)
             {
-                using Dataset tileDataset = Gdal.Open(tilePath, Access.GA_ReadOnly);
-                Raster tile = Raster.Read(tileDataset, readData: false);
-                vrt.Add(tile);
+                this.BandsByVrtIndex = new List<string>[capacity];
+                this.StatisticsByVrtIndex = new GridNullable<RasterBandStatistics[]>[capacity];
+                this.Vrts = new VirtualRaster<Raster>[capacity];
             }
-
-            if (vrt.TileCount < 1)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.TilePaths), "-" + nameof(this.TilePaths) + " does not specify any virtual raster tiles.");
-            }
-
-            vrt.CreateTileGrid();
-            return vrt;
         }
     }
 }

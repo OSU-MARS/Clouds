@@ -207,18 +207,18 @@ namespace Mars.Clouds.UnitTests
             RasterBandStatistics uint64stats = new(uint64s, hasNoData: true, noDataValue: RasterBand.NoDataDefaultUInt64);
 
             // check statistics
-            SimdTests.VerifyFloatingPointStatistics(doubles, 2364.5380098446294, doubleStats);
-            SimdTests.VerifyFloatingPointStatistics(floats, 1183.2793414912642, floatStats);
+            SimdTests.VerifyFloatingPointStatistics(doubles, 2364.6823606283078, doubleStats);
+            SimdTests.VerifyFloatingPointStatistics(floats, 1183.4237054692908, floatStats);
             
-            SimdTests.VerifySignedStatistics(int8s, 55.136195008360886, int8stats);
-            SimdTests.VerifySignedStatistics(int16s, 91.509562341866769, int16stats);
-            SimdTests.VerifySignedStatistics(int32s, 318.40854259896986, int32stats);
-            SimdTests.VerifySignedStatistics(int64s, 453.50854457220538, int64stats);
+            SimdTests.VerifySignedStatistics(int8s, 55.281099844341014, int8stats);
+            SimdTests.VerifySignedStatistics(int16s, 91.654241582154839, int16stats);
+            SimdTests.VerifySignedStatistics(int32s, 318.55297832542703, int32stats);
+            SimdTests.VerifySignedStatistics(int64s, 453.65295105399679, int64stats);
 
-            SimdTests.VerifyUnsignedStatistics(uint8s, 72.4568837309472, uint8stats);
-            SimdTests.VerifyUnsignedStatistics(uint16s, 126.7280552995271, uint16stats);
-            SimdTests.VerifyUnsignedStatistics(uint32s, 146.935359937627, uint32stats);
-            SimdTests.VerifyUnsignedStatistics(uint64s, 426.373076073056, uint64stats);
+            SimdTests.VerifyUnsignedStatistics(uint8s, 72.168206296124609, uint8stats);
+            SimdTests.VerifyUnsignedStatistics(uint16s, 126.43937941427372, uint16stats);
+            SimdTests.VerifyUnsignedStatistics(uint32s, 146.64668424482022, uint32stats);
+            SimdTests.VerifyUnsignedStatistics(uint64s, 426.08440087225279, uint64stats);
         }
 
         private static void VerifyFloatingPointStatistics<TBand>(TBand[] data, double standardDeviation, RasterBandStatistics stats) where TBand : IFloatingPoint<TBand>
@@ -236,7 +236,7 @@ namespace Mars.Clouds.UnitTests
         private static void VerifyUnsignedStatistics<TBand>(TBand[] data, double standardDeviation, RasterBandStatistics stats) where TBand : IUnsignedNumber<TBand>
         {
             Assert.IsTrue((stats.CellsSampled == data.Length) && (stats.NoDataCells == 1) && (stats.GetDataFraction() == (double)(data.Length - 1) / (double)data.Length));
-            Assert.IsTrue((stats.Minimum == 1.0) && (stats.Mean == 0.5 * (data.Length - 1)) && (stats.Maximum == data.Length - 1) && (stats.StandardDeviation == standardDeviation));
+            Assert.IsTrue((stats.Minimum == 1.0) && (stats.Mean == 0.5 * data.Length) && (stats.Maximum == data.Length - 1) && (stats.StandardDeviation == standardDeviation));
         }
     }
 }

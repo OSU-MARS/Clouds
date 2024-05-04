@@ -11,6 +11,7 @@ namespace Mars.Clouds.GdalExtensions
         private double sumOfSquares;
 
         public long CellsSampled { get; set; }
+        public bool IsApproximate { get; set; }
         public long NoDataCells { get; set; }
         public double Maximum { get; set; }
         public double Mean { get; private set; }
@@ -23,6 +24,7 @@ namespace Mars.Clouds.GdalExtensions
             this.sumOfSquares = 0.0;
 
             this.CellsSampled = 0;
+            this.IsApproximate = false;
             this.NoDataCells = 0;
             this.Maximum = Double.MinValue;
             this.Mean = Double.NaN;
@@ -102,15 +104,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = this.sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt(this.sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(float[]? bandData, bool hasNoData, float noDataValue)
@@ -191,15 +193,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = this.sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt(this.sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(sbyte[]? bandData, bool hasNoData, sbyte noDataValue)
@@ -306,6 +308,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
@@ -315,9 +318,8 @@ namespace Mars.Clouds.GdalExtensions
 
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(Int16[]? bandData, bool hasNoData, Int16 noDataValue)
@@ -418,6 +420,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
@@ -427,9 +430,8 @@ namespace Mars.Clouds.GdalExtensions
 
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(Int32[]? bandData, bool hasNoData, Int32 noDataValue)
@@ -515,15 +517,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = this.sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt(this.sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(Int64[]? bandData, bool hasNoData, Int64 noDataValue)
@@ -600,15 +602,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = this.sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt(this.sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(byte[]? bandData, bool hasNoData, byte noDataValue)
@@ -713,6 +715,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
@@ -722,9 +725,8 @@ namespace Mars.Clouds.GdalExtensions
 
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(UInt16[]? bandData, bool hasNoData, UInt16 noDataValue)
@@ -829,6 +831,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
@@ -838,9 +841,8 @@ namespace Mars.Clouds.GdalExtensions
 
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(UInt32[]? bandData, bool hasNoData, UInt32 noDataValue)
@@ -929,15 +931,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public unsafe RasterBandStatistics(UInt64[]? bandData, bool hasNoData, UInt64 noDataValue)
@@ -1072,15 +1074,15 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
+            // assume all band data passed; leave this.IsApproximate as false
             this.CellsSampled = (long)bandData.Length;
             long cellsWithData = this.CellsSampled - this.NoDataCells;
             if (cellsWithData > 0)
             {
                 this.Minimum = (double)minimum;
                 this.Maximum = (double)maximum;
-                this.Mean = (double)sum / this.CellsSampled;
-                this.StandardDeviation = Double.Sqrt((double)sumOfSquares / this.CellsSampled - this.Mean * this.Mean);
             }
+            this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
         public void Add(RasterBandStatistics other)
@@ -1090,16 +1092,21 @@ namespace Mars.Clouds.GdalExtensions
 
             this.CellsSampled += other.CellsSampled;
             this.NoDataCells += other.NoDataCells;
-            if (other.Minimum < this.Minimum)
+            
+            long otherCellsWithData = other.CellsSampled - other.NoDataCells;
+            if (otherCellsWithData > 0)
             {
-                this.Minimum = other.Minimum;
-            }
-            if (other.Maximum > this.Maximum)
-            { 
-                this.Maximum = other.Maximum;
+                if (other.Minimum < this.Minimum)
+                {
+                    this.Minimum = other.Minimum;
+                }
+                if (other.Maximum > this.Maximum)
+                {
+                    this.Maximum = other.Maximum;
+                }
             }
 
-            // just in case, invalidate any exsting mean and standard deviation until OnAdditionComplete() is called
+            // invalidate any exsting mean and standard deviation until OnAdditionComplete() is called
             this.Mean = Double.NaN;
             this.StandardDeviation = Double.NaN;
         }
@@ -1111,9 +1118,23 @@ namespace Mars.Clouds.GdalExtensions
 
         public void OnAdditionComplete()
         {
-            long cellsWithData = this.CellsSampled - this.NoDataCells;
-            this.Mean = this.sum / cellsWithData;
-            this.StandardDeviation = Double.Sqrt(this.sumOfSquares / cellsWithData - this.Mean * this.Mean);
+            this.SetMeanAndStandardDeviation(this.CellsSampled - this.NoDataCells);
+        }
+
+        private void SetMeanAndStandardDeviation(long cellsWithData)
+        {
+            if (cellsWithData > 0)
+            {
+                double cellsWithDataAsDouble = cellsWithData;
+                this.Mean = this.sum / cellsWithDataAsDouble;
+                this.StandardDeviation = Double.Sqrt(this.sumOfSquares / cellsWithDataAsDouble - this.Mean * this.Mean);
+            }
+            else
+            {
+                // invalidate any exsting mean and standard deviation
+                this.Mean = Double.NaN;
+                this.StandardDeviation = Double.NaN;
+            }
         }
     }
 }

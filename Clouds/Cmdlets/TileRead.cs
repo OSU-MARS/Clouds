@@ -8,7 +8,6 @@ namespace Mars.Clouds.Cmdlets
         private int tileReadIndex;
 
         public CancellationTokenSource CancellationTokenSource { get; private init; }
-        public Stopwatch Stopwatch { get; private init; }
         public int TilesLoaded { get; set; }
 
         public TileRead()
@@ -16,7 +15,6 @@ namespace Mars.Clouds.Cmdlets
             this.tileReadIndex = -1;
 
             this.CancellationTokenSource = new();
-            this.Stopwatch = Stopwatch.StartNew();
             this.TilesLoaded = 0;
         }
 

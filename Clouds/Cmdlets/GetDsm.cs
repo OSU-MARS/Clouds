@@ -201,11 +201,12 @@ namespace Mars.Clouds.Cmdlets
             // for standalone testing of read performance
             //Task[] dsmTasks = [ Task.Run(() => this.ReadLasTiles(lasGrid, this.ReadTile, dsmReadCreateWrite), dsmReadCreateWrite.CancellationTokenSource.Token) ];
 
-            this.WaitForLasReadTileWriteTasks("Get-Dsm", dsmTasks, lasGrid, dsmReadCreateWrite);
+            TimedProgressRecord progress = this.WaitForLasReadTileWriteTasks("Get-Dsm", dsmTasks, lasGrid, dsmReadCreateWrite);
             // TODO: generate .vrts
 
-            string elapsedTimeFormat = dsmReadCreateWrite.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Generated " + dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + " point cloud tiles in " + dsmReadCreateWrite.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (dsmReadCreateWrite.TilesWritten / dsmReadCreateWrite.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s.");
+            progress.Stopwatch.Stop();
+            string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
+            this.WriteVerbose("Generated " + dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + " point cloud tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s.");
             base.ProcessRecord();
         }
 

@@ -5,7 +5,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.LoadVrt(System.String)~Mars.Clouds.GdalExtensions.VirtualRaster{Mars.Clouds.GdalExtensions.Raster}")]
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.AssembleVrts~Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics")]
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CreateTileStatisticsTable(Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics)~Mars.Clouds.GdalExtensions.TileStatisticsTable")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.ProcessRecord")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Extensions.XmlReaderExtensions.ReadAttributeAsString(System.Xml.XmlReader,System.String)~System.String")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.GdalExtensions.GetDriverByExtension(System.String)~OSGeo.GDAL.Driver")]
@@ -16,6 +17,8 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Segmentation.TreetopRingSearchState.#ctor(Mars.Clouds.GdalExtensions.VirtualRasterNeighborhood8{System.Single},Mars.Clouds.GdalExtensions.VirtualRasterNeighborhood8{System.Single},System.String)")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Segmentation.TreetopSearch`1.FindTreetops(System.Int32,System.Int32,System.String)~System.Int32")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~T:Mars.Clouds.XmlSerializable")]
+[assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics.#ctor(System.Int32)")]
+[assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.TimedProgressRecord.#ctor(System.String,System.String)")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "member", Target = "~M:Mars.Clouds.GdalExtensions.VirtualRasterEnumerator`1.#ctor(Mars.Clouds.GdalExtensions.VirtualRaster{`0})")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "type", Target = "~T:Mars.Clouds.Cmdlets.GetDsm.DsmReadCreateWrite")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "type", Target = "~T:Mars.Clouds.Cmdlets.GetTreeSize.DirectorySize")]
@@ -38,5 +41,4 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "type", Target = "~T:Mars.Clouds.Segmentation.TreetopRadiusSearch")]
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "type", Target = "~T:Mars.Clouds.Segmentation.Treetops")]
 [assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetOrthoimages.SetCellSize(Mars.Clouds.Las.LasTileGrid)~System.ValueTuple{System.Int32,System.Int32}")]
-[assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CheckBands(Mars.Clouds.GdalExtensions.VirtualRaster{Mars.Clouds.GdalExtensions.Raster}[],System.Collections.Generic.List{System.String}[])~System.ValueTuple{Mars.Clouds.GdalExtensions.VirtualRaster{Mars.Clouds.GdalExtensions.Raster},System.Int32}")]
-[assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.LoadVrt(System.String)~Mars.Clouds.GdalExtensions.VirtualRaster{Mars.Clouds.GdalExtensions.Raster}")]
+[assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CheckBands(Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics)~System.Int32")]

@@ -81,12 +81,12 @@ namespace Mars.Clouds.Cmdlets
                 gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsRead), metricsRead.CancellationTokenSource.Token);
             }
 
-            this.WaitForTasks("Get-GridMetrics", gridMetricsTasks, lasGrid, metricsRead);
+            TimedProgressRecord progress = this.WaitForTasks("Get-GridMetrics", gridMetricsTasks, lasGrid, metricsRead);
             this.WriteObject(metricsRaster);
-            metricsRead.Stopwatch.Stop();
-
-            string elapsedTimeFormat = metricsRead.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + metricsRead.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / metricsRead.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            
+            progress.Stopwatch.Stop();
+            string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
+            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 

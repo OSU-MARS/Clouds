@@ -107,14 +107,12 @@ namespace Mars.Clouds.Cmdlets
                     });
                 });
 
-                ProgressRecord progressRecord = new(0, "Get-Treetops", "placeholder");
+                TimedProgressRecord progress = new("Get-Treetops", "placeholder");
                 while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesLoaded / (float)dsmTilePaths.Count;
-                    progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
-                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                    this.WriteProgress(progressRecord);
+                    progress.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
+                    progress.Update(tilesLoaded, dsmTilePaths.Count);
+                    this.WriteProgress(progress);
                 }
 
                 treetopSearch.BuildGrids();
@@ -148,13 +146,12 @@ namespace Mars.Clouds.Cmdlets
                     }
                 });
 
+                progress.Stopwatch.Restart();
                 while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesCompleted / (float)dsmTilePaths.Count;
-                    progressRecord.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
-                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                    this.WriteProgress(progressRecord);
+                    progress.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
+                    progress.Update(tilesCompleted, dsmTilePaths.Count);
+                    this.WriteProgress(progress);
                 }
             }
 

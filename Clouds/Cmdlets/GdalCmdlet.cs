@@ -130,7 +130,6 @@ namespace Mars.Clouds.Cmdlets
                 };
 
                 string? mostRecentDsmTileName = null;
-                Stopwatch stopwatch = Stopwatch.StartNew();
                 int tilesLoaded = 0;
                 Task loadTilesTask = Task.Run(() =>
                 {
@@ -149,17 +148,13 @@ namespace Mars.Clouds.Cmdlets
                     });
                 });
 
-                ProgressRecord progressRecord = new(0, cmdletName, "placeholder");
+                TimedProgressRecord progress = new(cmdletName, "placeholder");
                 while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
-                    float fractionComplete = (float)tilesLoaded / (float)tilePaths.Count;
-                    progressRecord.StatusDescription = "Loading " + tilePaths.Count + " virtual raster tiles" + (mostRecentDsmTileName != null ? ": " + mostRecentDsmTileName + "..." : "...");
-                    progressRecord.PercentComplete = (int)(100.0F * fractionComplete);
-                    progressRecord.SecondsRemaining = fractionComplete > 0.0F ? (int)Double.Round(stopwatch.Elapsed.TotalSeconds * (1.0F / fractionComplete - 1.0F)) : 0;
-                    this.WriteProgress(progressRecord);
+                    progress.StatusDescription = "Loading " + tilePaths.Count + " virtual raster tiles" + (mostRecentDsmTileName != null ? ": " + mostRecentDsmTileName + "..." : "...");
+                    progress.Update(tilesLoaded, tilePaths.Count);
+                    this.WriteProgress(progress);
                 }
-
-                stopwatch.Stop();
             }
 
             vrt.CreateTileGrid(); // unlike LasTileGrid, VirtualRaster<T> doesn't need snapping as it doesn't store tile sizes as doubles
