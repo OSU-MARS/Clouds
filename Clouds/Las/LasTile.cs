@@ -9,14 +9,14 @@ namespace Mars.Clouds.Las
     public class LasTile : LasFile
     {
         public string FilePath { get; private init; }
-        public long FileSize { get; private init; }
+        public long FileSizeInBytes { get; private init; }
         public Extent GridExtent { get; set; }
 
         public LasTile(string lasFilePath, LasReader reader)
             : base(reader)
         {
             this.FilePath = lasFilePath;
-            this.FileSize = reader.BaseStream.Length;
+            this.FileSizeInBytes = reader.BaseStream.Length;
             this.GridExtent = new(this.Header.MinX, this.Header.MaxX, this.Header.MinY, this.Header.MaxY);
         }
 
@@ -24,15 +24,15 @@ namespace Mars.Clouds.Las
         {
             // rough scaling with file size from https://github.com/dotnet/runtime/discussions/74405#discussioncomment-3488674
             int bufferSizeInKB;
-            if (this.FileSize > 512 * 1024 * 1024) // > 512 MB
+            if (this.FileSizeInBytes > 512 * 1024 * 1024) // > 512 MB
             {
                 bufferSizeInKB = 1024;
             }
-            else if (this.FileSize > 64 * 1024 * 1024) // > 64 MB
+            else if (this.FileSizeInBytes > 64 * 1024 * 1024) // > 64 MB
             {
                 bufferSizeInKB = 512;
             }
-            else if (this.FileSize > 8 * 1024 * 1024) // > 8 MB
+            else if (this.FileSizeInBytes > 8 * 1024 * 1024) // > 8 MB
             {
                 bufferSizeInKB = 256;
             }

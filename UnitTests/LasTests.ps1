@@ -50,6 +50,14 @@ $gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EP
 $scanMetrics = Get-ScanMetrics -Cells $gridPath -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1", "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 2+") -Verbose
 $scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metrics 10 m.tif", $false)
 
-# read header from .las or .laz file
-$lasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))
-$lazFile = Get-LasInfo -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\pointz\s03780w06540.laz"
+# read headers from .las or .laz files with basic query
+$singleLasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))
+$lasTiles = Get-LasInfo -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR"
+
+$pointCounts = [long[]](($lasTiles | ForEach-Object {$_}).Header.NumberOfPointRecords)
+$megaPoints = [double[]]$pointCounts
+for($index = 0; $index -lt $megaPoints.Length; ++$index)
+{
+    $megaPoints[$index] = $megaPoints[$index] / 1E6
+}
+$megaPoints | Measure -AllStats

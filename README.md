@@ -14,8 +14,8 @@ directories are searched for data tiles .las and .tif are the default file exten
 
 DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3 or newer processors with 12–16 cores and 64–128 GB of DDR are 
 assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most such processing tasks fitting within 
-64 GB DDR, though 96 or 128 GB is preferable. Tile processing rates depend on drive and processor core capabilities but .las read speeds can 
-exceed 2.0 GB/s per thread. AVX, AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently utilized. QGIS
+64 GB DDR, though 96 or 128 GB is preferable. Tile processing rates depend on drive and processor core capabilities but .las read speeds of 2.0 
+GB/s are sustainable. AVX, AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently utilized. QGIS
 (as of the 3.34 LTR) is slow to work with larger virtual rasters, which Clouds can't really do anything about, though using `Get-Vrt` to generate
 .vrt files with a minimal set of bands and tiles offers a mitigation.
 
@@ -97,8 +97,13 @@ Also,
 
 - Supported raster data types are real values (8, 16, 32, and 64 bit signed and unsigned integers, single and double precision floating point).
   While GDAL also supports complex values and two other cell types, Clouds does not.
-- The user has to know what thread counts to specify for optimal performance. Thread selection is automatable but requires performance 
-  characterization and drive capability identification that is not currently implemented.
+- The user has to know what thread counts to specify for optimal performance. Thread selection is automatable and cmdlets make an effort to 
+  set reasonable defaults but entirely robust choices require performance characterization and drive capability identification beyond the scope 
+  of current work.
+- Read speeds above roughly 1 GB/s tend to be stressful to .NET memory management. Best practices are used for object pooling and large object
+  heap offloading but it can take longer for the garbage collector to work through tens of gigabytes of first generation, second generation, and
+  large objects than it does to run a cmdlet. Cmdlets may therefore request a second generation collection and compaction of the managed heap
+  just before they exit.
 - QGIS sometimes modifies virtual rasters (.vrts) by adding or updatating band metadata and approximate histograms when a project is closed. 
   When QGIS does this it also either inserts `BlockYSize="1"` attributes on all the tiles listed in the .vrt or overwrites existing 
   `BlockYSize` values with 1, dramatically reducing performance for virtual rasters composed of GeoTIFF tiles. Clouds can't do much about 

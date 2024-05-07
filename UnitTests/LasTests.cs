@@ -1,4 +1,3 @@
-using Mars.Clouds.Cmdlets;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -44,11 +43,13 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
             using LasReader pointReader = lasTile.CreatePointReader();
-            PointListXyzcs dsmPoints = pointReader.ReadPoints(lasTile);
-            Assert.IsTrue(dsmPoints.Count == 207617);
+            ObjectPool<PointBatchXyzcs> dsmPointBatchPool = new();
+            PointList<PointBatchXyzcs> dsmPoints = pointReader.ReadPoints(lasTile, dsmPointBatchPool);
+            dsmPointBatchPool.Clear();
+            Assert.IsTrue((dsmPoints.Count == 1) && (dsmPoints[0].Count == 207617) && (dsmPoints[0].Capacity == PointBatch.DefaultCapacity));
 
             PointListGridZs? aerialPointZs = null;
-            PointListGridZs.CreateRecreateOrReset(dtmTile, newCellPointCapacity: 4, ref aerialPointZs);
+            PointListGridZs.CreateRecreateOrReset(dtmTile, dsmPoints[0].Count, ref aerialPointZs);
             DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", dsmPoints, dtmTile, aerialPointZs, minimumLayerSeparation: 0.5F /* m */);
             
             VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = [];

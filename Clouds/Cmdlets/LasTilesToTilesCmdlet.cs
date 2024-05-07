@@ -2,6 +2,7 @@
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using System;
+using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading.Tasks;
 
@@ -58,15 +59,11 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     string tileName = Tile.GetName(lasTile.FilePath);
-                    lock (tileReadWrite)
+                    int tilesLoaded = tileReadWrite.AddLoadedTileThreadSafe(tileName, parsedLasTile);
+                    if (tilesLoaded == lasGrid.NonNullCells)
                     {
-                        tileReadWrite.LoadedTiles.Add((tileName, parsedLasTile));
-                        ++tileReadWrite.TilesLoaded;
-
-                        if ((tileReadWrite.TilesLoaded == lasGrid.NonNullCells) && (tileReadWrite.LoadedTiles.IsAddingCompleted == false))
-                        {
-                            tileReadWrite.LoadedTiles.CompleteAdding();
-                        }
+                        Debug.Assert(tileReadWrite.LoadedTiles.IsAddingCompleted == false);
+                        tileReadWrite.LoadedTiles.CompleteAdding();
                     }
 
                     //FileInfo fileInfo = new(this.Las);
@@ -114,7 +111,7 @@ namespace Mars.Clouds.Cmdlets
                 // It's desirable to calculate a more accurate estimate based on monitoring tile read and compute rates but this is not
                 // currently implemented.
                 readWriteProgress.StatusDescription = tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid);
-                readWriteProgress.Update(tileReadWrite.TilesLoaded, lasGrid.NonNullCells);
+                readWriteProgress.Update(tileReadWrite.TilesRead, lasGrid.NonNullCells);
                 this.WriteProgress(readWriteProgress);
             }
 
@@ -128,7 +125,6 @@ namespace Mars.Clouds.Cmdlets
                 try
                 {
                     int cellsInTile = writeTile(tileName, dsmTilePointZ, tileReadWrite);
-
                     lock (tileReadWrite)
                     {
                         tileReadWrite.CellsWritten += cellsInTile;

@@ -3,7 +3,6 @@ using Mars.Clouds.GdalExtensions;
 using MaxRev.Gdal.Core;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
 using System.Threading.Tasks;
@@ -47,18 +46,18 @@ namespace Mars.Clouds.Cmdlets
             return (directoryPath, searchPattern);
         }
 
-        protected static List<string> GetExistingTilePaths(List<string>? tileSearchPaths, string defaultTileFileExtension)
+        protected static List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension)
         {
-            ArgumentNullException.ThrowIfNull(tileSearchPaths, nameof(tileSearchPaths));
-            if (tileSearchPaths.Count < 1)
+            ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
+            if (fileSearchPaths.Count < 1)
             {
-                throw new ArgumentNullException(nameof(tileSearchPaths), "No tile search paths were specified.");
+                throw new ArgumentNullException(nameof(fileSearchPaths), "No tile search paths were specified.");
             }
 
             List<string> tilePaths = [];
-            for (int pathIndex = 0; pathIndex < tileSearchPaths.Count; ++pathIndex)
+            for (int pathIndex = 0; pathIndex < fileSearchPaths.Count; ++pathIndex)
             {
-                string tileSearchPath = tileSearchPaths[pathIndex];
+                string tileSearchPath = fileSearchPaths[pathIndex];
                 string? directoryPath = String.Empty;
                 string? fileSearchPattern = String.Empty;
                 bool pathSpecifiesSingleFile = false;
@@ -67,19 +66,19 @@ namespace Mars.Clouds.Cmdlets
                     // presence of wildcards indicates a set of files in some directory
                     directoryPath = Path.GetDirectoryName(tileSearchPath);
                     fileSearchPattern = Path.GetFileName(tileSearchPath);
-                    fileSearchPattern ??= "*" + defaultTileFileExtension;
+                    fileSearchPattern ??= "*" + defaultExtension;
                 }
                 else if (Directory.Exists(tileSearchPath))
                 {
                     // if path indicates an existing directory, search it with the default extension
                     directoryPath = tileSearchPath;
-                    fileSearchPattern = "*" + defaultTileFileExtension;
+                    fileSearchPattern = "*" + defaultExtension;
                 }
                 else
                 {
                     if (File.Exists(tileSearchPath) == false)
                     {
-                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Can't fully load tiles. Path '" + tileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
+                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load tiles. Path '" + tileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
                     }
                     tilePaths.Add(tileSearchPath);
                     pathSpecifiesSingleFile = true;
@@ -89,13 +88,13 @@ namespace Mars.Clouds.Cmdlets
                 {
                     if (String.IsNullOrWhiteSpace(directoryPath))
                     {
-                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Wildcarded tile search path '" + tileSearchPath + "' doesn't contain a directory path.");
+                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Wildcarded tile search path '" + tileSearchPath + "' doesn't contain a directory path.");
                     }
 
                     string[] tilePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern);
                     if (tilePathsInDirectory.Length == 0)
                     {
-                        throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "Can't load tiles. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
+                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't load tiles. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
                     }
                     tilePaths.AddRange(tilePathsInDirectory);
                 }
@@ -103,7 +102,7 @@ namespace Mars.Clouds.Cmdlets
 
             if (tilePaths.Count == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(tileSearchPaths), "No tiles loaded as no files matched search paths '" + String.Join("', '", tileSearchPaths) + "'.");
+                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "No tiles loaded as no files matched search paths '" + String.Join("', '", fileSearchPaths) + "'.");
             }
             return tilePaths;
         }
@@ -112,7 +111,7 @@ namespace Mars.Clouds.Cmdlets
         {
             VirtualRaster<TTile> vrt = [];
 
-            List<string> tilePaths = GdalCmdlet.GetExistingTilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
+            List<string> tilePaths = GdalCmdlet.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
             if (tilePaths.Count == 1)
             {
                 // synchronous read for single tiles

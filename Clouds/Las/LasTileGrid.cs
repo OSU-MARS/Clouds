@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.GdalExtensions;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,8 @@ namespace Mars.Clouds.Las
     {
         public int NonNullCells { get; protected set; }
 
-        public LasTileGrid(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, IList<LasTile> tiles)
+        // accessible to unit tests
+        internal LasTileGrid(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, IList<LasTile> tiles)
             : base(crs, transform, xSize, ySize)
         {
             Debug.Assert(this.Transform.CellHeight < 0.0);

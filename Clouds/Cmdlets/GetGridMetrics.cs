@@ -69,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
             GridMetricsPointLists metricsGrid = new(cellMask, lasGrid); // convert band number from ones based numbering to zero based indexing
             GridMetricsRaster metricsRaster = new(metricsGrid, this.Settings);
 
-            MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxTiles);
+            MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxPointTiles);
             Task[] gridMetricsTasks = new Task[2];
             int readThreads = gridMetricsTasks.Length / 2;
             for (int readThread = 0; readThread < readThreads; ++readThread)
@@ -86,7 +86,7 @@ namespace Mars.Clouds.Cmdlets
             
             progress.Stopwatch.Stop();
             string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesLoaded + " tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesRead + " tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 
@@ -117,7 +117,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         metricsGrid.QueueCompletedCells(tile, tileRead.FullyPopulatedCells);
-                        ++tileRead.TilesLoaded;
+                        tileRead.IncrementTilesReadThreadSafe();
 
                         //FileInfo fileInfo = new(this.Las);
                         //UInt64 pointsRead = lasFile.Header.GetNumberOfPoints();

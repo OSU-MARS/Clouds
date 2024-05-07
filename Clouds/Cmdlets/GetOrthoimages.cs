@@ -46,7 +46,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Image), imagePathIsDirectory);
 
             (int imageTileSizeX, int imageTileSizeY) = this.SetCellSize(lasGrid);
-            TileReadWrite<ImageRaster<UInt64>> imageReadWrite = new(this.MaxTiles, imageTileSizeX, imageTileSizeY, imagePathIsDirectory);
+            ImageTileReadWrite imageReadWrite = new(this.MaxPointTiles, imageTileSizeX, imageTileSizeY, imagePathIsDirectory);
 
             // start single reader and multiple writers
             // Profiling is desirable for tuning here. For Int32 writes through GDAL 3.8.3 a single read thread from a 3.5 drive at
@@ -63,18 +63,18 @@ namespace Mars.Clouds.Cmdlets
             }
             for (int workerThread = readThreads; workerThread < orthoimageTasks.Length; ++workerThread)
             {
-                orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, TileReadWrite<ImageRaster<UInt64>>>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
+                orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, ImageTileReadWrite>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
             }
 
             TimedProgressRecord progress = this.WaitForLasReadTileWriteTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
 
             progress.Stopwatch.Stop();
             string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesLoaded + " point cloud tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + " point cloud tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 
-        private ImageRaster<UInt64> ReadTile(LasTile lasTile, TileReadWrite<ImageRaster<UInt64>> imageReadWrite)
+        private ImageRaster<UInt64> ReadTile(LasTile lasTile, ImageTileReadWrite imageReadWrite)
         {
             GridGeoTransform lasTileTransform = new(lasTile.GridExtent, this.CellSize, this.CellSize);
             ImageRaster<UInt64> imageTile = new(lasTile.GetSpatialReference(), lasTileTransform, imageReadWrite.TileSizeX, imageReadWrite.TileSizeY, UInt64.MaxValue);
@@ -108,7 +108,7 @@ namespace Mars.Clouds.Cmdlets
             return (outputTileSizeX, outputTileSizeY);
         }
 
-        private int WriteTile(string tileName, ImageRaster<UInt64> imageTile, TileReadWrite<ImageRaster<UInt64>> imageReadWrite)
+        private int WriteTile(string tileName, ImageRaster<UInt64> imageTile, ImageTileReadWrite imageReadWrite)
         {
             Debug.Assert(this.Image != null);
 
@@ -134,6 +134,19 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return imageTile.Cells;
+        }
+
+        private class ImageTileReadWrite : TileReadWrite<ImageRaster<UInt64>>
+        {
+            public int TileSizeX { get; private init; }
+            public int TileSizeY { get; private init; }
+
+            public ImageTileReadWrite(int maxSimultaneouslyLoadedTiles, int tileSizeX, int tileSizeY, bool outputPathIsDirectory)
+                : base(maxSimultaneouslyLoadedTiles, outputPathIsDirectory)
+            {
+                this.TileSizeX = tileSizeX;
+                this.TileSizeY = tileSizeY;
+            }
         }
     }
 }

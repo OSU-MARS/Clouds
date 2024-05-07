@@ -457,22 +457,24 @@ namespace Mars.Clouds.Las
             return pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
         }
 
-        public PointListXyzcs ReadPoints(LasTile lasTile)
+        public PointList<PointBatchXyzcs> ReadPoints(LasTile lasTile, ObjectPool<PointBatchXyzcs> pointBatchPool)
         {
             LasHeader10 lasHeader = lasTile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            PointListXyzcs tilePoints = new(lasTile);
+            PointList<PointBatchXyzcs> tilePoints = new(lasTile, pointBatchPool);
             this.MoveToPoints(lasTile);
 
             // read points
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
 
-            int destinationPointIndex = 0;
+            PointBatchXyzcs pointBatch = tilePoints[0];
+            int pointBatchIndex = 0;
+            int pointIndexInBatch = 0;
             Span<byte> pointReadBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
-            for (UInt64 sourcePointIndex = 0; sourcePointIndex < numberOfPoints; sourcePointIndex += LasReader.ReadExactSizeInPoints)
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
             {
-                UInt64 pointsRemainingToRead = numberOfPoints - sourcePointIndex;
+                UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
                 int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
                 int bytesToRead = pointsToRead * lasHeader.PointDataRecordLength;
                 this.BaseStream.ReadExactly(pointReadBuffer[..bytesToRead]);
@@ -489,16 +491,27 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
-                    tilePoints.Classification[destinationPointIndex] = classification;
-                    tilePoints.X[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                    tilePoints.Y[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                    tilePoints.Z[destinationPointIndex] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                    tilePoints.SourceID[destinationPointIndex] = LasReader.ReadPointSourceID(pointBytes, pointFormat);
-                    ++destinationPointIndex;
+                    pointBatch.Classification[pointIndexInBatch] = classification;
+                    pointBatch.X[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                    pointBatch.Y[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                    pointBatch.Z[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                    pointBatch.SourceID[pointIndexInBatch] = LasReader.ReadPointSourceID(pointBytes, pointFormat);
+                    ++pointIndexInBatch;
+
+                    if (pointIndexInBatch == pointBatch.Capacity)
+                    {
+                        pointBatch.Count = pointIndexInBatch;
+                        pointBatch = tilePoints[++pointBatchIndex];
+                        pointIndexInBatch = 0;
+                    }
                 }
             }
 
-            tilePoints.Count = destinationPointIndex; // noise or withheld points result in unused capacity at ends of arrays
+            // batch size typically leaves unused capacity at ends of arrays
+            // Noise or withheld points also result in unused capacity.
+            // Pull batches from object pool on demand to avoid need to trim unused batches from tile points list? For now an unused batch
+            // at the end is possible, though fairly unlikely.
+            pointBatch.Count = pointIndexInBatch;
             return tilePoints;
         }
 

@@ -18,7 +18,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected TimedProgressRecord WaitForTasks(string cmdletName, Task[] tasks, LasTileGrid lasGrid, TileReadToRaster tileRead)
         {
-            TimedProgressRecord gridMetricsProgress = new(cmdletName, "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
+            TimedProgressRecord gridMetricsProgress = new(cmdletName, "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
             this.WriteProgress(gridMetricsProgress);
 
             while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
@@ -34,7 +34,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                gridMetricsProgress.StatusDescription = "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
+                gridMetricsProgress.StatusDescription = "Calculating metrics: " + tileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + tileRead.RasterCells.ToString("#,0") + " cells (" + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
                 gridMetricsProgress.Update(tileRead.RasterCellsCompleted, tileRead.RasterCells);
                 this.WriteProgress(gridMetricsProgress);
             }

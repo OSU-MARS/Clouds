@@ -19,14 +19,14 @@ namespace Mars.Clouds.Cmdlets
             this.TilesWritten = 0;
         }
 
-        public int GetNextTileWriteIndex()
+        public int GetNextTileWriteIndexThreadSafe()
         {
             return Interlocked.Increment(ref this.tileWriteIndex);
         }
 
         public virtual string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid)
         {
-            string status = this.TilesLoaded + (this.TilesLoaded == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
+            string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
                             this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
             return status;
         }
@@ -36,16 +36,18 @@ namespace Mars.Clouds.Cmdlets
     {
         public long CellsWritten { get; set; } // 32 integer will overflow on large jobs
         public BlockingCollection<(string Name, TTile Tile)> LoadedTiles { get; private init; }
-        public int TileSizeX { get; private init; }
-        public int TileSizeY { get; private init; }
 
-        public TileReadWrite(int maxSimultaneouslyLoadedTiles, int tileSizeX, int tileSizeY, bool outputPathIsDirectory)
+        public TileReadWrite(int maxSimultaneouslyLoadedTiles, bool outputPathIsDirectory)
             : base(outputPathIsDirectory)
         {
             this.CellsWritten = 0;
             this.LoadedTiles = new(maxSimultaneouslyLoadedTiles); // FIFO as ConcurrentQueue is the default collection
-            this.TileSizeX = tileSizeX;
-            this.TileSizeY = tileSizeY;
+        }
+
+        public int AddLoadedTileThreadSafe(string tileName, TTile tile)
+        {
+            this.LoadedTiles.Add((tileName, tile));
+            return this.IncrementTilesReadThreadSafe();
         }
     }
 }

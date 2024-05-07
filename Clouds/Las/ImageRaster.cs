@@ -24,8 +24,9 @@ namespace Mars.Clouds.Las
         {
         }
 
+        // leave all bands at default value of zero; no datas are filled in OnPointAdditionComplete()
         public ImageRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, TPixel noDataValue)
-            : base(crs, transform, xSize, ySize, [ "red", "green", "blue", "nir", "intensity", "intensitySecondReturn", "firstReturns", "secondReturns" ])
+            : base(crs, transform, xSize, ySize, [ "red", "green", "blue", "nir", "intensity", "intensitySecondReturn", "firstReturns", "secondReturns" ], noDataValue, initializeBandsToNoData: false)
         {
             this.Red = this.Bands[0];
             this.Green = this.Bands[1];
@@ -35,10 +36,6 @@ namespace Mars.Clouds.Las
             this.IntensitySecondReturn = this.Bands[5];
             this.FirstReturns = this.Bands[6];
             this.SecondReturns = this.Bands[7];
-
-            this.SetNoDataOnAllBands(noDataValue);
-
-            // leave all bands at default value of zero; no datas are filled in OnPointAdditionComplete()
         }
 
         /// <summary>

@@ -33,12 +33,12 @@ namespace Mars.Clouds.Cmdlets
             ScanMetricsRaster scanMetrics = new(cellDefinitions);
             Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, scanMetrics, tileRead), tileRead.CancellationTokenSource.Token);
 
-            TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...");
+            TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...");
             this.WriteProgress(scanMetricsProgress);
             while (readPoints.Wait(LasTilesCmdlet.ProgressUpdateInterval) == false)
             {
-                scanMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesLoaded + " of " + lasGrid.NonNullCells + " point cloud tiles...";
-                scanMetricsProgress.Update(tileRead.TilesLoaded, lasGrid.NonNullCells);
+                scanMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...";
+                scanMetricsProgress.Update(tileRead.TilesRead, lasGrid.NonNullCells);
                 this.WriteProgress(scanMetricsProgress);
             }
 
@@ -47,7 +47,7 @@ namespace Mars.Clouds.Cmdlets
             
             scanMetricsProgress.Stopwatch.Stop();
             string elapsedTimeFormat = scanMetricsProgress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + tileRead.TilesLoaded + " tiles in " + scanMetricsProgress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            this.WriteVerbose("Calculated metrics for " + tileRead.TilesRead + " tiles in " + scanMetricsProgress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
             base.ProcessRecord();
         }
 
@@ -76,7 +76,7 @@ namespace Mars.Clouds.Cmdlets
                         break;
                     }
 
-                    ++tileRead.TilesLoaded;
+                    tileRead.IncrementTilesReadThreadSafe();
                 }
 
                 if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)

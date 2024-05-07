@@ -1,6 +1,5 @@
 ﻿using Mars.Clouds.Las;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System;
 using System.Management.Automation;
@@ -13,13 +12,13 @@ namespace Mars.Clouds.Cmdlets
 
         [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
         [ValidateNotNullOrWhiteSpace]
-        public List<string>? Las { get; set; }
+        public List<string> Las { get; set; }
 
         // quick solution for constraining memory consumption
         // A more adaptive implementation would track memory consumption (e.g. GlobalMemoryStatusEx()), estimate it from the size of the
         // tiles, or use a rasonably stable bound such as the total number of points loaded.
-        [Parameter(HelpMessage = "Maximum number of tiles to have fully loaded at the same time (default is 25). This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
-        public int MaxTiles { get; set; }
+        [Parameter(HelpMessage = "Maximum number of point cloud tiles to have fully loaded at the same time (default is 25 or the estimaated number of physical cores, whichever is higher). This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
+        public int MaxPointTiles { get; set; }
 
         [Parameter(HelpMessage = "Whether to snap tile origin and extent to next largest integer in CRS units. This can be a useful correction in cases where .las file extents are slightly smaller than the actual tile size and, because a 2x2 or larger grid of tiles is not being processed, either a tile's true x extent, y extent, or both cannot be inferred from tile to tile spacing.")]
         public SwitchParameter Snap { get; set; }
@@ -31,14 +30,14 @@ namespace Mars.Clouds.Cmdlets
 
         protected LasTilesCmdlet() 
         {
-            // this.Las is mandatory
-            this.MaxTiles = 25;
+            this.Las = [];
+            this.MaxPointTiles = Int32.Max(25, Environment.ProcessorCount / 2);
             this.Snap = false;
         }
 
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
-            List<string> lasTilePaths = GdalCmdlet.GetExistingTilePaths(this.Las, Constant.File.LasExtension);
+            List<string> lasTilePaths = GdalCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
 
             List<LasTile> lasTiles = new(lasTilePaths.Count);
             TimedProgressRecord tileIndexProgress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription

@@ -15,7 +15,7 @@ namespace Mars.Clouds.GdalExtensions
                 _ => throw new NotSupportedException("Unknown file extension '" + fileExtension + "' in path '" + filePath + "'.")
             };
 
-            Driver? driver = Gdal.GetDriverByName(driverName);
+            Driver? driver = Gdal.GetDriverByName(driverName); // caller is responsible for disposal
             if (driver == null)
             {
                 throw new InvalidOperationException("GDAL returned null for driver '" + driverName + "'.");

@@ -63,7 +63,7 @@ namespace Mars.Clouds.Cmdlets
             TreetopSearch treetopSearch = TreetopSearch.Create(this.Method, this.DsmBand, this.DtmBand);
             treetopSearch.DiagnosticsPath = this.Diagnostics;
 
-            List<string> dsmTilePaths = GdalCmdlet.GetExistingTilePaths([ this.Dsm ], Constant.File.GeoTiffExtension);
+            List<string> dsmTilePaths = GdalCmdlet.GetExistingFilePaths([ this.Dsm ], Constant.File.GeoTiffExtension);
             int treetopCandidates = 0;
             if (dsmTilePaths.Count == 1)
             {

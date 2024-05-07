@@ -52,6 +52,17 @@ namespace Mars.Clouds.Cmdlets
                 IgnoreInaccessible = true
             };
             this.ProgressInterval = TimeSpan.FromSeconds(1.0);
+            // increase this.MaxThreads from GdalCmdlet's default of Environment.ProcessorCount / 2
+            // One thread per physical core benches faster if tiles are cached in memory, worker threads equal to the number of hyperthreads
+            // (Environment.ProcessorCount) is about a third faster when tiles are out of memory. Two worker threads per hyperthread is slower.
+            // As a compromise, default to 75% of the hyperthreads available (1.5 threads per physical core if all cores are hyperthreaded
+            // p-cores).
+            //
+            // performance baselines, 2TB SN770 on 5950X CPU lanes
+            // threads  tile read speed, GB/s
+            // 16       1.2-1.6
+            // 32       2.4-3.0
+            this.MaxThreads = 3 * Environment.ProcessorCount / 4;
             this.MinSamplingFraction = 1.0F / 3.0F;
             this.MinTilesSampled = 10;
             this.TilePaths = [];
@@ -151,7 +162,7 @@ namespace Mars.Clouds.Cmdlets
                             bool bandDataPreviouslyRead = band.HasData;
                             if (bandDataPreviouslyRead == false)
                             {
-                                band.ReadData(tileDataset);
+                                band.ReadDataInSameCrsAndTransform(tileDataset); // band is reading its own data so CRS and transform are guaranteed
                             }
                             tileStatistics[bandIndex] = band.GetStatistics();
                             if (bandDataPreviouslyRead == false)

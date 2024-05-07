@@ -1,26 +1,35 @@
-﻿using System.Diagnostics;
-using System.Threading;
+﻿using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
     public class TileRead
     {
         private int tileReadIndex;
+        private int tilesRead;
 
         public CancellationTokenSource CancellationTokenSource { get; private init; }
-        public int TilesLoaded { get; set; }
 
         public TileRead()
         {
             this.tileReadIndex = -1;
+            this.tilesRead = 0;
 
             this.CancellationTokenSource = new();
-            this.TilesLoaded = 0;
+        }
+
+        public int TilesRead
+        {
+            get { return this.tilesRead; }
         }
 
         public int GetNextTileReadIndexThreadSafe()
         {
             return Interlocked.Increment(ref this.tileReadIndex);
+        }
+
+        public int IncrementTilesReadThreadSafe()
+        {
+            return Interlocked.Increment(ref this.tilesRead);
         }
     }
 }

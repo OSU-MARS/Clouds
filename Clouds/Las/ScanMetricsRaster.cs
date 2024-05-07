@@ -28,29 +28,17 @@ namespace Mars.Clouds.Las
         {
             // no data for min and max scan angles and GPS times should arguably be Double.MaxValue and Double.MinValue
             // However, GDAL's default TIFFTAG_GDAL_NODATA profile supports only one no data value per raster.
-            this.AcceptedPoints = new(this, "acceptedPoints", RasterBand.NoDataDefaultUInt32);
-            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat);
-            this.ScanDirectionMean = new(this, "scanDirection", RasterBand.NoDataDefaultFloat);
-            this.ScanAngleMin = new(this, "scanAngleMin", RasterBand.NoDataDefaultFloat);
-            this.ScanAngleMax = new(this, "scanAngleMax", RasterBand.NoDataDefaultFloat);
-            this.NoiseOrWithheld = new(this, "noiseOrWithheld", RasterBand.NoDataDefaultUInt32);
-            this.EdgeOfFlightLine = new(this, "edgeOfFlightLine", RasterBand.NoDataDefaultUInt32);
-            this.Overlap = new(this, "overlap", RasterBand.NoDataDefaultUInt32);
-            this.GpstimeMin = new(this, "gpstimeMin", RasterBand.NoDataDefaultDouble);
-            this.GpstimeMean = new(this, "gpstimeMean", RasterBand.NoDataDefaultDouble);
-            this.GpstimeMax = new(this, "gpstimeMax", RasterBand.NoDataDefaultDouble);
-
-            //this.N.Data.Span.Clear(); // leave at default (0.0F)
-            //this.ScanAngleMean.Data.Span.Clear(); // leave at default (0.0F)
-            //this.ScanDirection.Data.Span.Clear(); // leave at default (0.0F)
-            Array.Fill(this.ScanAngleMin.Data, Single.MaxValue);
-            Array.Fill(this.ScanAngleMax.Data, Single.MinValue);
-            //this.NoiseOrWithheld.Data.Span.Clear(); // leave at default (0.0F)
-            //this.EdgeOfFlightLine.Data.Span.Clear(); // leave at default (0.0F)
-            //this.Overlap.Data.Span.Clear(); // leave at default (0.0F)
-            Array.Fill(this.GpstimeMin.Data, Double.MaxValue);
-            //this.GpstimeMean.Data.Span.Clear(); // leave at default (0.0F)
-            Array.Fill(this.GpstimeMax.Data, Double.MinValue);
+            this.AcceptedPoints = new(this, "acceptedPoints", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
+            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat, fillWithNoData: false);
+            this.ScanDirectionMean = new(this, "scanDirection", RasterBand.NoDataDefaultFloat, fillWithNoData: false);
+            this.ScanAngleMin = new(this, "scanAngleMin", RasterBand.NoDataDefaultFloat, Single.MaxValue);
+            this.ScanAngleMax = new(this, "scanAngleMax", RasterBand.NoDataDefaultFloat, Single.MinValue);
+            this.NoiseOrWithheld = new(this, "noiseOrWithheld", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
+            this.EdgeOfFlightLine = new(this, "edgeOfFlightLine", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
+            this.Overlap = new(this, "overlap", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
+            this.GpstimeMin = new(this, "gpstimeMin", RasterBand.NoDataDefaultDouble, Double.MaxValue);
+            this.GpstimeMean = new(this, "gpstimeMean", RasterBand.NoDataDefaultDouble, fillWithNoData: false);
+            this.GpstimeMax = new(this, "gpstimeMax", RasterBand.NoDataDefaultDouble, Double.MinValue);
         }
 
         public void OnPointAdditionComplete()
