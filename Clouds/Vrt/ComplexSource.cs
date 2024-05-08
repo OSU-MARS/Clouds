@@ -12,7 +12,7 @@ namespace Mars.Clouds.Vrt
         public SourceProperties SourceProperties { get; private init; }
         public VrtRectangle SourceRectangle { get; private init; }
         public VrtRectangle DestinationRectangle { get; private init; }
-        public double NoDataValue { get; set; }
+        public double? NoDataValue { get; set; }
 
         public ComplexSource()
         {
@@ -21,7 +21,7 @@ namespace Mars.Clouds.Vrt
             this.SourceProperties = new();
             this.SourceRectangle = new();
             this.DestinationRectangle = new();
-            this.NoDataValue = Double.NaN;
+            this.NoDataValue = null;
         }
 
         protected override void ReadStartElement(XmlReader reader)
@@ -73,7 +73,10 @@ namespace Mars.Clouds.Vrt
             this.SourceProperties.WriteXml(writer);
             this.SourceRectangle.WriteXml(writer, "SrcRect");
             this.DestinationRectangle.WriteXml(writer, "DstRect");
-            writer.WriteElementDoubleOrNaN("NODATA", this.NoDataValue);
+            if (this.NoDataValue.HasValue)
+            {
+                writer.WriteElementDoubleOrNaN("NODATA", this.NoDataValue.Value);
+            }
             writer.WriteEndElement();
         }
     }

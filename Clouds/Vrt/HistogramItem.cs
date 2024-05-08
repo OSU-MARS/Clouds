@@ -53,7 +53,7 @@ namespace Mars.Clouds.Vrt
                     this.Maximum = reader.ReadElementContentAsDouble();
                     break;
                 case "BucketCount":
-                    this.Maximum = reader.ReadElementContentAsInt();
+                    this.BucketCount = reader.ReadElementContentAsInt();
                     break;
                 case "IncludeOutOfRange":
                     this.IncludeOutOfRange = reader.ReadElementContentAsBoolean();

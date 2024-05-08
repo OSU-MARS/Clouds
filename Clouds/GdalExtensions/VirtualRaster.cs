@@ -22,11 +22,13 @@ namespace Mars.Clouds.GdalExtensions
 
         public List<DataType> BandDataTypes { get; private set; }
         public List<string> BandNames { get; private set; }
+        public List<List<double>> NoDataValuesByBand { get; private set; }
         public int TileCount { get; private set; }
         public double TileCellSizeX { get; private set; }
         public double TileCellSizeY { get; private set; }
         public int TileSizeInCellsX { get; private set; }
         public int TileSizeInCellsY { get; private set; }
+        public List<int> TilesWithNoDataValuesByBand { get; private set; }
 
         public int VirtualRasterSizeInTilesX { get; private set; }
         public int VirtualRasterSizeInTilesY { get; private set; }
@@ -39,25 +41,24 @@ namespace Mars.Clouds.GdalExtensions
 
             this.BandDataTypes = [];
             this.BandNames = [];
+            this.NoDataValuesByBand = [];
             this.TileCount = 0;
             this.TileCellSizeX = Double.NaN;
             this.TileCellSizeY = Double.NaN;
             this.TileSizeInCellsX = -1;
             this.TileSizeInCellsY = -1;
+            this.TilesWithNoDataValuesByBand = [];
+            this.VirtualRasterSizeInTilesX = -1;
+            this.VirtualRasterSizeInTilesY = -1;
         }
 
         public VirtualRaster(LasTileGrid lasGrid)
+            : this()
         {
             this.crs = lasGrid.Crs.Clone();
             this.tileGrid = new(lasGrid);
-            this.ungriddedTiles = [];
 
-            this.BandDataTypes = [];
-            this.BandNames = [];
-            this.TileCellSizeX = Double.NaN; // no DTM information available, so no cell size information yet
-            this.TileCellSizeY = Double.NaN;
-            this.TileSizeInCellsX = -1;
-            this.TileSizeInCellsY = -1;
+            // no DTM information available, so no cell size information yet
             this.VirtualRasterSizeInTilesX = lasGrid.SizeX;
             this.VirtualRasterSizeInTilesY = lasGrid.SizeY;
         }
@@ -118,10 +119,17 @@ namespace Mars.Clouds.GdalExtensions
             if (this.BandNames.Count == 0)
             {
                 // latch bands of first tile added
-                foreach (RasterBand band in tile.GetBands())
+                foreach (RasterBand tileBand in tile.GetBands())
                 {
-                    this.BandDataTypes.Add(band.GetGdalDataType());
-                    this.BandNames.Add(band.Name); // should names be checked for uniqueness or numbers inserted if null or empty?
+                    this.BandDataTypes.Add(tileBand.GetGdalDataType());
+                    this.BandNames.Add(tileBand.Name); // should names be checked for uniqueness or numbers inserted if null or empty?
+                    List<double> noDataValues = [];
+                    this.NoDataValuesByBand.Add(noDataValues);
+                    this.TilesWithNoDataValuesByBand.Add(tileBand.HasNoDataValue ? 1 : 0);
+                    if (tileBand.HasNoDataValue)
+                    {
+                        noDataValues.Add(tileBand.GetNoDataValueAsDouble());
+                    }
                 }
             }
             else
@@ -152,6 +160,18 @@ namespace Mars.Clouds.GdalExtensions
                             throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have incompatible data types for band '" + this.BandNames[bandIndex] + "' (index " + bandIndex + "). Current type is " + thisBandDataType + " while tile has type " + tileBandDataType + "'.");
                         }
                     }
+
+                    if (tileBand.HasNoDataValue)
+                    {
+                        double noDataValue = tileBand.GetNoDataValueAsDouble();
+                        List<double> noDataValues = this.NoDataValuesByBand[bandIndex];
+                        if (noDataValues.Contains(noDataValue) == false)
+                        {
+                            noDataValues.Add(noDataValue);
+                        }
+                        ++this.TilesWithNoDataValuesByBand[bandIndex];
+                    }
+
                     ++bandIndex;
                 }
 

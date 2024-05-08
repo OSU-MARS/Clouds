@@ -14,7 +14,7 @@ namespace Mars.Clouds.UnitTests
         public DataType[] BandType { get; init; }
         public int[] SourceBandIndex { get; init; }
         public ColorInterpretation[] ColorInterpretation { get; init; }
-        public double[] NoDataValue { get; init; }
+        public double?[] NoDataValue { get; init; }
         public int[] Histograms { get; init; }
         public int[] Metadata { get; init; }
         public int Sources { get; init; }

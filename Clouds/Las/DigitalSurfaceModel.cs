@@ -53,17 +53,17 @@ namespace Mars.Clouds.Las
                 throw new NotSupportedException(tileName + ": DTM tiles and aerial point list grid are currently required to be aligned. The point list grid extent is (" + aerialPointZs.ZSourceID.GetExtentString() + ") while the DTM extent is (" + dtmTile.GetExtentString() + ").");
             }
 
-            this.Surface = new(this, "dsm", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.CanopyMaxima3 = new(this, "cmm3", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.CanopyHeight = new(this, "chm", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.Layer1 = new(this, "layer1", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.Layer2 = new(this, "layer2", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.Ground = new(this, "ground", RasterBand.NoDataDefaultFloat, fillWithNoData: true);
-            this.AerialPoints = new(this, "nAerial", RasterBand.NoDataDefaultUInt32, fillWithNoData: false); // leave at default of zero
-            this.GroundPoints = new(this, "nGround", RasterBand.NoDataDefaultUInt32, fillWithNoData: false); // leave at default of zero
-            this.SourceIDSurface = new(this, "sourceIDsurface", 0, fillWithNoData: true); // leave at default of zero as source IDs 1-65535 are valid
-            this.SourceIDLayer1 = new(this, "sourceIDlayer1", 0, fillWithNoData: true);
-            this.SourceIDLayer2 = new(this, "sourceIDlayer2", 0, fillWithNoData: true);
+            this.Surface = new(this, "dsm", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.CanopyMaxima3 = new(this, "cmm3", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.CanopyHeight = new(this, "chm", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.Layer1 = new(this, "layer1", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.Layer2 = new(this, "layer2", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.Ground = new(this, "ground", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.AerialPoints = new(this, "nAerial", RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+            this.GroundPoints = new(this, "nGround", RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+            this.SourceIDSurface = new(this, "sourceIDsurface", 0, RasterBandInitialValue.NoData); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
+            this.SourceIDLayer1 = new(this, "sourceIDlayer1", 0, RasterBandInitialValue.NoData);
+            this.SourceIDLayer2 = new(this, "sourceIDlayer2", 0, RasterBandInitialValue.NoData);
 
             // build aerial point lists and accumulate ground points
             double xOffset = tilePoints.XOffset;
@@ -504,28 +504,28 @@ namespace Mars.Clouds.Las
             return true;
         }
 
-        public override void Write(string dsmPrimaryTilePath, bool compress)
+        public override void Write(string dsmPath, bool compress)
         {
             // primary data bands
             // GDAL+GeoTIFF single type constraint: convert all bands to double and write with default no data value
             Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
-            using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(dsmPrimaryTilePath, 3, DataType.GDT_Float32, compress);
-            this.WriteBand(dsmDataset, this.Surface, 1);
-            this.WriteBand(dsmDataset, this.CanopyMaxima3, 2);
-            this.WriteBand(dsmDataset, this.CanopyHeight, 3);
-            this.FilePath = dsmPrimaryTilePath;
+            using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(dsmPath, 3, DataType.GDT_Float32, compress);
+            this.Surface.Write(dsmDataset, 1);
+            this.CanopyMaxima3.Write(dsmDataset, 2);
+            this.CanopyHeight.Write(dsmDataset, 3);
+            this.FilePath = dsmPath;
 
             // diagnostic bands in z
             // Bands are single precision floating point as that is the minimum supported size.
             if ((this.Layer1 != null) && (this.Layer2 != null) && (this.Ground != null))
             {
                 Debug.Assert(this.Layer1.IsNoData(RasterBand.NoDataDefaultFloat) && this.Layer2.IsNoData(RasterBand.NoDataDefaultFloat) && this.Ground.IsNoData(RasterBand.NoDataDefaultFloat));
-                string zDiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPrimaryTilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                string zDiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
 
                 using Dataset zDiagnosticDataset = this.CreateGdalRasterAndSetFilePath(zDiagnosticTilePath, 3, DataType.GDT_Float32, compress);
-                this.WriteBand(zDiagnosticDataset, this.Layer1, 1);
-                this.WriteBand(zDiagnosticDataset, this.Layer2, 2);
-                this.WriteBand(zDiagnosticDataset, this.Ground, 3);
+                this.Layer1.Write(zDiagnosticDataset, 1);
+                this.Layer2.Write(zDiagnosticDataset, 2);
+                this.Ground.Write(zDiagnosticDataset, 3);
             }
             else if ((this.Layer1 != null) || (this.Layer2 != null) || (this.Ground != null))
             {
@@ -537,13 +537,13 @@ namespace Mars.Clouds.Las
             // be merged with source ID tiles but are not.
             if ((this.AerialPoints != null) && (this.GroundPoints != null))
             {
-                Debug.Assert(this.AerialPoints.IsNoData(RasterBand.NoDataDefaultUInt32) && this.GroundPoints.IsNoData(RasterBand.NoDataDefaultUInt32));
-                string pointCountDiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPrimaryTilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                Debug.Assert((this.AerialPoints.HasNoDataValue == false) && (this.GroundPoints.HasNoDataValue == false));
+                string pointCountDiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
                 DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(this.AerialPoints, this.GroundPoints);
 
                 using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountDiagnosticTilePath, 2, pointCountBandType, compress);
-                this.WriteBand(pointCountDataset, this.AerialPoints, 1);
-                this.WriteBand(pointCountDataset, this.GroundPoints, 2);
+                this.AerialPoints.Write(pointCountDataset, 1);
+                this.GroundPoints.Write(pointCountDataset, 2);
             }
             else if ((this.AerialPoints != null) || (this.GroundPoints != null))
             {
@@ -555,13 +555,13 @@ namespace Mars.Clouds.Las
             if ((this.SourceIDSurface != null) && (this.SourceIDLayer1 != null) && (this.SourceIDLayer2 != null))
             {
                 Debug.Assert(this.SourceIDSurface.IsNoData(0) && this.SourceIDLayer1.IsNoData(0) && this.SourceIDLayer2.IsNoData(0));
-                string sourceIDdiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPrimaryTilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
+                string sourceIDdiagnosticTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
                 DataType sourceIDbandType = DataTypeExtensions.GetMostCompactIntegerType(this.SourceIDSurface, this.SourceIDLayer1, this.SourceIDLayer2);
 
                 using Dataset sourceIDdataset = this.CreateGdalRasterAndSetFilePath(sourceIDdiagnosticTilePath, 3, sourceIDbandType, compress);
-                this.WriteBand(sourceIDdataset, this.SourceIDSurface, 1);
-                this.WriteBand(sourceIDdataset, this.SourceIDLayer1, 2);
-                this.WriteBand(sourceIDdataset, this.SourceIDLayer2, 3);
+                this.SourceIDSurface.Write(sourceIDdataset, 1);
+                this.SourceIDLayer1.Write(sourceIDdataset, 2);
+                this.SourceIDLayer2.Write(sourceIDdataset, 3);
             }
             else if ((this.SourceIDSurface != null) || (this.SourceIDLayer1 != null) || (this.SourceIDLayer2 != null))
             {

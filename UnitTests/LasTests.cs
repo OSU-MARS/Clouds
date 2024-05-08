@@ -647,18 +647,18 @@ namespace Mars.Clouds.UnitTests
             int imageYsize = (int)(lasTile.GridExtent.Height / imageCellSize) + 1;
             GridGeoTransform imageTransform = new(lasTile.GridExtent, imageCellSize, imageCellSize);
 
-            ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, UInt64.MaxValue);
+            ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, includeNearInfrared: true);
             using LasReader imageReader = lasTile.CreatePointReader();
             imageReader.ReadPointsToImage(lasTile, image);
 
             image.OnPointAdditionComplete();
-            ImageRaster<UInt16> image16 = image.AsUInt16();
-            ImageRaster<UInt32> image32 = image.AsUInt32();
+            ImageRaster<UInt16> image16 = image.PackToUInt16();
+            ImageRaster<UInt32> image32 = image.PackToUInt32();
 
-            Assert.IsTrue(image.Bands.Length == 8);
-            Assert.IsTrue(image.Cells == 72);
-            Assert.IsTrue(image.SizeX == imageXsize);
-            Assert.IsTrue(image.SizeY == imageYsize);
+            Assert.IsTrue((image.Cells == 72) && (image.SizeX == imageXsize) && (image.SizeY == imageYsize));
+            Assert.IsTrue((image.NearInfrared != null) && (image16.NearInfrared != null) && (image32.NearInfrared != null));
+            Assert.IsTrue((image.Cells == image16.Cells) && (image.SizeX == image16.SizeX) && (image.SizeY == image16.SizeY));
+            Assert.IsTrue((image.Cells == image32.Cells) && (image.SizeX == image32.SizeX) && (image.SizeY == image32.SizeY));
 
             for (int yIndex = 0; yIndex < image.SizeY; ++yIndex)
             {

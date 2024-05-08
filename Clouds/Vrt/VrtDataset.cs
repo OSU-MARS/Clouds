@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Xml;
-using System.Xml.Linq;
 
 namespace Mars.Clouds.Vrt
 {
@@ -72,17 +71,29 @@ namespace Mars.Clouds.Vrt
             // add bands
             for (int bandIndex = 0; bandIndex < bands.Count; ++bandIndex) 
             {
-                // create band
                 string bandName = bands[bandIndex];
-                DataType vrtBandDataType = vrt.BandDataTypes[bandIndex];
+                int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[bandIndex];
+                if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != vrt.TileCount))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + bandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.TileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
+                }
+
+                // create band
+                DataType bandDataType = vrt.BandDataTypes[bandIndex];
                 VrtRasterBand band = new()
                 {
                     Band = this.Bands.Count + 1,
-                    DataType = vrtBandDataType,
+                    DataType = bandDataType,
                     Description = bandName,
-                    NoDataValue = RasterBand.GetDefaultNoDataValueAsDouble(vrtBandDataType), // TODO: how to check if band should not have a no data value?
                     ColorInterpretation = VrtRasterBand.GetColorInterpretation(bandName)
                 };
+                if (tilesWithNoDataValue > 0)
+                {
+                    // set no data value for virtual raster's band
+                    // This can differ from the tiles' no data values and, in cases where band type varies, often does differ from tile values.
+                    Debug.Assert(vrt.NoDataValuesByBand[bandIndex].Count > 0);
+                    band.NoDataValue = VrtDataset.ResolveBandNoDataValue(bandName, bandDataType, vrt.NoDataValuesByBand[bandIndex]);
+                }
 
                 // add sources and combine statistics from sampled tiles
                 RasterBandStatistics bandStatistics = new();
@@ -100,10 +111,6 @@ namespace Mars.Clouds.Vrt
 
                         // sources
                         RasterBand tileBand = tile.GetBand(bandName);
-                        if (tileBand.HasNoDataValue == false)
-                        {
-                            throw new NotSupportedException("Band '" + bandName + "' in tile '" + tile.FilePath + "' does not have a no data value.");
-                        }
                         int tileBandIndex = tile.GetBandIndex(bandName);
                         if (tileBandIndex == -1)
                         {
@@ -122,8 +129,11 @@ namespace Mars.Clouds.Vrt
                             SourceProperties = { RasterXSize = (UInt32)tile.SizeX, RasterYSize = (UInt32)tile.SizeY, DataType = tileBand.GetGdalDataType() },
                             SourceRectangle = { XOffset = 0.0, YOffset = 0.0, XSize = tile.SizeX, YSize = tile.SizeY },
                             DestinationRectangle = { XOffset = tileIndexX * vrt.TileSizeInCellsX, YOffset = tileIndexY * vrt.TileSizeInCellsY, XSize = tile.SizeX,YSize = tile.SizeY },
-                            NoDataValue = tileBand.GetNoDataValueAsDouble()
                         };
+                        if (tileBand.HasNoDataValue)
+                        {
+                            tileSource.NoDataValue = tileBand.GetNoDataValueAsDouble();
+                        }
 
                         band.Sources.Add(tileSource);
 
@@ -221,6 +231,33 @@ namespace Mars.Clouds.Vrt
                 default:
                     throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
+        }
+
+        private static double ResolveBandNoDataValue(string bandName, DataType gdalDataType, List<double> noDataValues)
+        {
+            if (noDataValues.Count == 0)
+            {
+                return RasterBand.GetDefaultNoDataValueAsDouble(gdalDataType);
+            }
+            else if (noDataValues.Count == 1)
+            {
+                return noDataValues[0];
+            }
+
+            return gdalDataType switch
+            {
+                DataType.GDT_Byte => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, Byte.MaxValue),
+                DataType.GDT_Int8 => RasterBand.ResolveSignedIntegerNoDataValue(noDataValues, SByte.MinValue, SByte.MaxValue),
+                DataType.GDT_Int16 => RasterBand.ResolveSignedIntegerNoDataValue(noDataValues, Int16.MinValue, Int16.MaxValue),
+                DataType.GDT_Int32 => RasterBand.ResolveSignedIntegerNoDataValue(noDataValues, Int32.MinValue, Int32.MaxValue),
+                DataType.GDT_Int64 => RasterBand.ResolveSignedIntegerNoDataValue(noDataValues, Int64.MinValue, Int64.MaxValue),
+                DataType.GDT_UInt16 => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, UInt16.MaxValue),
+                DataType.GDT_UInt32 => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, UInt32.MaxValue),
+                DataType.GDT_UInt64 => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, UInt64.MaxValue),
+                DataType.GDT_Float32 or
+                DataType.GDT_Float64 => throw new NotSupportedException("Multiple " + gdalDataType + " no data values found in virtual raster tiles for band '" + bandName + "'. Making a selection among these (or picking an alternate value) is not currently implemented."),
+                _ => throw new NotSupportedException("Unhandled GDAL data type " + gdalDataType + ".")
+            };
         }
 
         public void WriteXml(string vrtFilePath)

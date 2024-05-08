@@ -19,7 +19,7 @@ namespace Mars.Clouds.Vrt
         public string Description { get; set; }
         public List<HistogramItem> Histograms { get; private init; }
         public VrtMetadata Metadata { get; private init; }
-        public double NoDataValue { get; set; }
+        public double? NoDataValue { get; set; }
         public List<ComplexSource> Sources { get; private init; }
 
         public VrtRasterBand()
@@ -30,7 +30,7 @@ namespace Mars.Clouds.Vrt
             this.Description = String.Empty;
             this.Histograms = [];
             this.Metadata = new();
-            this.NoDataValue = Double.NaN;
+            this.NoDataValue = null;
             this.Sources = [];
         }
 
@@ -107,7 +107,10 @@ namespace Mars.Clouds.Vrt
             writer.WriteAttributeDoubleOrNan("band", this.Band);
             writer.WriteElementString("Description", this.Description);
             this.Metadata.WriteXml(writer);
-            writer.WriteElementDoubleOrNaN("NoDataValue", this.NoDataValue);
+            if (this.NoDataValue.HasValue)
+            {
+                writer.WriteElementDoubleOrNaN("NoDataValue", this.NoDataValue.Value);
+            }
             if (this.ColorInterpretation != ColorInterpretation.Unknown)
             {
                 writer.WriteElementString("ColorInterp", this.ColorInterpretation);

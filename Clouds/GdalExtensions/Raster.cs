@@ -1,4 +1,5 @@
-﻿using OSGeo.GDAL;
+﻿using Mars.Clouds.DiskSpd;
+using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,8 @@ namespace Mars.Clouds.GdalExtensions
                 // This will throw ApplicationException with 0x80131600 = -2146232832 if the raster file is incomplete.
                 try
                 {
-                    rasterDriver.Delete(rasterPath);
+                    CPLErr gdalErrorCode = rasterDriver.Delete(rasterPath);
+                    GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDriver.Delete));
                 }
                 catch (ApplicationException gdalDeletionError)
                 {
@@ -136,40 +138,6 @@ namespace Mars.Clouds.GdalExtensions
         public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
 
         public abstract void Write(string rasterPath, bool compress);
-
-        protected void WriteBand(Dataset rasterDataset, RasterBand band, int gdalBandIndex)
-        {
-            using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
-            gdalBand.SetDescription(band.Name);
-            if (band.HasNoDataValue)
-            {
-                gdalBand.SetNoDataValue(RasterBand.GetDefaultNoDataValueAsDouble(gdalBand.DataType));
-            }
-
-            GCHandle dataPin = gdalBand.DataType switch
-            {
-                DataType.GDT_Byte => band.GetPinnedDataHandle<byte>(RasterBand<byte>.GetDefaultNoDataValue()),
-                DataType.GDT_Float32 => band.GetPinnedDataHandle<float>(RasterBand<float>.GetDefaultNoDataValue()),
-                DataType.GDT_Float64 => band.GetPinnedDataHandle<double>(RasterBand<double>.GetDefaultNoDataValue()),
-                DataType.GDT_Int8 => band.GetPinnedDataHandle<sbyte>(RasterBand<sbyte>.GetDefaultNoDataValue()),
-                DataType.GDT_Int16 => band.GetPinnedDataHandle<Int16>(RasterBand<Int16>.GetDefaultNoDataValue()),
-                DataType.GDT_Int32 => band.GetPinnedDataHandle<Int32>(RasterBand<Int32>.GetDefaultNoDataValue()),
-                DataType.GDT_Int64 => band.GetPinnedDataHandle<Int64>(RasterBand<Int64>.GetDefaultNoDataValue()),
-                DataType.GDT_UInt16 => band.GetPinnedDataHandle<UInt16>(RasterBand<UInt16>.GetDefaultNoDataValue()),
-                DataType.GDT_UInt32 => band.GetPinnedDataHandle<UInt32>(RasterBand<UInt32>.GetDefaultNoDataValue()),
-                DataType.GDT_UInt64 => band.GetPinnedDataHandle<UInt64>(RasterBand<UInt64>.GetDefaultNoDataValue()),
-                _ => throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Unhandled output data type " + gdalBand.DataType + ".")
-            };
-            try
-            {
-                CPLErr gdalErrorCode = gdalBand.WriteRaster(xOff: 0, yOff: 0, xSize: this.SizeX, ySize: this.SizeY, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.SizeX, buf_ySize: this.SizeY, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
-                GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.WriteRaster));
-            }
-            finally
-            {
-                dataPin.Free();
-            }
-        }
     }
 
     /// <summary>
@@ -216,12 +184,7 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public Raster(Grid extent, string[] bandNames, TBand noDataValue)
-            : this(extent.Crs, extent.Transform, extent.SizeX, extent.SizeY, bandNames, noDataValue, true)
-        {
-        }
-
-        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, string[] bandNames, TBand noDataValue, bool initializeBandsToNoData)
-            : base(crs, transform, xSize, ySize)
+            : base(extent)
         {
             if (bandNames.Length < 1)
             {
@@ -231,7 +194,7 @@ namespace Mars.Clouds.GdalExtensions
             this.Bands = new RasterBand<TBand>[bandNames.Length];
             for (int bandIndex = 0; bandIndex < bandNames.Length; ++bandIndex)
             {
-                this.Bands[bandIndex] = new(this, bandNames[bandIndex], noDataValue, initializeBandsToNoData);
+                this.Bands[bandIndex] = new(this, bandNames[bandIndex], noDataValue, RasterBandInitialValue.NoData);
             }
         }
 
@@ -334,8 +297,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 RasterBand<TBand> band = this.Bands[bandIndex];
                 int gdalbandIndex = bandIndex + 1;
-
-                this.WriteBand(rasterDataset, band, gdalbandIndex);
+                band.Write(rasterDataset, gdalbandIndex);
             }
         }
     }

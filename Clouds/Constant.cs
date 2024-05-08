@@ -4,7 +4,7 @@ namespace Mars.Clouds
 {
     public static class Constant
     {
-        public static readonly TimeSpan DefaultProgressInterval = TimeSpan.FromSeconds(2.0);
+        public static readonly TimeSpan DefaultProgressInterval = TimeSpan.FromSeconds(1.5);
 
         public static class File
         {

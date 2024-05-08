@@ -1,6 +1,7 @@
 ﻿using OSGeo.GDAL;
-using OSGeo.OSR;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -66,7 +67,6 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract DataType GetGdalDataType();
         public abstract double GetNoDataValueAsDouble();
-        public abstract GCHandle GetPinnedDataHandle<TOutput>(TOutput noDataValue) where TOutput : INumber<TOutput>;
 
         public static DataType GetGdalDataType<TBand>() where TBand : INumber<TBand>
         {
@@ -108,6 +108,74 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public abstract void ReleaseData();
+
+        public static double ResolveSignedIntegerNoDataValue(List<double> candidateNoDataValues, double minValue, double maxValue)
+        {
+            Debug.Assert((candidateNoDataValues.Count > 1) && (Int64.MinValue <= minValue) && (minValue < maxValue) && (maxValue <= Int64.MaxValue));
+
+            // find extent of candidate values
+            double maxCandidateValue = Double.MinValue;
+            double minCandidateValue = Double.MaxValue;
+            for (int valueIndex = 0; valueIndex < candidateNoDataValues.Count; ++valueIndex)
+            {
+                double noDataValue = candidateNoDataValues[valueIndex];
+                if ((noDataValue < minValue) || (noDataValue > maxValue))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), "Candidate no data value " + noDataValue + " is not in the interval [ " + minValue + ", " + maxValue + "].");
+                }
+
+                if (noDataValue < minCandidateValue)
+                {
+                    minCandidateValue = noDataValue;
+                }
+                if (noDataValue > maxCandidateValue)
+                {
+                    maxCandidateValue = noDataValue;
+                }
+            }
+
+            // if candidate values favor a low side convention, resolve to the most negative available value
+            if (maxCandidateValue < 0.0)
+            {
+                return minCandidateValue;
+            }
+            // presume high side convention
+            if (minCandidateValue > 0.0)
+            {
+                return maxCandidateValue;
+            }
+
+            throw new NotSupportedException("Unable to determine signed integer no data value assignment convention. Candidate signed integer no data values range from " + minCandidateValue + " to " + maxCandidateValue + " within limits [" + minValue + ", " + maxValue + "].");
+        }
+
+        public static double ResolveUnsignedIntegerNoDataValue(List<double> candidateNoDataValues, double maxValue)
+        {
+            Debug.Assert((candidateNoDataValues.Count > 1) && (0.0 <= maxValue) && (maxValue <= UInt64.MaxValue));
+
+            double maxCandidateValue = Double.MinValue;
+            double minCandidateValue = Double.MaxValue;
+            for (int valueIndex = 0; valueIndex < candidateNoDataValues.Count; ++valueIndex)
+            {
+                double noDataValue = candidateNoDataValues[valueIndex];
+                if ((noDataValue < 0.0) || (noDataValue > maxValue))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), "Candidate no data value " + noDataValue + " is not in the interval [ 0.0, " + maxValue + "].");
+                }
+
+                if (noDataValue > maxCandidateValue)
+                {
+                    maxCandidateValue = noDataValue;
+                }
+                if (noDataValue < minCandidateValue)
+                {
+                    minCandidateValue = noDataValue;
+                }
+            }
+
+            // for now, assume high side no data convention if multiple values are present
+            // A low side convention would set all values to zero, in which case resolution is not needed.
+            return maxCandidateValue;
+        }
     }
 
     public class RasterBand<TBand> : RasterBand where TBand : IMinMaxValue<TBand>, INumber<TBand>
@@ -144,13 +212,39 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         // band is created in memory
-        public RasterBand(Raster raster, string name, TBand noDataValue, bool fillWithNoData)
-            : this(raster, name, noDataValue, fillWithNoData ? noDataValue : default)
+        public RasterBand(Raster raster, string name, RasterBandInitialValue initialValue)
+            : this(raster, name, RasterBand<TBand>.GetDefaultNoDataValue(), initialValue)
         {
+            // revert no data status but leave default no data value in place in case HasNoDataValue is later set to true
+            this.HasNoDataValue = false;
+        }
+
+        public RasterBand(Raster raster, string name, TBand noDataValue, RasterBandInitialValue initialValue)
+            : base(raster, name)
+        {
+            switch (initialValue)
+            {
+                case RasterBandInitialValue.Default:
+                    this.Data = new TBand[this.Cells];
+                    break;
+                case RasterBandInitialValue.NoData:
+                    this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
+                    Array.Fill(this.Data, noDataValue);
+                    break;
+                case RasterBandInitialValue.Unintialized:
+                    this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+            }
+
+            this.HasNoDataValue = true;
+            this.NoDataIsNaN = TBand.IsNaN(noDataValue);
+            this.NoDataValue = noDataValue;
         }
 
         public RasterBand(Raster raster, string name, TBand noDataValue, TBand? initialValue)
-            : base(raster, name)
+            : this(raster, name, noDataValue, RasterBandInitialValue.Unintialized)
         {
             if (noDataValue == default)
             {
@@ -161,6 +255,7 @@ namespace Mars.Clouds.GdalExtensions
                 this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
                 Array.Fill(this.Data, initialValue);
             }
+
             this.HasNoDataValue = true;
             this.NoDataIsNaN = TBand.IsNaN(noDataValue);
             this.NoDataValue = noDataValue;
@@ -217,19 +312,21 @@ namespace Mars.Clouds.GdalExtensions
             throw new InvalidOperationException("No data value requested but band does not have a no data value.");
         }
 
-        public override GCHandle GetPinnedDataHandle<TOutput>(TOutput outputNoDataValue)
+        private GCHandle GetPinnedDataHandleWithRetypedNoData<TOutput>(TOutput outputNoDataValue) where TOutput : INumber<TOutput>
         {
-            DataType thisDataType = this.GetGdalDataType();
-            DataType outputDataType = RasterBand.GetGdalDataType<TOutput>();
+            TypeCode thisDataType = Type.GetTypeCode(typeof(TBand));
+            TypeCode outputDataType = Type.GetTypeCode(typeof(TOutput));
             if (thisDataType == outputDataType)
             {
+                // no type conversion needed
                 return GCHandle.Alloc(this.Data, GCHandleType.Pinned);
             }
 
-            bool outputNoDataIsNaN = TOutput.IsNaN(outputNoDataValue);
+            // type conversion needed
             TOutput[] retypedData = new TOutput[this.Cells];
             if (this.HasNoDataValue)
             {
+                bool outputNoDataIsNaN = TOutput.IsNaN(outputNoDataValue);
                 for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
                 {
                     TBand value = this.Data[cellIndex];
@@ -391,32 +488,32 @@ namespace Mars.Clouds.GdalExtensions
                 switch (gdalBand.DataType)
                 {
                     case DataType.GDT_Byte:
-                        byte[] bufferUInt8 = new byte[this.Cells];
+                        byte[] bufferUInt8 = GC.AllocateUninitializedArray<byte>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt8);
                         DataTypeExtensions.Convert(bufferUInt8, this.Data);
                         break;
                     case DataType.GDT_Int8:
-                        sbyte[] bufferInt8 = new sbyte[this.Cells];
+                        sbyte[] bufferInt8 = GC.AllocateUninitializedArray<sbyte>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt8);
                         DataTypeExtensions.Convert(bufferInt8, this.Data);
                         break;
                     case DataType.GDT_Int16:
-                        Int16[] bufferInt16 = new Int16[this.Cells];
+                        Int16[] bufferInt16 = GC.AllocateUninitializedArray<Int16>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt16);
                         DataTypeExtensions.Convert(bufferInt16, this.Data);
                         break;
                     case DataType.GDT_Int32:
-                        Int32[] bufferInt32 = new Int32[this.Cells];
+                        Int32[] bufferInt32 = GC.AllocateUninitializedArray<Int32>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt32);
                         DataTypeExtensions.Convert(bufferInt32, this.Data);
                         break;
                     case DataType.GDT_UInt16:
-                        UInt16[] bufferUInt16 = new UInt16[this.Cells];
+                        UInt16[] bufferUInt16 = GC.AllocateUninitializedArray<UInt16>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt16);
                         DataTypeExtensions.Convert(bufferUInt16, this.Data);
                         break;
                     case DataType.GDT_UInt32:
-                        UInt32[] bufferUInt32 = new UInt32[this.Cells];
+                        UInt32[] bufferUInt32 = GC.AllocateUninitializedArray<UInt32>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt32);
                         DataTypeExtensions.Convert(bufferUInt32, this.Data);
                         break;
@@ -478,6 +575,118 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return this.IsNoData(maximumValue) == false;
+        }
+
+        public void Write(Dataset rasterDataset, int gdalBandIndex)
+        {
+            Debug.Assert(this.HasData);
+
+            using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+            gdalBand.SetDescription(this.Name);
+
+            GCHandle dataPin;
+            DataType thisGdalDataType = this.GetGdalDataType();
+            if (thisGdalDataType == gdalBand.DataType)
+            {
+                // no type conversion necessary: pass through any no data value and pin existing data array
+                if (this.HasNoDataValue)
+                {
+                    CPLErr gdalErrorCode = gdalBand.SetNoDataValue(this.GetNoDataValueAsDouble());
+                    GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                }
+                dataPin = GCHandle.Alloc(this.Data, GCHandleType.Pinned);
+            }
+            else
+            {
+                // type conversion needed: currently only integer compactions are supported
+                bool noDataIsSaturating = false; // true if saturating from below (signed integers) or from above (unsigned integers)
+                switch (gdalBand.DataType)
+                {
+                    case DataType.GDT_Int8:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = (this.NoDataValue < TBand.CreateChecked(SByte.MinValue)) || (TBand.CreateChecked(SByte.MaxValue) < this.NoDataValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(SByte.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        sbyte[] bufferInt8 = GC.AllocateUninitializedArray<sbyte>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferInt8, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferInt8, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_Int16:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = (this.NoDataValue < TBand.CreateChecked(Int16.MinValue)) || (TBand.CreateChecked(Int16.MaxValue) < this.NoDataValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Int16.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        Int16[] bufferInt16 = GC.AllocateUninitializedArray<Int16>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferInt16, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferInt16, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_Int32:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = (this.NoDataValue < TBand.CreateChecked(Int32.MinValue)) || (TBand.CreateChecked(Int32.MaxValue) < this.NoDataValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Int32.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        Int32[] bufferInt32 = GC.AllocateUninitializedArray<Int32>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferInt32, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferInt32, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_Byte:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = this.NoDataValue > TBand.CreateChecked(Byte.MaxValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Byte.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        byte[] bufferUInt8 = GC.AllocateUninitializedArray<byte>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferUInt8, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferUInt8, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_UInt16:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = this.NoDataValue > TBand.CreateChecked(UInt16.MaxValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(UInt16.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        UInt16[] bufferUInt16 = GC.AllocateUninitializedArray<UInt16>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferUInt16, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferUInt16, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_UInt32:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = this.NoDataValue > TBand.CreateChecked(UInt32.MaxValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(UInt32.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        UInt32[] bufferUInt32 = GC.AllocateUninitializedArray<UInt32>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferUInt32, noDataIsSaturating);
+                        dataPin = GCHandle.Alloc(bufferUInt32, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_Int64: // not a compaction target, should be Int64 passthrough
+                    case DataType.GDT_Float32: // not compatable
+                    case DataType.GDT_Float64: // lossy compaction not currently supported (is AVX convertible; vcvtpd2ps)
+                    case DataType.GDT_UInt64: // not a compaction target, should be UInt64 passthrough
+                    default:
+                        throw new NotSupportedException("Unhandled conversion of " + thisGdalDataType + " raster band to " + gdalBand.DataType + ".");
+                }
+            }
+
+            // write data with unchanged type or with type compacted to match raster band
+            try
+            {
+                CPLErr gdalErrorCode = gdalBand.WriteRaster(xOff: 0, yOff: 0, xSize: this.SizeX, ySize: this.SizeY, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: this.SizeX, buf_ySize: this.SizeY, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.WriteRaster));
+            }
+            finally
+            {
+                dataPin.Free();
+            }
         }
     }
 }

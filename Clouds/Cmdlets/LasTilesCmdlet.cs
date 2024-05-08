@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System;
 using System.Management.Automation;
+using DocumentFormat.OpenXml.EMMA;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -33,6 +34,11 @@ namespace Mars.Clouds.Cmdlets
             this.Las = [];
             this.MaxPointTiles = Int32.Max(25, Environment.ProcessorCount / 2);
             this.Snap = false;
+        }
+
+        protected static string GetDtmTilePath(string dtmDirectoryPath, string tileName)
+        {
+            return Path.Combine(dtmDirectoryPath, tileName + Constant.File.GeoTiffExtension);
         }
 
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)

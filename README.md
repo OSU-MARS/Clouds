@@ -30,6 +30,9 @@ Supporting tools are
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
 - `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
+- `Repair-NoisePoints`: mark z outliers as high and low noise relative to DTM (useful for that one point in low Earth orbit)
+- `Export-VrtBands`: work around QGIS performance limitations in displaying virtual rasters by extracting subsets of the bands in a .vrt
+- `Remove-VrtBlockSize`: work around QGIS's tendency to further degrade its performance displaying virtual rasters (see below)
 
 ### Dataset structure
 A LiDAR dataset is assumed to consist of
@@ -104,8 +107,11 @@ Also,
   heap offloading but it can take longer for the garbage collector to work through tens of gigabytes of first generation, second generation, and
   large objects than it does to run a cmdlet. Cmdlets may therefore request a second generation collection and compaction of the managed heap
   just before they exit.
-- QGIS sometimes modifies virtual rasters (.vrts) by adding or updatating band metadata and approximate histograms when a project is closed. 
-  When QGIS does this it also either inserts `BlockYSize="1"` attributes on all the tiles listed in the .vrt or overwrites existing 
-  `BlockYSize` values with 1, dramatically reducing performance for virtual rasters composed of GeoTIFF tiles. Clouds can't do much about 
-  this QGIS-GDAL issue but a quick repair is to use find/replace in a text editor remove `BlockYSize` attributes or set them to the tiles'
-  y size in cells.
+- QGIS will modify virtual rasters (.vrts) by adding or updatating band metadata and approximate histograms when a project is closed, often 
+  following changes to symbology. When QGIS does this it inserts `BlockYSize="1"` attributes on all the tiles listed in the .vrt or sets existing 
+  `BlockYSize` values with 1, dramatically reducing performance for virtual rasters composed of GeoTIFF tiles once the QGIS project is reopened.
+  Clouds can't do much about this QGIS-GDAL behavior but `Remove-VrtBlockSize` can be used to strip out the reintroduced `BlockXSize` and 
+  `BlockYSize` attributes (find/replace in a text editor also works).
+
+In certain situations GDAL bypasses its callers and writes directly to the console. The common case for this is `ERROR 4` when a malformed dataset
+(GIS file) is encountered. If error 4 occurs during a raster write Clouds catches it and tries to recreate the raster (which typically succeeds).

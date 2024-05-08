@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Mars.Clouds.GdalExtensions;
@@ -13,7 +14,9 @@ namespace Mars.Clouds.Las
         // 1                   1.7
         // 2                   1.9
         // 5, 10, 100, 1000    2.0
-        private const int ReadExactSizeInPoints = 8;
+        protected const int ReadExactSizeInPoints = 8;
+
+        public const float ReadPointsToXyzcsSpeedInGBs = 2.0F;
 
         private bool isDisposed;
 
@@ -68,7 +71,7 @@ namespace Mars.Clouds.Las
             return cellInitialPointCapacity;
         }
 
-        private void MoveToPoints(LasTile tile)
+        protected void MoveToPoints(LasTile tile)
         {
             if (tile.IsPointFormatCompressed())
             {
@@ -83,7 +86,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <returns>false if point is classified as noise or is withdrawn</returns>
-        private static bool ReadClassification(ReadOnlySpan<byte> pointBytes, int pointFormat, out PointClassification classification)
+        protected static bool ReadClassification(ReadOnlySpan<byte> pointBytes, int pointFormat, out PointClassification classification)
         {
             if (pointFormat < 6)
             {
@@ -271,15 +274,20 @@ namespace Mars.Clouds.Las
         {
             LasHeader10 lasHeader = tile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            int redOffset = lasHeader.GetRgbOffset();
+            int greenOffset = redOffset + 2;
+            int blueOffset = redOffset + 4;
+            int nirOffset = tile.Header.GetNearInfraredOffset();
+            if ((nirOffset >= 0) && (image.NearInfrared == null))
+            {
+                // for now, fail if points have NIR data but image won't capture it
+                // This can be relaxed if needed.
+                throw new ArgumentOutOfRangeException(nameof(image), "Point cloud tile '" + tile.FilePath + "' has near infrared data but image lacks a near infrared band.");
+            }
             this.MoveToPoints(tile);
 
             // read points
             // See performance notes in ReadPointsToGrid().
-            int redOffset = tile.Header.GetRgbOffset();
-            int greenOffset = redOffset + 2;
-            int blueOffset = redOffset + 4;
-            int nirOffset = tile.Header.GetNearInfraredOffset();
-
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             double xOffset = lasHeader.XOffset;
@@ -327,7 +335,7 @@ namespace Mars.Clouds.Las
                     // assume first returns are always the most representative => only first returns contribute to RGB+NIR
                     ++image.FirstReturns[cellIndex];
 
-                    if (redOffset > 0)
+                    if (redOffset >= 0)
                     {
                         UInt16 red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[redOffset..]);
                         image.Red[cellIndex] += red;
@@ -336,8 +344,9 @@ namespace Mars.Clouds.Las
                         UInt16 blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[blueOffset..]);
                         image.Blue[cellIndex] += blue;
                     }
-                    if (nirOffset > 0)
+                    if (nirOffset >= 0)
                     {
+                        Debug.Assert(image.NearInfrared != null); // caught by checking
                         UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[nirOffset..]);
                         image.NearInfrared[cellIndex] += nir;
                     }
@@ -785,7 +794,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private static void ThrowOnUnsupportedPointFormat(LasHeader10 lasHeader)
+        protected static void ThrowOnUnsupportedPointFormat(LasHeader10 lasHeader)
         {
             byte pointFormat = lasHeader.PointDataRecordFormat;
             if (pointFormat > 10)

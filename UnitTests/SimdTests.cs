@@ -9,7 +9,7 @@ namespace Mars.Clouds.UnitTests
     public class SimdTests
     {
         [TestMethod]
-        public void Convert()
+        public void ConvertToWiderTypes()
         {
             sbyte[] signedArrayLengths = [ 7, 41, 71, 97, 113, 127 ];
             byte[] unsignedArrayLengths = [ 5, 19, 47, 101, 131, 193, 251 ];
@@ -103,6 +103,224 @@ namespace Mars.Clouds.UnitTests
                 Assert.IsTrue(destinationUInt16toUInt32[unsignedIndex] == unsignedIndex);
                 Assert.IsTrue(destinationUInt16toUInt64[unsignedIndex] == unsignedIndex);
                 Assert.IsTrue(destinationUInt32toUInt64[unsignedIndex] == unsignedIndex);
+            }
+        }
+
+        [TestMethod]
+        public void PackToNarrowerTypes()
+        {
+            Int16[] sourceInt16 = [ Int16.MinValue, Int16.MinValue + 1, Int16.MinValue + 2, Int16.MinValue + 3, SByte.MinValue, SByte.MinValue + 1, SByte.MinValue + 2, SByte.MinValue + 3, 
+                                    -4, -3, -2, -1, 0, 1, 2, 3,
+                                    Int16.MaxValue, Int16.MaxValue - 1, Int16.MaxValue - 2, Int16.MaxValue - 3, SByte.MaxValue, SByte.MaxValue - 1, SByte.MaxValue - 2, SByte.MaxValue - 3, 
+                                    SByte.MaxValue - 4, SByte.MaxValue - 5, SByte.MaxValue - 6, SByte.MaxValue - 7, SByte.MaxValue - 8, SByte.MaxValue - 9, SByte.MaxValue - 10, SByte.MaxValue - 11, 
+                                    Int16.MinValue, SByte.MinValue, 0, SByte.MaxValue, Int16.MaxValue ];
+            Int32[] sourceInt32 = [ Int32.MinValue, Int16.MinValue, Byte.MinValue, Int16.MinValue + 2, Int16.MinValue + 3, -1, 0, 1, 
+                                    Int32.MaxValue, Int16.MaxValue, Byte.MaxValue, Int16.MaxValue - 1, SByte.MaxValue - 1, Int16.MaxValue - 2, SByte.MaxValue - 2, Int16.MaxValue - 3,
+                                    Int16.MinValue, SByte.MinValue, 0, Int16.MaxValue, SByte.MaxValue ];
+            Int64[] sourceInt64 = [ Int64.MinValue, Int32.MinValue, Int16.MinValue, Byte.MinValue + 2, Int32.MinValue + 3, -1, 0, 1, 
+                                    Int64.MaxValue, Int32.MaxValue, Int16.MaxValue, Byte.MaxValue, Int32.MaxValue - 1, Int16.MaxValue - 1, SByte.MaxValue - 1, Int32.MaxValue - 2, 
+                                    Int32.MinValue, Int16.MinValue, SByte.MinValue, 0, Int32.MaxValue, Int16.MaxValue, SByte.MaxValue ];
+
+            UInt16[] sourceUInt16 = [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                                      UInt16.MaxValue, Byte.MaxValue, Byte.MaxValue - 1, Byte.MaxValue - 2, Byte.MaxValue - 3, Byte.MaxValue - 4, Byte.MaxValue - 5, Byte.MaxValue - 6, 
+                                      UInt16.MaxValue - 1, Byte.MaxValue - 7, Byte.MaxValue - 8, Byte.MaxValue - 9, Byte.MaxValue - 10, Byte.MaxValue - 11, Byte.MaxValue - 12, Byte.MaxValue - 13,
+                                      0, 1, 2, 3, 4, UInt16.MaxValue, UInt16.MaxValue - 1, Byte.MaxValue, Byte.MaxValue - 1 ];
+            UInt32[] sourceUInt32 = [ 0, 1, 2, 3, 4, 5, 6, 7, UInt32.MaxValue, UInt16.MaxValue, Byte.MaxValue, UInt16.MaxValue - 1, Byte.MaxValue - 1, UInt16.MaxValue - 2, Byte.MaxValue - 2, UInt16.MaxValue - 3,
+                                      0, UInt16.MaxValue, Byte.MaxValue ];
+            UInt64[] sourceUInt64 = [ 0, 1, 2, 3, 4, 5, 6, 7, UInt64.MaxValue, UInt32.MaxValue, UInt16.MaxValue, Byte.MaxValue, UInt32.MaxValue - 1, UInt16.MaxValue - 1, Byte.MaxValue - 1, UInt32.MaxValue - 2, 
+                                      0, UInt32.MaxValue, UInt16.MaxValue, Byte.MaxValue ];
+
+            sourceInt16.RandomizeOrder();
+            sourceInt32.RandomizeOrder();
+            sourceInt64.RandomizeOrder();
+            sourceUInt16.RandomizeOrder();
+            sourceUInt32.RandomizeOrder();
+            sourceUInt64.RandomizeOrder();
+
+            // signed packs
+            // { 16, 32, 64 } -> 8
+            sbyte[] destinationInt16toInt8noDataSaturating = new sbyte[sourceInt16.Length];
+            DataTypeExtensions.Pack(sourceInt16, destinationInt16toInt8noDataSaturating, noDataSaturatingFromBelow: true);
+            sbyte[] destinationInt16toInt8noDataUnsaturating = new sbyte[sourceInt16.Length];
+            DataTypeExtensions.Pack(sourceInt16, destinationInt16toInt8noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+            sbyte[] destinationInt32toInt8noDataSaturating = new sbyte[sourceInt32.Length];
+            DataTypeExtensions.Pack(sourceInt32, destinationInt32toInt8noDataSaturating, noDataSaturatingFromBelow: true);
+            sbyte[] destinationInt32toInt8noDataUnsaturating = new sbyte[sourceInt32.Length];
+            DataTypeExtensions.Pack(sourceInt32, destinationInt32toInt8noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+            sbyte[] destinationInt64toInt8noDataSaturating = new sbyte[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt8noDataSaturating, noDataSaturatingFromBelow: true);
+            sbyte[] destinationInt64toInt8noDataUnsaturating = new sbyte[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt8noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+            // { 32, 64 } -> 16
+            Int16[] destinationInt32toInt16noDataSaturating = new Int16[sourceInt32.Length];
+            DataTypeExtensions.Pack(sourceInt32, destinationInt32toInt16noDataSaturating, noDataSaturatingFromBelow: true);
+            Int16[] destinationInt32toInt16noDataUnsaturating = new Int16[sourceInt32.Length];
+            DataTypeExtensions.Pack(sourceInt32, destinationInt32toInt16noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+            Int16[] destinationInt64toInt16noDataSaturating = new Int16[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt16noDataSaturating, noDataSaturatingFromBelow: true);
+            Int16[] destinationInt64toInt16noDataUnsaturating = new Int16[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt16noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+
+            // 64 -> 32
+            Int32[] destinationInt64toInt32noDataSaturating = new Int32[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt32noDataSaturating, noDataSaturatingFromBelow: true);
+            Int32[] destinationInt64toInt32noDataUnsaturating = new Int32[sourceInt64.Length];
+            DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt32noDataUnsaturating, noDataSaturatingFromBelow: false);
+
+            // unsigned packs
+            // { 16, 32, 64 } -> 8
+            byte[] destinationUInt16toUInt8noDataSaturating = new byte[sourceUInt16.Length];
+            DataTypeExtensions.Pack(sourceUInt16, destinationUInt16toUInt8noDataSaturating, noDataSaturatingFromAbove: true);
+            byte[] destinationUInt16toUInt8noDataUnsaturating = new byte[sourceUInt16.Length];
+            DataTypeExtensions.Pack(sourceUInt16, destinationUInt16toUInt8noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            byte[] destinationUInt32toUInt8noDataSaturating = new byte[sourceUInt32.Length];
+            DataTypeExtensions.Pack(sourceUInt32, destinationUInt32toUInt8noDataSaturating, noDataSaturatingFromAbove: true);
+            byte[] destinationUInt32toUInt8noDataUnsaturating = new byte[sourceUInt32.Length];
+            DataTypeExtensions.Pack(sourceUInt32, destinationUInt32toUInt8noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            byte[] destinationUInt64toUInt8noDataSaturating = new byte[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt8noDataSaturating, noDataSaturatingFromAbove: true);
+            byte[] destinationUInt64toUInt8noDataUnsaturating = new byte[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt8noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            // { 32, 64 } -> 16
+            UInt16[] destinationUInt32toUInt16noDataSaturating = new UInt16[sourceUInt32.Length];
+            DataTypeExtensions.Pack(sourceUInt32, destinationUInt32toUInt16noDataSaturating, noDataSaturatingFromAbove: true);
+            UInt16[] destinationUInt32toUInt16noDataUnsaturating = new UInt16[sourceUInt32.Length];
+            DataTypeExtensions.Pack(sourceUInt32, destinationUInt32toUInt16noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            UInt16[] destinationUInt64toUInt16noDataSaturating = new UInt16[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt16noDataSaturating, noDataSaturatingFromAbove: true);
+            UInt16[] destinationUInt64toUInt16noDataUnsaturating = new UInt16[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt16noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            // 64 -> 32
+            UInt32[] destinationUInt64toUInt32noDataSaturating = new UInt32[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt32noDataSaturating, noDataSaturatingFromAbove: true);
+            UInt32[] destinationUInt64toUInt32noDataUnsaturating = new UInt32[sourceUInt64.Length];
+            DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt32noDataUnsaturating, noDataSaturatingFromAbove: false);
+
+            // signed validation
+            // Int16 -> 8
+            for (int index = 0; index < sourceInt16.Length; ++index)
+            {
+                Int16 valueInt16 = sourceInt16[index];
+
+                sbyte expectedValueInt16toInt8noDataSaturating = valueInt16 == SByte.MinValue ? (sbyte)(SByte.MinValue + 1) : SByte.CreateSaturating(valueInt16);
+                sbyte valueInt16toInt8noDataSaturating = destinationInt16toInt8noDataSaturating[index];
+                sbyte expectedValueInt16toInt8noDataUnsaturating = SByte.CreateSaturating(valueInt16);
+                sbyte valueInt16toInt8noDataUnsaturating = destinationInt16toInt8noDataUnsaturating[index];
+
+                Assert.IsTrue((expectedValueInt16toInt8noDataSaturating == valueInt16toInt8noDataSaturating) && (expectedValueInt16toInt8noDataUnsaturating == valueInt16toInt8noDataUnsaturating));
+            }
+
+            // Int32 -> { 16, 8 }
+            for (int index = 0; index < sourceInt32.Length; ++index)
+            {
+                Int32 valueInt32 = sourceInt32[index];
+
+                sbyte expectedValueInt32toInt8noDataSaturating = valueInt32 == SByte.MinValue ? (sbyte)(SByte.MinValue + 1) : SByte.CreateSaturating(valueInt32);
+                sbyte valueInt32toInt8noDataSaturating = destinationInt32toInt8noDataSaturating[index];
+                sbyte expectedValueInt32toInt8noDataUnsaturating = SByte.CreateSaturating(valueInt32);
+                sbyte valueInt32toInt8noDataUnsaturating = destinationInt32toInt8noDataUnsaturating[index];
+
+                Int16 expectedValueInt32toInt16noDataSaturating = valueInt32 == Int16.MinValue ? (Int16)(Int16.MinValue + 1) : Int16.CreateSaturating(valueInt32);
+                Int16 valueInt32toInt16noDataSaturating = destinationInt32toInt16noDataSaturating[index];
+                Int16 expectedValueInt32toInt16noDataUnsaturating = Int16.CreateSaturating(valueInt32);
+                Int16 valueInt32toInt16noDataUnsaturating = destinationInt32toInt16noDataUnsaturating[index];
+
+                Assert.IsTrue((expectedValueInt32toInt8noDataSaturating == valueInt32toInt8noDataSaturating) && (expectedValueInt32toInt8noDataUnsaturating == valueInt32toInt8noDataUnsaturating));
+                Assert.IsTrue((expectedValueInt32toInt16noDataSaturating == valueInt32toInt16noDataSaturating) && (expectedValueInt32toInt16noDataUnsaturating == valueInt32toInt16noDataUnsaturating));
+            }
+
+            // Int64 -> { 32, 16, 8 }
+            for (int index = 0; index < sourceInt64.Length; ++index)
+            {
+                Int64 valueInt64 = sourceInt64[index];
+
+                sbyte expectedValueInt64toInt8noDataSaturating = valueInt64 == SByte.MinValue ? (sbyte)(SByte.MinValue + 1) : SByte.CreateSaturating(valueInt64);
+                sbyte valueInt64toInt8noDataSaturating = destinationInt64toInt8noDataSaturating[index];
+                sbyte expectedValueInt64toInt8noDataUnsaturating = SByte.CreateSaturating(valueInt64);
+                sbyte valueInt64toInt8noDataUnsaturating = destinationInt64toInt8noDataUnsaturating[index];
+
+                Int16 expectedValueInt64toInt16noDataSaturating = valueInt64 == Int16.MinValue ? (Int16)(Int16.MinValue + 1) : Int16.CreateSaturating(valueInt64);
+                Int16 valueInt64toInt16noDataSaturating = destinationInt64toInt16noDataSaturating[index];
+                Int16 expectedValueInt64toInt16noDataUnsaturating = Int16.CreateSaturating(valueInt64);
+                Int16 valueInt64toInt16noDataUnsaturating = destinationInt64toInt16noDataUnsaturating[index];
+
+                Int32 expectedValueInt64toInt32noDataSaturating = valueInt64 == Int32.MinValue ? Int32.MinValue + 1 : Int32.CreateSaturating(valueInt64);
+                Int32 valueInt64toInt32noDataSaturating = destinationInt64toInt32noDataSaturating[index];
+                Int32 expectedValueInt64toInt32noDataUnsaturating = Int32.CreateSaturating(valueInt64);
+                Int32 valueInt64toInt32noDataUnsaturating = destinationInt64toInt32noDataUnsaturating[index];
+
+                Assert.IsTrue((expectedValueInt64toInt8noDataSaturating == valueInt64toInt8noDataSaturating) && (expectedValueInt64toInt8noDataUnsaturating == valueInt64toInt8noDataUnsaturating));
+                Assert.IsTrue((expectedValueInt64toInt16noDataSaturating == valueInt64toInt16noDataSaturating) && (expectedValueInt64toInt16noDataUnsaturating == valueInt64toInt16noDataUnsaturating));
+                Assert.IsTrue((expectedValueInt64toInt32noDataSaturating == valueInt64toInt32noDataSaturating) && (expectedValueInt64toInt32noDataUnsaturating == valueInt64toInt32noDataUnsaturating));
+            }
+
+            // unsigned validation
+            // UInt16 -> 8
+            for (int index = 0; index < sourceUInt16.Length; ++index)
+            {
+                UInt16 valueUInt16 = sourceUInt16[index];
+
+                byte expectedValueUInt16toUInt8noDataSaturating = valueUInt16 == Byte.MaxValue ? (byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(valueUInt16);
+                byte valueUInt16toUInt8noDataSaturating = destinationUInt16toUInt8noDataSaturating[index];
+                byte expectedValueUInt16toUInt8noDataUnsaturating = Byte.CreateSaturating(valueUInt16);
+                byte valueUInt16toUInt8noDataUnsaturating = destinationUInt16toUInt8noDataUnsaturating[index];
+
+                Assert.IsTrue((expectedValueUInt16toUInt8noDataSaturating == valueUInt16toUInt8noDataSaturating) && (expectedValueUInt16toUInt8noDataUnsaturating == valueUInt16toUInt8noDataUnsaturating));
+            }
+
+            // UInt32 -> { 16, 8 }
+            for (int index = 0; index < sourceUInt32.Length; ++index)
+            {
+                UInt32 valueUInt32 = sourceUInt32[index];
+
+                byte expectedValueUInt32toUInt8noDataSaturating = valueUInt32 == Byte.MaxValue ? (byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(valueUInt32);
+                byte valueUInt32toUInt8noDataSaturating = destinationUInt32toUInt8noDataSaturating[index];
+                byte expectedValueUInt32toUInt8noDataUnsaturating = Byte.CreateSaturating(valueUInt32);
+                byte valueUInt32toUInt8noDataUnsaturating = destinationUInt32toUInt8noDataUnsaturating[index];
+
+                UInt16 expectedValueUInt32toUInt16noDataSaturating = valueUInt32 == UInt16.MaxValue ? (UInt16)(UInt16.MaxValue - 1) : UInt16.CreateSaturating(valueUInt32);
+                UInt16 valueUInt32toUInt16noDataSaturating = destinationUInt32toUInt16noDataSaturating[index];
+                UInt16 expectedValueUInt32toUInt16noDataUnsaturating = UInt16.CreateSaturating(valueUInt32);
+                UInt16 valueUInt32toUInt16noDataUnsaturating = destinationUInt32toUInt16noDataUnsaturating[index];
+                
+                Assert.IsTrue((expectedValueUInt32toUInt8noDataSaturating == valueUInt32toUInt8noDataSaturating) && (expectedValueUInt32toUInt8noDataUnsaturating == valueUInt32toUInt8noDataUnsaturating));
+                Assert.IsTrue((expectedValueUInt32toUInt16noDataSaturating == valueUInt32toUInt16noDataSaturating) && (expectedValueUInt32toUInt16noDataUnsaturating == valueUInt32toUInt16noDataUnsaturating));
+
+            }
+
+            // UInt64 -> { 32, 16, 8 }
+            for (int index = 0; index < sourceUInt64.Length; ++index)
+            {
+                UInt64 valueUInt64 = sourceUInt64[index];
+
+                byte expectedValueUInt64toUInt8noDataSaturating = valueUInt64 == Byte.MaxValue ? (byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(valueUInt64);
+                byte valueUInt64toUInt8noDataSaturating = destinationUInt64toUInt8noDataSaturating[index];
+                byte expectedValueUInt64toUInt8noDataUnsaturating = Byte.CreateSaturating(valueUInt64);
+                byte valueUInt64toUInt8noDataUnsaturating = destinationUInt64toUInt8noDataUnsaturating[index];
+
+                UInt16 expectedValueUInt64toUInt16noDataSaturating = valueUInt64 == UInt16.MaxValue ? (UInt16)(UInt16.MaxValue - 1) : UInt16.CreateSaturating(valueUInt64);
+                UInt16 valueUInt64toUInt16noDataSaturating = destinationUInt64toUInt16noDataSaturating[index];
+                UInt16 expectedValueUInt64toUInt16noDataUnsaturating = UInt16.CreateSaturating(valueUInt64);
+                UInt16 valueUInt64toUInt16noDataUnsaturating = destinationUInt64toUInt16noDataUnsaturating[index];
+
+                UInt32 expectedValueUInt64toUInt32noDataSaturating = valueUInt64 == UInt32.MaxValue ? UInt32.MaxValue - 1 : UInt32.CreateSaturating(valueUInt64);
+                UInt32 valueUInt64toUInt32noDataSaturating = destinationUInt64toUInt32noDataSaturating[index];
+                UInt32 expectedValueUInt64toUInt32noDataUnsaturating = UInt32.CreateSaturating(valueUInt64);
+                UInt32 valueUInt64toUInt32noDataUnsaturating = destinationUInt64toUInt32noDataUnsaturating[index];
+
+                Assert.IsTrue((expectedValueUInt64toUInt8noDataSaturating == valueUInt64toUInt8noDataSaturating) && (expectedValueUInt64toUInt8noDataUnsaturating == valueUInt64toUInt8noDataUnsaturating));
+                Assert.IsTrue((expectedValueUInt64toUInt16noDataSaturating == valueUInt64toUInt16noDataSaturating) && (expectedValueUInt64toUInt16noDataUnsaturating == valueUInt64toUInt16noDataUnsaturating));
+                Assert.IsTrue((expectedValueUInt64toUInt32noDataSaturating == valueUInt64toUInt32noDataSaturating) && (expectedValueUInt64toUInt32noDataUnsaturating == valueUInt64toUInt32noDataUnsaturating));
             }
         }
 

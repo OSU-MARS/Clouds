@@ -61,3 +61,6 @@ for($index = 0; $index -lt $megaPoints.Length; ++$index)
     $megaPoints[$index] = $megaPoints[$index] / 1E6
 }
 $megaPoints | Measure -AllStats
+
+# outlier detection
+Repair-NoisePoints -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles testing\s03780w06390.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM"

@@ -77,7 +77,7 @@ namespace Mars.Clouds.Cmdlets
         private ImageRaster<UInt64> ReadTile(LasTile lasTile, ImageTileReadWrite imageReadWrite)
         {
             GridGeoTransform lasTileTransform = new(lasTile.GridExtent, this.CellSize, this.CellSize);
-            ImageRaster<UInt64> imageTile = new(lasTile.GetSpatialReference(), lasTileTransform, imageReadWrite.TileSizeX, imageReadWrite.TileSizeY, UInt64.MaxValue);
+            ImageRaster<UInt64> imageTile = new(lasTile.GetSpatialReference(), lasTileTransform, imageReadWrite.TileSizeX, imageReadWrite.TileSizeY, lasTile.Header.PointsHaveNearInfrared());
             using LasReader pointReader = lasTile.CreatePointReader();
             pointReader.ReadPointsToImage(lasTile, imageTile);
 
@@ -122,11 +122,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 case 16:
                     // will likely fail since source data is UInt16; divide by two to avoid Int16 overflows?
-                    ImageRaster<UInt16> imageTile16 = imageTile.AsUInt16();
+                    ImageRaster<UInt16> imageTile16 = imageTile.PackToUInt16();
                     imageTile16.Write(imageTilePath, this.CompressRasters);
                     break;
                 case 32:
-                    ImageRaster<UInt32> imageTile32 = imageTile.AsUInt32();
+                    ImageRaster<UInt32> imageTile32 = imageTile.PackToUInt32();
                     imageTile32.Write(imageTilePath, this.CompressRasters); // 32 bit integer deflate compression appears to be somewhat expensive
                     break;
                 default:

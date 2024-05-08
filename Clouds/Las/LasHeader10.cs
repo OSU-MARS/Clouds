@@ -214,6 +214,21 @@ namespace Mars.Clouds.Las
             };
         }
 
+        public bool PointsHaveGpsTime()
+        {
+            return this.GetGpstimePointOffset() != -1;
+        }
+
+        public bool PointsHaveNearInfrared()
+        {
+            return this.GetNearInfraredOffset() != -1;
+        }
+
+        public bool PointsHaveRgb()
+        {
+            return this.GetRgbOffset() != -1;
+        }
+
         public virtual void Validate()
         {
             if (this.SystemIdentifier.Length > 32)

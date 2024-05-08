@@ -70,7 +70,7 @@ namespace Mars.Clouds.Cmdlets
                     try
                     {
                         // load DTM tile
-                        string dtmTilePath = Path.Combine(this.Dtm, lasTile.Name + Constant.File.GeoTiffExtension);
+                        string dtmTilePath = LasTilesCmdlet.GetDtmTilePath(this.Dtm, lasTile.Name);
                         if (dtmTile == null)
                         {
                             dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
@@ -210,7 +210,7 @@ namespace Mars.Clouds.Cmdlets
             int usablePhysicalMemoryInGB = (int)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024 * 1024)) - 8; // set aside 8 GB for operating system and other programs
             int maxWorkerThreads = Int32.Max(Int32.Min(this.MaxThreads - readThreads, usablePhysicalMemoryInGB / 6), 1); // for now, assume 6 GB/thread, guarantee at least one worker thread
             // minimum bound on workers is at least two, but prefer a minimum of two for margin and enough to fully utilize the read threads
-            float readBandwidthInGBs = Single.Min(2.0F * readThreads, driveCapabilities.GetSequentialCapabilityInGBs());
+            float readBandwidthInGBs = Single.Min(LasReader.ReadPointsToXyzcsSpeedInGBs * readThreads, driveCapabilities.GetSequentialCapabilityInGBs());
             int preferredWorkerThreadsAsymptotic = Int32.Min(maxWorkerThreads, Int32.Max(2, (int)(readBandwidthInGBs / 0.2F + 0.5F)));
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
             int preferredWorkerThreadsLimitedTiles = Int32.Min(maxWorkerThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles

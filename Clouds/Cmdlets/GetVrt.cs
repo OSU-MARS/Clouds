@@ -21,9 +21,11 @@ namespace Mars.Clouds.Cmdlets
         public List<string> TilePaths { get; set; }
 
         [Parameter(HelpMessage = "List of bands to include in the virtual raster. All available bands are included if not specified.")]
+        [ValidateNotNullOrEmpty]
         public List<string> Bands { get; set; }
 
         [Parameter(Mandatory = true, HelpMessage = "Path to output .vrt file.")]
+        [ValidateNotNullOrEmpty]
         public string Vrt { get; set; }
 
         [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 16 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]

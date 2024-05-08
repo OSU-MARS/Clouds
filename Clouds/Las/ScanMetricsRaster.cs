@@ -28,16 +28,16 @@ namespace Mars.Clouds.Las
         {
             // no data for min and max scan angles and GPS times should arguably be Double.MaxValue and Double.MinValue
             // However, GDAL's default TIFFTAG_GDAL_NODATA profile supports only one no data value per raster.
-            this.AcceptedPoints = new(this, "acceptedPoints", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
-            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat, fillWithNoData: false);
-            this.ScanDirectionMean = new(this, "scanDirection", RasterBand.NoDataDefaultFloat, fillWithNoData: false);
+            this.AcceptedPoints = new(this, "acceptedPoints", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
+            this.ScanDirectionMean = new(this, "scanDirection", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
             this.ScanAngleMin = new(this, "scanAngleMin", RasterBand.NoDataDefaultFloat, Single.MaxValue);
             this.ScanAngleMax = new(this, "scanAngleMax", RasterBand.NoDataDefaultFloat, Single.MinValue);
-            this.NoiseOrWithheld = new(this, "noiseOrWithheld", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
-            this.EdgeOfFlightLine = new(this, "edgeOfFlightLine", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
-            this.Overlap = new(this, "overlap", RasterBand.NoDataDefaultUInt32, fillWithNoData: false);
+            this.NoiseOrWithheld = new(this, "noiseOrWithheld", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.EdgeOfFlightLine = new(this, "edgeOfFlightLine", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.Overlap = new(this, "overlap", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
             this.GpstimeMin = new(this, "gpstimeMin", RasterBand.NoDataDefaultDouble, Double.MaxValue);
-            this.GpstimeMean = new(this, "gpstimeMean", RasterBand.NoDataDefaultDouble, fillWithNoData: false);
+            this.GpstimeMean = new(this, "gpstimeMean", RasterBand.NoDataDefaultDouble, RasterBandInitialValue.Default);
             this.GpstimeMax = new(this, "gpstimeMax", RasterBand.NoDataDefaultDouble, Double.MinValue);
         }
 
@@ -176,17 +176,17 @@ namespace Mars.Clouds.Las
             Debug.Assert(this.GpstimeMin.IsNoData(RasterBand.NoDataDefaultDouble) && this.GpstimeMean.IsNoData(RasterBand.NoDataDefaultDouble) && this.GpstimeMax.IsNoData(RasterBand.NoDataDefaultDouble));
 
             using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, 11, DataType.GDT_Float64, compress);
-            this.WriteBand(rasterDataset, this.AcceptedPoints, 1);
-            this.WriteBand(rasterDataset, this.ScanAngleMeanAbsolute, 2);
-            this.WriteBand(rasterDataset, this.NoiseOrWithheld, 3);
-            this.WriteBand(rasterDataset, this.GpstimeMean, 4);
-            this.WriteBand(rasterDataset, this.ScanDirectionMean, 5);
-            this.WriteBand(rasterDataset, this.ScanAngleMin, 6);
-            this.WriteBand(rasterDataset, this.ScanAngleMax, 7);
-            this.WriteBand(rasterDataset, this.GpstimeMin, 8);
-            this.WriteBand(rasterDataset, this.GpstimeMax, 9);
-            this.WriteBand(rasterDataset, this.EdgeOfFlightLine, 10);
-            this.WriteBand(rasterDataset, this.Overlap, 11);
+            this.AcceptedPoints.Write(rasterDataset, 1);
+            this.ScanAngleMeanAbsolute.Write(rasterDataset, 2);
+            this.NoiseOrWithheld.Write(rasterDataset, 3);
+            this.GpstimeMean.Write(rasterDataset, 4);
+            this.ScanDirectionMean.Write(rasterDataset, 5);
+            this.ScanAngleMin.Write(rasterDataset, 6);
+            this.ScanAngleMax.Write(rasterDataset, 7);
+            this.GpstimeMin.Write(rasterDataset, 8);
+            this.GpstimeMax.Write(rasterDataset, 9);
+            this.EdgeOfFlightLine.Write(rasterDataset, 10);
+            this.Overlap.Write(rasterDataset, 11);
         }
     }
 }

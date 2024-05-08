@@ -22,6 +22,16 @@ namespace Mars.Clouds.Las
 
         public LasReader CreatePointReader()
         {
+            return new LasReader(this.CreatePointStream(FileAccess.Read));
+        }
+
+        public LasReaderWriter CreatePointReaderWriter()
+        {
+            return new LasReaderWriter(this.CreatePointStream(FileAccess.ReadWrite));
+        }
+
+        private FileStream CreatePointStream(FileAccess fileAccess)
+        {
             // rough scaling with file size from https://github.com/dotnet/runtime/discussions/74405#discussioncomment-3488674
             int bufferSizeInKB;
             if (this.FileSizeInBytes > 512 * 1024 * 1024) // > 512 MB
@@ -41,10 +51,9 @@ namespace Mars.Clouds.Las
                 bufferSizeInKB = 128;
             }
 
-            FileStream stream = new(this.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSizeInKB * 1024);
-            LasReader reader = new(stream);
-            reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
-            return reader;
+            FileStream stream = new(this.FilePath, FileMode.Open, fileAccess, FileShare.Read, bufferSizeInKB * 1024);
+            stream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return stream;
         }
     }
 }

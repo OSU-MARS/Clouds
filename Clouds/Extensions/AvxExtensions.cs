@@ -220,7 +220,7 @@ namespace Mars.Clouds.Extensions
             fixed (byte* sourceStart = &source[0])
             fixed (Int16* destinationStart = &destination[0])
             {
-                Int16* destinationAddress = (Int16*)destinationStart;
+                Int16* destinationAddress = destinationStart;
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -246,7 +246,7 @@ namespace Mars.Clouds.Extensions
             fixed (byte* sourceStart = &source[0])
             fixed (Int32* destinationStart = &destination[0])
             {
-                Int32* destinationAddress = (Int32*)destinationStart;
+                Int32* destinationAddress = destinationStart;
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -272,7 +272,7 @@ namespace Mars.Clouds.Extensions
             fixed (byte* sourceStart = &source[0])
             fixed (Int64* destinationStart = &destination[0])
             {
-                Int64* destinationAddress = (Int64*)destinationStart;
+                Int64* destinationAddress = destinationStart;
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -376,7 +376,7 @@ namespace Mars.Clouds.Extensions
             fixed (UInt16* sourceStart = &source[0])
             fixed (Int32* destinationStart = &destination[0])
             {
-                Int32* destinationAddress = (Int32*)destinationStart;
+                Int32* destinationAddress = destinationStart;
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -402,7 +402,7 @@ namespace Mars.Clouds.Extensions
             fixed (UInt16* sourceStart = &source[0])
             fixed (Int64* destinationStart = &destination[0])
             {
-                Int64* destinationAddress = (Int64*)destinationStart;
+                Int64* destinationAddress = destinationStart;
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -480,7 +480,7 @@ namespace Mars.Clouds.Extensions
             fixed (UInt32* sourceStart = &source[0])
             fixed (Int64* destinationStart = &destination[0])
             {
-                Int64* destinationAddress = (Int64*)destinationStart;
+                Int64* destinationAddress = destinationStart;
                 UInt32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
@@ -992,6 +992,396 @@ namespace Mars.Clouds.Extensions
         {
             // _mm256_min_epi64() is in AVX-512VL
             return Avx2.BlendVariable(value1, value2, Avx2.CompareGreaterThan(value1, value2));
+        }
+
+        public static unsafe void Pack(Int16[] source, sbyte[] destination, bool noDataIsSaturatingFromBelow)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 16; // read 16 Int16s, convert to 16 Int64s
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (Int16* sourceStart = &source[0])
+            fixed (sbyte* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of Int16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                sbyte* destinationAddress = destinationStart;
+                Int16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                if (noDataIsSaturatingFromBelow)
+                {
+                    Vector256<Int16> int8min = Vector256.Create((Int16)SByte.MinValue);
+                    Vector256<Int16> int8unsaturatedMin = Vector256.Create((Int16)(SByte.MinValue + 1));
+                    for (Int16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<Int16> octet16 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<Int16> dataSaturationMask = Avx2.CompareEqual(octet16, int8min);
+                        octet16 = Avx2.BlendVariable(octet16, int8unsaturatedMin, dataSaturationMask);
+                        Vector128<sbyte> octet8 = Avx2.PackSignedSaturate(octet16.GetLower(), octet16.GetUpper());
+                        Avx.Store(destinationAddress, octet8);
+                    }
+                }
+                else
+                {
+                    for (Int16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<Int16> octet16 = Avx2.LoadVector256(sourceAddress);
+                        Vector128<sbyte> octet8 = Avx2.PackSignedSaturate(octet16.GetLower(), octet16.GetUpper());
+                        Avx.Store(destinationAddress, octet8);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromBelow)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    Int16 value16 = source[scalarIndex];
+                    sbyte value8 = value16 == SByte.MinValue ? (SByte)(SByte.MinValue + 1) : SByte.CreateSaturating(value16);
+                    destination[scalarIndex] = value8;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = SByte.CreateSaturating(source[scalarIndex]);
+                }
+            }
+        }
+
+        public static unsafe void Pack(Int32[] source, sbyte[] destination, bool noDataIsSaturatingFromAbove)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 2 * 256 / 32; // read 16 Int32s, convert to 16 sbytes
+            const int halfStride = stride / 2;
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (Int32* sourceStart = &source[0])
+            fixed (sbyte* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of Int16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                sbyte* destinationAddress = destinationStart;
+                Int32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                if (noDataIsSaturatingFromAbove)
+                {
+                    Vector256<Int32> int8min = Vector256.Create((Int32)SByte.MinValue);
+                    Vector256<Int32> int8unsaturatedMin = Vector256.Create((Int32)(SByte.MinValue + 1));
+                    for (Int32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += halfStride)
+                    {
+                        Vector256<Int32> octet32_0 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<Int32> dataSaturationMask0 = Avx2.CompareEqual(octet32_0, int8min);
+                        octet32_0 = Avx2.BlendVariable(octet32_0, int8unsaturatedMin, dataSaturationMask0);
+                        Vector128<Int16> octet16_0 = Avx2.PackSignedSaturate(octet32_0.GetLower(), octet32_0.GetUpper());
+
+                        sourceAddress += halfStride;
+                        Vector256<Int32> octet32_1 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<Int32> dataSaturationMask1 = Avx2.CompareEqual(octet32_1, int8min);
+                        octet32_1 = Avx2.BlendVariable(octet32_1, int8unsaturatedMin, dataSaturationMask1);
+                        Vector128<Int16> octet16_1 = Avx2.PackSignedSaturate(octet32_1.GetLower(), octet32_1.GetUpper());
+
+                        Vector128<sbyte> hextet8 = Avx2.PackSignedSaturate(octet16_0, octet16_1);
+                        Avx.Store(destinationAddress, hextet8);
+                    }
+                }
+                else
+                {
+                    for (Int32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += halfStride)
+                    {
+                        Vector256<Int32> octet32_0 = Avx2.LoadVector256(sourceAddress);
+                        Vector128<Int16> octet16_0 = Avx2.PackSignedSaturate(octet32_0.GetLower().AsInt32(), octet32_0.GetUpper().AsInt32());
+
+                        sourceAddress += halfStride;
+                        Vector256<Int32> octet32_1 = Avx2.LoadVector256(sourceAddress);
+                        Vector128<Int16> octet16_1 = Avx2.PackSignedSaturate(octet32_1.GetLower(), octet32_1.GetUpper());
+
+                        Vector128<sbyte> hextet8 = Avx2.PackSignedSaturate(octet16_0, octet16_1);
+                        Avx.Store(destinationAddress, hextet8);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromAbove)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    Int32 value32 = source[scalarIndex];
+                    sbyte value8 = value32 == SByte.MinValue ? (sbyte)(SByte.MinValue + 1) : SByte.CreateSaturating(value32);
+                    destination[scalarIndex] = value8;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = SByte.CreateSaturating(source[scalarIndex]);
+                }
+            }
+        }
+
+        public static unsafe void Pack(Int32[] source, Int16[] destination, bool noDataIsSaturatingFromBelow)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 32; // read 8 Int32s, convert to 8 Int16s
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (Int32* sourceStart = &source[0])
+            fixed (Int16* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of Int16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                Int16* destinationAddress = destinationStart;
+                Int32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                if (noDataIsSaturatingFromBelow)
+                {
+                    Vector256<Int32> int16min = Vector256.Create((Int32)Int16.MinValue);
+                    Vector256<Int32> int16unsaturatedMin = Vector256.Create((Int32)(Int16.MinValue + 1));
+                    for (Int32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<Int32> octet32 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<Int32> dataSaturationMask = Avx2.CompareEqual(octet32, int16min);
+                        octet32 = Avx2.BlendVariable(octet32, int16unsaturatedMin, dataSaturationMask);
+                        Vector128<Int16> octet16 = Avx2.PackSignedSaturate(octet32.GetLower(), octet32.GetUpper());
+                        Avx.Store(destinationAddress, octet16);
+                    }
+                }
+                else
+                {
+                    for (Int32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<Int32> octet32 = Avx2.LoadVector256(sourceAddress);
+                        Vector128<Int16> octet16 = Avx2.PackSignedSaturate(octet32.GetLower(), octet32.GetUpper());
+                        Avx.Store(destinationAddress, octet16);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromBelow)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    Int32 value32 = source[scalarIndex];
+                    Int16 value16 = value32 == Int16.MinValue ? (Int16)(Int16.MinValue + 1) : Int16.CreateSaturating(value32);
+                    destination[scalarIndex] = value16;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = Int16.CreateSaturating(source[scalarIndex]);
+                }
+            }
+        }
+
+        public static unsafe void Pack(UInt16[] source, byte[] destination, bool noDataIsSaturatingFromAbove)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 16; // read 16 UInt16s, convert to 16 UInt64s
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (UInt16* sourceStart = &source[0])
+            fixed (byte* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of UInt16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                byte* destinationAddress = destinationStart;
+                UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                Vector256<UInt16> uint8max = Vector256.Create((UInt16)Byte.MaxValue);
+                if (noDataIsSaturatingFromAbove)
+                {
+                    Vector256<UInt16> uint8unsaturatedMax = Vector256.Create((UInt16)(Byte.MaxValue - 1));
+                    for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<UInt16> octet16 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<UInt16> dataSaturationMask = Avx2.CompareEqual(octet16, uint8max);
+                        octet16 = Avx2.BlendVariable(Avx2.Min(octet16, uint8max), uint8unsaturatedMax, dataSaturationMask);
+                        Vector128<byte> octet8 = Avx2.PackUnsignedSaturate(octet16.GetLower().AsInt16(), octet16.GetUpper().AsInt16());
+                        Avx.Store(destinationAddress, octet8);
+                    }
+                }
+                else
+                {
+                    for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<UInt16> octet16 = Avx2.Min(Avx2.LoadVector256(sourceAddress), uint8max);
+                        Vector128<byte> octet8 = Avx2.PackUnsignedSaturate(octet16.GetLower().AsInt16(), octet16.GetUpper().AsInt16());
+                        Avx.Store(destinationAddress, octet8);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromAbove)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    UInt16 value16 = source[scalarIndex];
+                    byte value8 = value16 == Byte.MaxValue ? (Byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(value16);
+                    destination[scalarIndex] = value8;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = Byte.CreateSaturating(source[scalarIndex]);
+                }
+            }
+        }
+
+        public static unsafe void Pack(UInt32[] source, byte[] destination, bool noDataIsSaturatingFromAbove)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 2 * 256 / 32; // read 16 UInt32s, convert to 16 bytes
+            const int halfStride = stride / 2;
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (UInt32* sourceStart = &source[0])
+            fixed (byte* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of UInt16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                byte* destinationAddress = destinationStart;
+                UInt32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                Vector256<UInt32> uint8max = Vector256.Create((UInt32)Byte.MaxValue);
+                if (noDataIsSaturatingFromAbove)
+                {
+                    Vector256<UInt32> uint8unsaturatedMax = Vector256.Create((UInt32)(Byte.MaxValue - 1));
+                    for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += halfStride)
+                    {
+                        Vector256<UInt32> octet32_0 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<UInt32> dataSaturationMask0 = Avx2.CompareEqual(octet32_0, uint8max);
+                        octet32_0 = Avx2.BlendVariable(Avx2.Min(octet32_0, uint8max), uint8unsaturatedMax, dataSaturationMask0);
+                        Vector128<UInt16> octet16_0 = Avx2.PackUnsignedSaturate(octet32_0.GetLower().AsInt32(), octet32_0.GetUpper().AsInt32());
+
+                        sourceAddress += halfStride;
+                        Vector256<UInt32> octet32_1 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<UInt32> dataSaturationMask1 = Avx2.CompareEqual(octet32_1, uint8max);
+                        octet32_1 = Avx2.BlendVariable(Avx2.Min(octet32_1, uint8max), uint8unsaturatedMax, dataSaturationMask1);
+                        Vector128<UInt16> octet16_1 = Avx2.PackUnsignedSaturate(octet32_1.GetLower().AsInt32(), octet32_1.GetUpper().AsInt32());
+
+                        Vector128<byte> hextet8 = Avx2.PackUnsignedSaturate(octet16_0.AsInt16(), octet16_1.AsInt16());
+                        Avx.Store(destinationAddress, hextet8);
+                    }
+                }
+                else
+                {
+                    for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += halfStride)
+                    {
+                        Vector256<UInt32> octet32_0 = Avx2.Min(Avx2.LoadVector256(sourceAddress), uint8max);
+                        Vector128<UInt16> octet16_0 = Avx2.PackUnsignedSaturate(octet32_0.GetLower().AsInt32(), octet32_0.GetUpper().AsInt32());
+
+                        sourceAddress += halfStride;
+                        Vector256<UInt32> octet32_1 = Avx2.Min(Avx2.LoadVector256(sourceAddress), uint8max);
+                        Vector128<UInt16> octet16_1 = Avx2.PackUnsignedSaturate(octet32_1.GetLower().AsInt32(), octet32_1.GetUpper().AsInt32());
+
+                        Vector128<byte> hextet8 = Avx2.PackUnsignedSaturate(octet16_0.AsInt16(), octet16_1.AsInt16());
+                        Avx.Store(destinationAddress, hextet8);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromAbove)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    UInt32 value32 = source[scalarIndex];
+                    byte value8 = value32 == Byte.MaxValue ? (byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(value32);
+                    destination[scalarIndex] = value8;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = Byte.CreateSaturating(source[scalarIndex]);
+                }
+            }
+        }
+
+        public static unsafe void Pack(UInt32[] source, UInt16[] destination, bool noDataIsSaturatingFromAbove)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 32; // read 8 UInt32s, convert to 8 UInt16s
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (UInt32* sourceStart = &source[0])
+            fixed (UInt16* destinationStart = &destination[0])
+            {
+                // no _mm_packus_epu16() in AVX or AVX10
+                // Workaround is to clamp 32 bit values to the maximum value of UInt16 and then just use _mm_packus_epi32() for type conversion rather than
+                // taking advantage of its saturation capabilities. _mm256_packus_epi32() isn't particularly helpful here as it packs within lanes, requiring
+                // two 256 bit fetches and then lane swapping and permutes to produce a 256 bit store.
+                UInt16* destinationAddress = destinationStart;
+                UInt32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                Vector256<UInt32> uint16max = Vector256.Create((UInt32)UInt16.MaxValue);
+                if (noDataIsSaturatingFromAbove)
+                {
+                    Vector256<UInt32> uint16unsaturatedMax = Vector256.Create((UInt32)(UInt16.MaxValue - 1));
+                    for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<UInt32> octet32 = Avx2.LoadVector256(sourceAddress);
+                        Vector256<UInt32> dataSaturationMask = Avx2.CompareEqual(octet32, uint16max);
+                        octet32 = Avx2.BlendVariable(Avx2.Min(octet32, uint16max), uint16unsaturatedMax, dataSaturationMask);
+                        Vector128<UInt16> octet16 = Avx2.PackUnsignedSaturate(octet32.GetLower().AsInt32(), octet32.GetUpper().AsInt32());
+                        Avx.Store(destinationAddress, octet16);
+                    }
+                }
+                else
+                {
+                    for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                    {
+                        Vector256<UInt32> octet32 = Avx2.Min(Avx2.LoadVector256(sourceAddress), uint16max);
+                        Vector128<UInt16> octet16 = Avx2.PackUnsignedSaturate(octet32.GetLower().AsInt32(), octet32.GetUpper().AsInt32());
+                        Avx.Store(destinationAddress, octet16);
+                    }
+                }
+            }
+
+            if (noDataIsSaturatingFromAbove)
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    UInt32 value32 = source[scalarIndex];
+                    UInt16 value16 = value32 == UInt16.MaxValue ? (UInt16)(UInt16.MaxValue - 1) : UInt16.CreateSaturating(value32);
+                    destination[scalarIndex] = value16;
+                }
+            }
+            else
+            {
+                for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+                {
+                    destination[scalarIndex] = UInt16.CreateSaturating(source[scalarIndex]);
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

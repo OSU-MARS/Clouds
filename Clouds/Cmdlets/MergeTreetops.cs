@@ -151,9 +151,8 @@ namespace Mars.Clouds.Cmdlets
                 });
             });
 
-            TimeSpan progressInterval = TimeSpan.FromSeconds(2.0);
             TimedProgressRecord progress = new("Get-Treetops", "placeholder");
-            while (loadAndClassifyTreetops.Wait(progressInterval) == false)
+            while (loadAndClassifyTreetops.Wait(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
                 progress.Update(tilesLoaded, treetopTilePaths.Count);

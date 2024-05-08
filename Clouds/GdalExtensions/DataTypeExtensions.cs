@@ -299,5 +299,219 @@ namespace Mars.Clouds.GdalExtensions
                 _ => throw new NotSupportedException("Unhandled GDAL data type " + from + ".")
             }; ;
         }
+
+        public static void Pack<TBand>(TBand[] source, sbyte[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Int16:
+                    Int16[]? sourceInt16 = source as Int16[];
+                    Debug.Assert(sourceInt16 != null);
+                    AvxExtensions.Pack(sourceInt16, destination, noDataSaturatingFromBelow);
+                    break;
+                case TypeCode.Int32:
+                    Int32[]? sourceInt32 = source as Int32[];
+                    Debug.Assert(sourceInt32 != null);
+                    AvxExtensions.Pack(sourceInt32, destination, noDataSaturatingFromBelow);
+                    break;
+                case TypeCode.Int64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    // If there was a vpackusqw instruction it'd likely pack to 32 bit, requring a following vpackuswb.
+                    Int64[]? sourceInt64 = source as Int64[];
+                    Debug.Assert((sourceInt64 != null) && (sourceInt64.Length == destination.Length));
+                    if (noDataSaturatingFromBelow)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            Int64 value64 = sourceInt64[index];
+                            sbyte value8 = value64 == SByte.MinValue ? (sbyte)(SByte.MinValue + 1) : SByte.CreateSaturating(value64);
+                            destination[index] = value8;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = SByte.CreateSaturating(sourceInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
+
+        public static void Pack<TBand>(TBand[] source, Int16[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Int32:
+                    Int32[]? sourceInt32 = source as Int32[];
+                    Debug.Assert(sourceInt32 != null);
+                    AvxExtensions.Pack(sourceInt32, destination, noDataSaturatingFromBelow);
+                    break;
+                case TypeCode.Int64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    // If there was a vpackusqw instruction it'd likely pack to 32 bit, requring a following vpackuswb.
+                    Int64[]? sourceInt64 = source as Int64[];
+                    Debug.Assert((sourceInt64 != null) && (sourceInt64.Length == destination.Length));
+                    if (noDataSaturatingFromBelow)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            Int64 value64 = sourceInt64[index];
+                            Int16 value16 = value64 == Int16.MinValue ? (Int16)(Int16.MinValue + 1) : Int16.CreateSaturating(value64);
+                            destination[index] = value16;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = Int16.CreateSaturating(sourceInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
+
+        public static void Pack<TBand>(TBand[] source, Int32[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Int64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    Int64[]? sourceInt64 = source as Int64[];
+                    Debug.Assert((sourceInt64 != null) && (sourceInt64.Length == destination.Length));
+                    if (noDataSaturatingFromBelow)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            Int64 value64 = sourceInt64[index];
+                            Int32 value32 = value64 == Int32.MinValue ? Int32.MinValue + 1 : Int32.CreateSaturating(value64);
+                            destination[index] = value32;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = Int32.CreateSaturating(sourceInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
+
+        public static void Pack<TBand>(TBand[] source, byte[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.UInt16:
+                    UInt16[]? sourceUInt16 = source as UInt16[];
+                    Debug.Assert(sourceUInt16 != null);
+                    AvxExtensions.Pack(sourceUInt16, destination, noDataSaturatingFromAbove);
+                    break;
+                case TypeCode.UInt32:
+                    UInt32[]? sourceUInt32 = source as UInt32[];
+                    Debug.Assert(sourceUInt32 != null);
+                    AvxExtensions.Pack(sourceUInt32, destination, noDataSaturatingFromAbove);
+                    break;
+                case TypeCode.UInt64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    // If there was a vpackusqw instruction it'd likely pack to 32 bit, requring a following vpackuswb.
+                    UInt64[]? sourceUInt64 = source as UInt64[];
+                    Debug.Assert((sourceUInt64 != null) && (sourceUInt64.Length == destination.Length));
+                    if (noDataSaturatingFromAbove)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            UInt64 value64 = sourceUInt64[index];
+                            byte value8 = value64 == Byte.MaxValue ? (byte)(Byte.MaxValue - 1) : Byte.CreateSaturating(value64);
+                            destination[index] = value8;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = Byte.CreateSaturating(sourceUInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
+
+        public static void Pack<TBand>(TBand[] source, UInt16[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.UInt32:
+                    UInt32[]? sourceUInt32 = source as UInt32[];
+                    Debug.Assert(sourceUInt32 != null);
+                    AvxExtensions.Pack(sourceUInt32, destination, noDataSaturatingFromAbove);
+                    break;
+                case TypeCode.UInt64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    // If there was a vpackusqw instruction it'd likely pack to 32 bit, requring a following vpackuswb.
+                    UInt64[]? sourceUInt64 = source as UInt64[];
+                    Debug.Assert((sourceUInt64 != null) && (sourceUInt64.Length == destination.Length));
+                    if (noDataSaturatingFromAbove)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            UInt64 value64 = sourceUInt64[index];
+                            UInt16 value16 = value64 == UInt16.MaxValue ? (UInt16)(UInt16.MaxValue - 1) : UInt16.CreateSaturating(value64);
+                            destination[index] = value16;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = UInt16.CreateSaturating(sourceUInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
+
+        public static void Pack<TBand>(TBand[] source, UInt32[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.UInt64:
+                    // no _mm_packus_epi64() or _mm_packus_epu64() in AVX or AVX10, _mm256_cmp_epu64_mask() is in AVX-512VL
+                    UInt64[]? sourceUInt64 = source as UInt64[];
+                    Debug.Assert((sourceUInt64 != null) && (sourceUInt64.Length == destination.Length));
+                    if (noDataSaturatingFromAbove)
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            UInt64 value64 = sourceUInt64[index];
+                            UInt32 value32 = value64 == UInt32.MaxValue ? UInt32.MaxValue - 1 : UInt32.CreateSaturating(value64);
+                            destination[index] = value32;
+                        }
+                    }
+                    else
+                    {
+                        for (int index = 0; index < source.Length; ++index)
+                        {
+                            destination[index] = UInt32.CreateSaturating(sourceUInt64[index]);
+                        }
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+            }
+        }
     }
 }

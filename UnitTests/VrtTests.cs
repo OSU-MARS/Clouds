@@ -108,7 +108,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(copyOfMinimumVrt.Bands.Count == 1);
 
             VrtRasterBand band1copy = copyOfMinimumVrt.Bands[0];
-            Assert.IsTrue((band1.DataType == band1copy.DataType) && (band1.Band == band1copy.Band) && String.Equals(band1.Description, band1copy.Description, StringComparison.Ordinal) && Double.IsNaN(band1copy.NoDataValue) && (band1.ColorInterpretation == band1copy.ColorInterpretation) && (band1copy.Sources.Count == 1));
+            Assert.IsTrue((band1.DataType == band1copy.DataType) && (band1.Band == band1copy.Band) && String.Equals(band1.Description, band1copy.Description, StringComparison.Ordinal) && (band1copy.NoDataValue == null) && (band1.ColorInterpretation == band1copy.ColorInterpretation) && (band1copy.Sources.Count == 1));
             ComplexSource source1copy = band1copy.Sources[0];
             Assert.IsTrue((source1.SourceFilename.RelativeToVrt == source1copy.SourceFilename.RelativeToVrt) && String.Equals(source1.SourceFilename.Filename, source1copy.SourceFilename.Filename, StringComparison.Ordinal) && (source1.SourceBand == source1copy.SourceBand));
             Assert.IsTrue((source1.SourceRectangle.XOffset == source1copy.SourceRectangle.XOffset) && (source1.SourceRectangle.YOffset == source1copy.SourceRectangle.YOffset) && (source1.SourceRectangle.XSize == source1copy.SourceRectangle.XSize) && (source1.SourceRectangle.YSize == source1copy.SourceRectangle.YSize));
@@ -142,11 +142,11 @@ namespace Mars.Clouds.UnitTests
                 Assert.IsTrue(band.Histograms.Count == expected.Histograms[bandIndex]);
                 Assert.IsTrue(band.Metadata.Count == expected.Metadata[bandIndex]);
 
-                double expectedBandNoData = expected.NoDataValue[bandIndex];
-                bool expectedBandNoDataIsNaN = Double.IsNaN(expectedBandNoData);
+                double? expectedBandNoData = expected.NoDataValue[bandIndex];
+                bool expectedBandNoDataIsNaN = expectedBandNoData.HasValue && Double.IsNaN(expectedBandNoData.Value);
                 if (expectedBandNoDataIsNaN)
                 {
-                    Assert.IsTrue(Double.IsNaN(band.NoDataValue));
+                    Assert.IsTrue(band.NoDataValue.HasValue && Double.IsNaN(band.NoDataValue.Value));
                 }
                 else
                 {
@@ -164,7 +164,7 @@ namespace Mars.Clouds.UnitTests
                     Assert.IsTrue((source.SourceRectangle.XOffset == 0.0) && (source.SourceRectangle.YOffset == 0.0) && (source.SourceRectangle.XSize == 2000.0) && (source.SourceRectangle.YSize == 2000.0));
                     if (expectedBandNoDataIsNaN)
                     {
-                        Assert.IsTrue(Double.IsNaN(source.NoDataValue));
+                        Assert.IsTrue(source.NoDataValue.HasValue && Double.IsNaN(source.NoDataValue.Value));
                     }
                     else
                     {
