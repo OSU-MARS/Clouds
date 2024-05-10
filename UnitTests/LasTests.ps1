@@ -33,6 +33,14 @@ Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$
 # orthoimage generation, all tiles
 Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose
 
+# local maxima in DSM, 3x3 group of tiles
+$tiles = "s042?0w068?0"
+Get-LocalMaxima -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\$tiles.tif" -LocalMaxima "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\local maxima" -Verbose
+
+# local maxima in DSM, all tiles
+Get-LocalMaxima -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -LocalMaxima "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\local maxima" -Verbose
+
+
 # high resolution grid metrics bootstrapping from DSM (or CHM or DTM) grid
 # Just under 4 Mcells => 600 MB float32 .tif @ 57 standard metrics bands.
 $tile = "s04200w06810"

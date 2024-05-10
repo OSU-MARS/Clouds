@@ -6,17 +6,23 @@ namespace Mars.Clouds.Cmdlets
 {
     public class TileReadWrite : TileRead
     {
+        private int tilesWritten;
         private int tileWriteIndex;
 
         public bool OutputPathIsDirectory { get; private init; }
-        public int TilesWritten { get; set; }
 
         public TileReadWrite(bool outputPathIsDirectory)
         {
+            this.tilesWritten = 0;
             this.tileWriteIndex = -1;
 
             this.OutputPathIsDirectory = outputPathIsDirectory;
-            this.TilesWritten = 0;
+        }
+
+        public int TilesWritten
+        {
+            get { return this.tilesWritten; }
+            set { this.tilesWritten = value; }
         }
 
         public int GetNextTileWriteIndexThreadSafe()
@@ -29,6 +35,11 @@ namespace Mars.Clouds.Cmdlets
             string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
                             this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
             return status;
+        }
+
+        public void IncrementTilesWrittenThreadSafe()
+        {
+            Interlocked.Increment(ref this.tilesWritten);
         }
     }
 

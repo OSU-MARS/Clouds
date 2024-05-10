@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
-using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.GdalExtensions;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;

@@ -107,7 +107,7 @@ namespace Mars.Clouds.Cmdlets
                     });
                 });
 
-                TimedProgressRecord progress = new("Get-Treetops", "placeholder");
+                TimedProgressRecord progress = new("Get-Treetops", "placeholder"); // can't pass null or empty statusDescription
                 while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
                 {
                     progress.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";

@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.DiskSpd;
-using OSGeo.GDAL;
+﻿using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -7,7 +6,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Numerics;
-using System.Runtime.InteropServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
@@ -196,6 +194,23 @@ namespace Mars.Clouds.GdalExtensions
             {
                 this.Bands[bandIndex] = new(this, bandNames[bandIndex], noDataValue, RasterBandInitialValue.NoData);
             }
+        }
+
+        public static Raster<TBand> CreateRecreateOrReset(Raster<TBand>? raster, Grid extent, string[] bandNames, TBand noDataValue)
+        {
+            if ((raster == null) || (raster.SizeX != extent.SizeX) || (raster.SizeY != extent.SizeY) || (raster.Bands.Length != bandNames.Length))
+            {
+                return new(extent, bandNames, noDataValue); // if needed, this.Bands can be expanded or reduced
+            }
+
+            for (int bandIndex = 0; bandIndex < raster.Bands.Length; ++bandIndex) 
+            { 
+                RasterBand<TBand> band = raster.Bands[bandIndex];
+                Array.Fill(band.Data, noDataValue);
+                band.Name = bandNames[bandIndex];
+            }
+
+            return raster;
         }
 
         public override int GetBandIndex(string name)

@@ -45,7 +45,7 @@ namespace Mars.Clouds.Cmdlets
             this.Dtm = String.Empty;
             this.DtmBand = null;
             this.LayerSeparation = -1.0F;
-            // leave this.MaxThreads at default for DTM read
+            // leave this.MaxThreads at default
             this.ReadThreads = -1;
         }
 
@@ -254,17 +254,11 @@ namespace Mars.Clouds.Cmdlets
             return pointReader.ReadPoints(lasTile, dsmReadCreateWrite.PointBatchPool);
         }
 
-        private class DsmReadCreateWrite : TileReadWrite<PointList<PointBatchXyzcs>>
+        private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, PointList<PointBatchXyzcs>, DigitalSurfaceModel>
         {
-            private readonly bool[,] dsmCompletedWriteMap;
-            private int dsmPendingCreationIndexY;
-            private int dsmPendingFreeIndexY;
-            private int dsmPendingWriteCompletionIndexY;
-            private int dsmPendingWriteIndexX;
-            private int dsmPendingWriteIndexY;
-
             public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
             public LasTileGrid Las { get; private init; }
+
             public float MeanPointsPerTile { get; private init; }
             public ObjectPool<PointBatchXyzcs> PointBatchPool { get; private init; }
             public int TileWritesInitiated { get; set; }
@@ -272,20 +266,13 @@ namespace Mars.Clouds.Cmdlets
             public float TotalPointDataInGB { get; private init; }
 
             public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, int maxSimultaneouslyLoadedTiles, bool dsmPathIsDirectory)
-                : base(maxSimultaneouslyLoadedTiles, dsmPathIsDirectory)
+                : base(lasGrid, dsm, maxSimultaneouslyLoadedTiles, dsmPathIsDirectory)
             {
                 // TODO: lasGrid.IsSameExtentAndResolution(dsm)
                 if ((lasGrid.SizeX != dsm.VirtualRasterSizeInTilesX) && (lasGrid.SizeY == dsm.VirtualRasterSizeInTilesY))
                 {
                     throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " while the DSM tile grid is " + dsm.VirtualRasterSizeInTilesX + " x " + dsm.VirtualRasterSizeInTilesY + ". Are the LAS and DTM tile specifications matched? (This is a temporary requirement pending more flexible tile instantiation.)");
                 }
-
-                this.dsmCompletedWriteMap = lasGrid.GetUnpopulatedCellMap();
-                this.dsmPendingCreationIndexY = 0;
-                this.dsmPendingFreeIndexY = 0;
-                this.dsmPendingWriteCompletionIndexY = 0;
-                this.dsmPendingWriteIndexX = 0;
-                this.dsmPendingWriteIndexY = 0;
 
                 this.Dsm = dsm;
                 this.Las = lasGrid;
@@ -319,111 +306,6 @@ namespace Mars.Clouds.Cmdlets
             public void OnTileWriteComplete()
             {
                 this.PointBatchPool.Clear();
-            }
-
-            public void OnTileWritten(int tileWriteIndexX, int tileWriteIndexY, DigitalSurfaceModel dsmTileWritten)
-            {
-                this.dsmCompletedWriteMap[tileWriteIndexX, tileWriteIndexY] = true;
-
-                // scan to see if creation of one or more rows of DSM tiles has been completed since the last call
-                // Similar to code in TryGetNextTileWriteIndex().
-                for (; this.dsmPendingWriteCompletionIndexY < this.Dsm.VirtualRasterSizeInTilesY; ++this.dsmPendingWriteCompletionIndexY)
-                {
-                    bool dsmRowIncompletelyWritten = false;
-                    for (int xIndex = 0; xIndex < this.Dsm.VirtualRasterSizeInTilesX; ++xIndex)
-                    {
-                        if (this.dsmCompletedWriteMap[xIndex, this.dsmPendingWriteCompletionIndexY] == false)
-                        {
-                            dsmRowIncompletelyWritten = true;
-                            break;
-                        }
-                    }
-
-                    if (dsmRowIncompletelyWritten)
-                    {
-                        break;
-                    }
-                }
-
-                int dsmWriteCompletedIndexY = this.dsmPendingWriteCompletionIndexY; // if DSM is fully written then all its tiles can be freed
-                if (this.dsmPendingWriteCompletionIndexY < this.Dsm.VirtualRasterSizeInTilesY)
-                {
-                    --dsmWriteCompletedIndexY; // row n of DSM isn't fully written so row n - 1 cannot be written without impairing canopy maxima model creation
-                }
-                for (; this.dsmPendingFreeIndexY < dsmWriteCompletedIndexY; ++this.dsmPendingFreeIndexY)
-                {
-                    this.Dsm.SetRowToNull(this.dsmPendingFreeIndexY);
-                }
-
-                this.CellsWritten += dsmTileWritten.Cells;
-                ++this.TilesWritten;
-            }
-
-            public bool TryGetNextTileWriteIndex(out int tileWriteIndexX, out int tileWriteIndexY, [NotNullWhen(true)] out DigitalSurfaceModel? dsmTileToWrite)
-            {
-                Debug.Assert((this.Las.SizeX == this.Dsm.VirtualRasterSizeInTilesX) && (this.Las.SizeY == this.Dsm.VirtualRasterSizeInTilesY));
-
-                // scan to see if creation of one or more rows of DSM tiles has been completed since the last call
-                // Similar to code in OnTileWritten().
-                for (; this.dsmPendingCreationIndexY < this.Dsm.VirtualRasterSizeInTilesY; ++this.dsmPendingCreationIndexY)
-                {
-                    bool dsmRowIncompletelyCreated = false; // unlikely, but maybe no tiles to create in row
-                    for (int xIndex = 0; xIndex < this.Dsm.VirtualRasterSizeInTilesX; ++xIndex)
-                    {
-                        if (this.Las[xIndex, this.dsmPendingCreationIndexY] != null) // point cloud tile grid fully populated before point reads start
-                        {
-                            if (this.Dsm[xIndex, this.dsmPendingCreationIndexY] == null)
-                            {
-                                dsmRowIncompletelyCreated = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (dsmRowIncompletelyCreated)
-                    {
-                        break;
-                    }
-                }
-
-                // see if a tile is available for write a row basis
-                // In the single row case, tile writes can begin as soon as their +x neighbor's been created. This is not currently
-                // handled. Neither are more complex cases where voids in the grid permit writes to start before the next row of DSM
-                // tiles has completed loading.
-                int dsmCreationCompletedIndexY = this.dsmPendingCreationIndexY; // if DSM is fully created then all its tiles can be written
-                if (this.dsmPendingCreationIndexY < this.Dsm.VirtualRasterSizeInTilesY)
-                {
-                    --dsmCreationCompletedIndexY; // row n of DSM isn't fully created yet so canopy maxima models for row n - 1 cannot yet be generated without edge effects
-                }
-                for (; this.dsmPendingWriteIndexY < dsmCreationCompletedIndexY; ++this.dsmPendingWriteIndexY)
-                {
-                    for (; this.dsmPendingWriteIndexX < this.Dsm.VirtualRasterSizeInTilesX; ++this.dsmPendingWriteIndexX)
-                    {
-                        DigitalSurfaceModel? createdTileCandidate = this.Dsm[this.dsmPendingWriteIndexX, this.dsmPendingWriteIndexY];
-                        if (createdTileCandidate != null)
-                        {
-                            tileWriteIndexX = this.dsmPendingWriteIndexX;
-                            tileWriteIndexY = this.dsmPendingWriteIndexY;
-                            dsmTileToWrite = createdTileCandidate;
-
-                            // advance to next grid position
-                            ++this.dsmPendingWriteIndexX;
-                            if (this.dsmPendingWriteIndexX >= this.Dsm.VirtualRasterSizeInTilesX)
-                            {
-                                ++this.dsmPendingWriteIndexY;
-                                this.dsmPendingWriteIndexX = 0;
-                            }
-                            return true;
-                        }
-                    }
-
-                    this.dsmPendingWriteIndexX = 0; // reset to beginning of row, next iteration of loop will increment in y
-                }
-
-                tileWriteIndexX = -1;
-                tileWriteIndexY = -1;
-                dsmTileToWrite = null;
-                return false;
             }
         }
     }

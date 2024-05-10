@@ -123,35 +123,26 @@ namespace Mars.Clouds.Cmdlets
                 // multithreaded read for multiple tiles
                 // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
                 // locality advantage.
-                ParallelOptions parallelOptions = new()
+                TileRead tileRead = new();
+                ParallelTasks tileReadTasks = new(Int32.Min(this.MaxThreads, tilePaths.Count), () =>
                 {
-                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, tilePaths.Count)
-                };
-
-                string? mostRecentDsmTileName = null;
-                int tilesLoaded = 0;
-                Task loadTilesTask = Task.Run(() =>
-                {
-                    Parallel.For(0, tilePaths.Count, parallelOptions, (int tileIndex) =>
+                    for (int tileIndex = tileRead.GetNextTileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextTileReadIndexThreadSafe())
                     {
-                        // find treetops in tile
                         string tilePath = tilePaths[tileIndex];
                         TTile tile = TTile.Read(tilePath, readData: true);
                         lock (vrt)
                         {
                             vrt.Add(tile);
-                            ++tilesLoaded;
+                            ++tileRead.TilesRead;
                         }
-
-                        mostRecentDsmTileName = Tile.GetName(tilePath);
-                    });
+                    }
                 });
 
-                TimedProgressRecord progress = new(cmdletName, "placeholder");
-                while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
+                TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
+                while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = "Loading " + tilePaths.Count + " virtual raster tiles" + (mostRecentDsmTileName != null ? ": " + mostRecentDsmTileName + "..." : "...");
-                    progress.Update(tilesLoaded, tilePaths.Count);
+                    progress.StatusDescription = "Loaded " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile..." : "tiles...");
+                    progress.Update(tileRead.TilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }
             }

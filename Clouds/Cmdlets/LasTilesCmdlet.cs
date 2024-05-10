@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System;
 using System.Management.Automation;
-using DocumentFormat.OpenXml.EMMA;
 
 namespace Mars.Clouds.Cmdlets
 {
