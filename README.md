@@ -29,10 +29,12 @@ Supporting tools are
 - `Get-ScanMetrics`: similar to `Get-GridMetrics` but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
+- `Register-Cloud`: set a .las file's origin, coordinate system, and source ID
 - `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 - `Repair-NoisePoints`: mark z outliers as high and low noise relative to DTM (useful for that one point in low Earth orbit)
 - `Export-VrtBands`: work around QGIS performance limitations in displaying virtual rasters by extracting subsets of the bands in a .vrt
 - `Remove-VrtBlockSize`: work around QGIS's tendency to further degrade its performance displaying virtual rasters (see below)
+- `Convert-DiskSpd`: reformat [DiskSpd](https://github.com/microsoft/diskspd) .xml result files as longform data
 
 ### Dataset structure
 A LiDAR dataset is assumed to consist of

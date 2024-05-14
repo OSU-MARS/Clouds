@@ -1,10 +1,7 @@
-﻿using DocumentFormat.OpenXml.Wordprocessing;
+﻿using Mars.Clouds.Las;
 using System;
 using System.Collections.Generic;
-using System.Data.SqlTypes;
 using System.Runtime.InteropServices;
-using static Mars.Clouds.Constant;
-using System.Text;
 
 namespace Mars.Clouds.Cmdlets.Drives
 {
@@ -28,6 +25,20 @@ namespace Mars.Clouds.Cmdlets.Drives
             }
 
             throw new NotSupportedException("Unhandled operating system " + RuntimeInformation.OSDescription + ".");
+        }
+
+        public int GetPracticalThreadCount(float workloadRatePerThreadInGBs)
+        {
+            int threads = (int)(this.GetSequentialCapabilityInGBs() / workloadRatePerThreadInGBs);
+            if (this.MediaType == MediaType.HardDrive)
+            {
+                // for now, limit workloads to one thread per hard drive to limit acutator contention
+                // Underlying assumption is workloads are fast enough to exploit single threaded multi-actuator actuator configurations (e.g. dual
+                // actuators in standard RAID0 or RAID10).
+                threads = Int32.Min(threads, this.NumberOfDataCopies);
+            }
+
+            return Int32.Max(threads, 1); // guarantee at least one thread
         }
 
         /// <returns>Rough estimate (likely within a factor of two) of upper bound on sequential transfer rates in GB/s based on drive type and connection.</returns>

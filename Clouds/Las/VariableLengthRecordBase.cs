@@ -1,9 +1,10 @@
 ﻿using System;
+using System.IO;
 using System.Numerics;
 
 namespace Mars.Clouds.Las
 {
-    public class VariableLengthRecordBase
+    public abstract class VariableLengthRecordBase<TRecordLength> where TRecordLength : INumber<TRecordLength>
     {
         /// <summary>
         /// Variable length record signature in LAS 1.0, reserved subsequently and set to zero in LAS 1.4+.
@@ -21,30 +22,29 @@ namespace Mars.Clouds.Las
         public UInt16 RecordID { get; set; }
 
         /// <summary>
-        /// UTF8 description of record.
-        /// </summary>
-        public string Description { get; set; }
-
-        protected VariableLengthRecordBase(UInt16 reserved, string userID, UInt16 recordID, string description)
-        {
-            this.Reserved = reserved;
-            this.UserID = userID;
-            this.RecordID = recordID;
-            this.Description = description;
-        }
-    }
-
-    public class VariableLengthRecordBase<TRecordLength> : VariableLengthRecordBase where TRecordLength : INumber<TRecordLength>
-    {
-        /// <summary>
         /// Length of record in bytes, excluding the 54 header bytes.
         /// </summary>
         public TRecordLength RecordLengthAfterHeader { get; set; }
 
+        /// <summary>
+        /// UTF8 description of record.
+        /// </summary>
+        public string Description { get; set; }
+
         protected VariableLengthRecordBase(UInt16 reserved, string userID, UInt16 recordID, TRecordLength recordLengthAfterHeader, string description)
-            : base(reserved, userID, recordID, description)
         {
+            if (description.Length > 32)
+            {
+                throw new ArgumentOutOfRangeException(nameof(description), "Maximum length of a variable length record's description is 32 UTF8 characters.");
+            }
+
+            this.Reserved = reserved;
+            this.UserID = userID;
+            this.RecordID = recordID;
             this.RecordLengthAfterHeader = recordLengthAfterHeader;
+            this.Description = description;
         }
+
+        public abstract void Write(Stream stream);
     }
 }

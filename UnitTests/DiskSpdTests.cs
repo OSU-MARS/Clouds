@@ -1,5 +1,6 @@
 ﻿using Mars.Clouds.DiskSpd;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.IO;
 
 namespace Mars.Clouds.UnitTests
@@ -8,43 +9,124 @@ namespace Mars.Clouds.UnitTests
     public class DiskSpdTests : CloudTest
     {
         [TestMethod]
-        public void Read() 
+        public void ReadToLongform() 
         {
-            Results diskSpdResults = new(Path.Combine(this.UnitTestPath, "DiskSpd SEQ1M Q8T2 mix 7030 results.xml"));
-            // diskSpdResults.System not currently checked
+            Results results = new(Path.Combine(this.UnitTestPath, "DiskSpd SEQ1M Q8T2 mix 7030 results.xml"));
+            DiskSpdLongformResults longformResults = new([ results ]);
+
+            // verify deserialization
+            Assert.IsTrue(String.Equals(results.System.ComputerName, "disk-tester", StringComparison.Ordinal));
+            // diskSpdResults.System.ProcessorTopology not currently checked
+            // diskSpdResults.System.RunTime not currently checked
+            // diskSpdResults.System.Tool not currently checked
             // diskSpdResults.Profile not currently checked
-            Assert.IsTrue(diskSpdResults.TimeSpan.TestTimeSeconds == 30.00F);
-            Assert.IsTrue(diskSpdResults.TimeSpan.ThreadCount == 4);
+            Assert.IsTrue(results.TimeSpan.TestTimeSeconds == 30.00F);
+            Assert.IsTrue(results.TimeSpan.ThreadCount == 4);
             // diskSpdResults.TimeSpan.RequestCount not currently checked
             // diskSpdResults.TimeSpan.ProcCount not currently checked
             // diskSpdResults.TimeSpan.CpuUtilization not currently checked
             // diskSpdResults.TimeSpan.Latency not currently checked
             // diskSpdResults.TimeSpan.Iops not currently checked
-            Assert.IsTrue(diskSpdResults.TimeSpan.Threads.Count == 4);
+            Assert.IsTrue(results.TimeSpan.Threads.Count == 4);
 
-            ThreadTarget target0 = diskSpdResults.TimeSpan.Threads[0].Target;
+            ThreadTarget target0 = results.TimeSpan.Threads[0].Target;
             Assert.IsTrue(target0.ReadBytes == 1213202432L);
+            Assert.IsTrue(target0.ReadCount == 1157);
             Assert.IsTrue(target0.WriteBytes == 527433728L);
+            Assert.IsTrue(target0.WriteCount == 503);
             Assert.IsTrue(target0.AverageReadLatencyMilliseconds == 139.327F);
             Assert.IsTrue(target0.AverageWriteLatencyMilliseconds == 158.178F);
 
-            ThreadTarget target1 = diskSpdResults.TimeSpan.Threads[1].Target;
+            ThreadTarget target1 = results.TimeSpan.Threads[1].Target;
             Assert.IsTrue(target1.ReadBytes == 1194328064L);
+            Assert.IsTrue(target1.ReadCount == 1139);
             Assert.IsTrue(target1.WriteBytes == 547356672);
+            Assert.IsTrue(target1.WriteCount == 522);
             Assert.IsTrue(target1.AverageReadLatencyMilliseconds == 137.532F);
             Assert.IsTrue(target1.AverageWriteLatencyMilliseconds == 161.036F);
 
-            ThreadTarget target2 = diskSpdResults.TimeSpan.Threads[2].Target;
+            ThreadTarget target2 = results.TimeSpan.Threads[2].Target;
             Assert.IsTrue(target2.ReadBytes == 1310720000L);
+            Assert.IsTrue(target2.ReadCount == 1250);
             Assert.IsTrue(target2.WriteBytes == 600834048L);
+            Assert.IsTrue(target2.WriteCount == 573);
             Assert.IsTrue(target2.AverageReadLatencyMilliseconds == 126.608F);
             Assert.IsTrue(target2.AverageWriteLatencyMilliseconds == 142.784F);
 
-            ThreadTarget target3 = diskSpdResults.TimeSpan.Threads[3].Target;
+            ThreadTarget target3 = results.TimeSpan.Threads[3].Target;
             Assert.IsTrue(target3.ReadBytes == 1351614464L);
+            Assert.IsTrue(target3.ReadCount == 1289);
             Assert.IsTrue(target3.WriteBytes == 564133888L);
+            Assert.IsTrue(target3.WriteCount == 538);
             Assert.IsTrue(target3.AverageReadLatencyMilliseconds == 126.051F);
             Assert.IsTrue(target3.AverageWriteLatencyMilliseconds == 144.038F);
+
+            // verify longform translation
+            Assert.IsTrue(longformResults.Count == 4);
+
+            Assert.IsTrue(String.Equals(longformResults.Host[0], "disk-tester", StringComparison.Ordinal));
+            Assert.IsTrue(String.Equals(longformResults.TargetPath[0], "D:\\diskspd\\1GB.tmp", StringComparison.Ordinal));
+            Assert.IsTrue(longformResults.RandomSize[0] == -1);
+            Assert.IsTrue(longformResults.BlockSize[0] == 1048576);
+            Assert.IsTrue(longformResults.QueueDepth[0] == 8);
+            Assert.IsTrue(longformResults.ThreadsPerFile[0] == 2);
+            Assert.IsTrue(longformResults.ThreadID[0] == 0);
+            Assert.IsTrue(longformResults.DurationInS[0] == 30.0F);
+
+            Assert.IsTrue(longformResults.ReadBytes[0] == 1213202432L);
+            Assert.IsTrue(longformResults.WriteBytes[0] == 527433728L);
+            Assert.IsTrue(longformResults.AverageReadLatencyMilliseconds[0] == 139.327F);
+            Assert.IsTrue(longformResults.ReadLatencyStdev[0] == 206.970F);
+            Assert.IsTrue(longformResults.AverageWriteLatencyMilliseconds[0] == 158.178F);
+            Assert.IsTrue(longformResults.WriteLatencyStdev[0] == 214.636F);
+
+            Assert.IsTrue(String.Equals(longformResults.Host[1], "disk-tester", StringComparison.Ordinal));
+            Assert.IsTrue(String.Equals(longformResults.TargetPath[1], "D:\\diskspd\\1GB.tmp", StringComparison.Ordinal));
+            Assert.IsTrue(longformResults.RandomSize[1] == -1);
+            Assert.IsTrue(longformResults.BlockSize[1] == 1048576);
+            Assert.IsTrue(longformResults.QueueDepth[1] == 8);
+            Assert.IsTrue(longformResults.ThreadsPerFile[1] == 2);
+            Assert.IsTrue(longformResults.ThreadID[1] == 1);
+            Assert.IsTrue(longformResults.DurationInS[1] == 30.0F);
+
+            Assert.IsTrue(longformResults.ReadBytes[1] == 1194328064L);
+            Assert.IsTrue(longformResults.WriteBytes[1] == 547356672);
+            Assert.IsTrue(longformResults.AverageReadLatencyMilliseconds[1] == 137.532F);
+            Assert.IsTrue(longformResults.ReadLatencyStdev[1] == 208.460F);
+            Assert.IsTrue(longformResults.AverageWriteLatencyMilliseconds[1] == 161.036F);
+            Assert.IsTrue(longformResults.WriteLatencyStdev[1] == 226.541F);
+
+            Assert.IsTrue(String.Equals(longformResults.Host[2], "disk-tester", StringComparison.Ordinal));
+            Assert.IsTrue(String.Equals(longformResults.TargetPath[2], "E:\\diskspd\\1GB.tmp", StringComparison.Ordinal));
+            Assert.IsTrue(longformResults.RandomSize[2] == -1);
+            Assert.IsTrue(longformResults.BlockSize[2] == 1048576);
+            Assert.IsTrue(longformResults.QueueDepth[2] == 8);
+            Assert.IsTrue(longformResults.ThreadsPerFile[2] == 2);
+            Assert.IsTrue(longformResults.ThreadID[2] == 2);
+            Assert.IsTrue(longformResults.DurationInS[2] == 30.0F);
+
+            Assert.IsTrue(longformResults.ReadBytes[2] == 1310720000L);
+            Assert.IsTrue(longformResults.WriteBytes[2] == 600834048L);
+            Assert.IsTrue(longformResults.AverageReadLatencyMilliseconds[2] == 126.608F);
+            Assert.IsTrue(longformResults.ReadLatencyStdev[2] == 104.524F);
+            Assert.IsTrue(longformResults.AverageWriteLatencyMilliseconds[2] == 142.784F);
+            Assert.IsTrue(longformResults.WriteLatencyStdev[2] == 70.796F);
+
+            Assert.IsTrue(String.Equals(longformResults.Host[3], "disk-tester", StringComparison.Ordinal));
+            Assert.IsTrue(String.Equals(longformResults.TargetPath[3], "E:\\diskspd\\1GB.tmp", StringComparison.Ordinal));
+            Assert.IsTrue(longformResults.RandomSize[3] == -1);
+            Assert.IsTrue(longformResults.BlockSize[3] == 1048576);
+            Assert.IsTrue(longformResults.QueueDepth[3] == 8);
+            Assert.IsTrue(longformResults.ThreadsPerFile[3] == 2);
+            Assert.IsTrue(longformResults.ThreadID[3] == 3);
+            Assert.IsTrue(longformResults.DurationInS[3] == 30.0F);
+
+            Assert.IsTrue(longformResults.ReadBytes[3] == 1351614464L);
+            Assert.IsTrue(longformResults.WriteBytes[3] == 564133888L);
+            Assert.IsTrue(longformResults.AverageReadLatencyMilliseconds[3] == 126.051F);
+            Assert.IsTrue(longformResults.ReadLatencyStdev[3] == 100.735F);
+            Assert.IsTrue(longformResults.AverageWriteLatencyMilliseconds[3] == 144.038F);
+            Assert.IsTrue(longformResults.WriteLatencyStdev[3] == 76.912F);
         }
     }
 }

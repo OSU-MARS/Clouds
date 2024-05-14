@@ -110,7 +110,7 @@ namespace Mars.Clouds.UnitTests
             FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
             using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
-            LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
+            LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader, fallbackCreationDate: null);
 
             VirtualRaster<Raster<float>> dtm = this.ReadDtm();
 
@@ -196,6 +196,8 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(verticalCrsKey.Count == 1);
             Assert.IsTrue(verticalCrsKey.ValueOrOffset == 32610);
             // third key is a write error and is all zero; ignore for now
+
+            Assert.IsTrue(lasTile.ExtendedVariableLengthRecords.Count == 0);
 
             int lasFileEpsg = lasTile.GetProjectedCoordinateSystemEpsg();
             Assert.IsTrue(lasFileEpsg == 32610);
@@ -783,7 +785,7 @@ namespace Mars.Clouds.UnitTests
             FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
             using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
-            LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader);
+            LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader, fallbackCreationDate: null);
 
             return lasTile;
         }

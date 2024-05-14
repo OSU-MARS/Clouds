@@ -10,6 +10,11 @@ namespace Mars.Clouds.Las
     {
         public const float RepairNoisePointsSpeedInGBs = 2.0F; // TODO: get benchmark values
 
+        public static new LasReaderWriter CreateForPointRead(string lasPath, long fileSizeInBytes)
+        {
+            return new LasReaderWriter(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite));
+        }
+
         public int TryFindUnclassifiedNoise(LasTile lasTile, RasterBand<float> dtmTile, float highNoiseThreshold, float lowNoiseThreshold)
         {
             SpatialReference lasTileCrs = lasTile.GetSpatialReference();

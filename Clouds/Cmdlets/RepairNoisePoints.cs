@@ -65,15 +65,11 @@ namespace Mars.Clouds.Cmdlets
 
             // spin up point cloud read and tile worker threads
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = (int)(driveCapabilities.GetSequentialCapabilityInGBs() / LasReaderWriter.RepairNoisePointsSpeedInGBs);
-            if (driveCapabilities.MediaType == MediaType.HardDrive)
-            {
-                readThreads = driveCapabilities.NumberOfDataCopies; // restrict threads per hard drive with
-            }
+            int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasReaderWriter.RepairNoisePointsSpeedInGBs), this.MaxThreads);
 
             RepairNoiseReadWrite tileChecks = new();
-            Task[] checkTasks = new Task[readThreads];
-            for (int readThread = 0; readThread < readThreads; ++readThread)
+            Task[] checkTasks = new Task[Int32.Min(readThreads, lasGrid.NonNullCells)];
+            for (int readThread = 0; readThread < checkTasks.Length; ++readThread)
             {
                 checkTasks[readThread] = Task.Run(() => this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, tileChecks), tileChecks.CancellationTokenSource.Token);
             }

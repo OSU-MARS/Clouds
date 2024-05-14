@@ -5,11 +5,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
-using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class GdalCmdlet : Cmdlet
+    public class GdalCmdlet : FileCmdlet
     {
         [Parameter(HelpMessage = "Maximum number of threads to use when processing tiles in parallel. Default is half of the procesor's thread count.")]
         public int MaxThreads { get; set; }
@@ -44,67 +43,6 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return (directoryPath, searchPattern);
-        }
-
-        protected static List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension)
-        {
-            ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
-            if (fileSearchPaths.Count < 1)
-            {
-                throw new ArgumentNullException(nameof(fileSearchPaths), "No tile search paths were specified.");
-            }
-
-            List<string> tilePaths = [];
-            for (int pathIndex = 0; pathIndex < fileSearchPaths.Count; ++pathIndex)
-            {
-                string tileSearchPath = fileSearchPaths[pathIndex];
-                string? directoryPath = String.Empty;
-                string? fileSearchPattern = String.Empty;
-                bool pathSpecifiesSingleFile = false;
-                if (tileSearchPath.Contains('*', StringComparison.Ordinal) || tileSearchPath.Contains('?', StringComparison.Ordinal))
-                {
-                    // presence of wildcards indicates a set of files in some directory
-                    directoryPath = Path.GetDirectoryName(tileSearchPath);
-                    fileSearchPattern = Path.GetFileName(tileSearchPath);
-                    fileSearchPattern ??= "*" + defaultExtension;
-                }
-                else if (Directory.Exists(tileSearchPath))
-                {
-                    // if path indicates an existing directory, search it with the default extension
-                    directoryPath = tileSearchPath;
-                    fileSearchPattern = "*" + defaultExtension;
-                }
-                else
-                {
-                    if (File.Exists(tileSearchPath) == false)
-                    {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load tiles. Path '" + tileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
-                    }
-                    tilePaths.Add(tileSearchPath);
-                    pathSpecifiesSingleFile = true;
-                }
-
-                if (pathSpecifiesSingleFile == false)
-                {
-                    if (String.IsNullOrWhiteSpace(directoryPath))
-                    {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Wildcarded tile search path '" + tileSearchPath + "' doesn't contain a directory path.");
-                    }
-
-                    string[] tilePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern);
-                    if (tilePathsInDirectory.Length == 0)
-                    {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't load tiles. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
-                    }
-                    tilePaths.AddRange(tilePathsInDirectory);
-                }
-            }
-
-            if (tilePaths.Count == 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "No tiles loaded as no files matched search paths '" + String.Join("', '", fileSearchPaths) + "'.");
-            }
-            return tilePaths;
         }
 
         protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IRasterSerializable<TTile>

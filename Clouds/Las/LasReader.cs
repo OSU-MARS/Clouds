@@ -7,44 +7,50 @@ using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Las
 {
-    public class LasReader : IDisposable
+    public class LasReader : LasStream
     {
         // basic perf profile on tiles cached in memory: ReadPoints() for xyzcs, 5950X, DDR4-3200, .NET 8, 9 tiles totaling 28.4 GB
         // batch size, points  read speed, GB/s
         // 1                   1.7
         // 2                   1.9
         // 5, 10, 100, 1000    2.0
-        protected const int ReadExactSizeInPoints = 8;
+        public const int ReadExactSizeInPoints = 8;
 
         public const float ReadPointsToXyzcsSpeedInGBs = 2.0F;
 
-        private bool isDisposed;
-
-        public Stream BaseStream { get; private init; }
-
         public LasReader(Stream stream)
+            : base(stream)
         {
-            this.isDisposed = false;
-            this.BaseStream = stream;
         }
 
-        public void Dispose()
+        public static LasReader CreateForPointRead(string lasPath, long fileSizeInBytes)
         {
-            this.Dispose(disposing: true);
-            GC.SuppressFinalize(this);
+            return new LasReader(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.Read));
         }
 
-        protected virtual void Dispose(bool disposing)
+        protected static FileStream CreatePointStream(string lasPath, long fileSizeInBytes, FileAccess fileAccess)
         {
-            if (!this.isDisposed)
+            // rough scaling with file size from https://github.com/dotnet/runtime/discussions/74405#discussioncomment-3488674
+            int bufferSizeInKB;
+            if (fileSizeInBytes > 512 * 1024 * 1024) // > 512 MB
             {
-                if (disposing)
-                {
-                    this.BaseStream.Dispose();
-                }
-
-                this.isDisposed = true;
+                bufferSizeInKB = 1024;
             }
+            else if (fileSizeInBytes > 64 * 1024 * 1024) // > 64 MB
+            {
+                bufferSizeInKB = 512;
+            }
+            else if (fileSizeInBytes > 8 * 1024 * 1024) // > 8 MB
+            {
+                bufferSizeInKB = 256;
+            }
+            else // ≤ 8 MB
+            {
+                bufferSizeInKB = 128;
+            }
+
+            FileStream stream = new(lasPath, FileMode.Open, fileAccess, FileShare.Read, bufferSizeInKB * 1024);
+            return stream;
         }
 
         private static int EstimateCellInitialPointCapacity(LasTile tile, Grid metricsGrid)
@@ -69,20 +75,6 @@ namespace Mars.Clouds.Las
             }
 
             return cellInitialPointCapacity;
-        }
-
-        protected void MoveToPoints(LasTile tile)
-        {
-            if (tile.IsPointFormatCompressed())
-            {
-                throw new ArgumentOutOfRangeException(nameof(tile), ".laz files are not currently supported.");
-            }
-
-            LasHeader10 lasHeader = tile.Header;
-            if (this.BaseStream.Position != lasHeader.OffsetToPointData)
-            {
-                this.BaseStream.Seek(lasHeader.OffsetToPointData, SeekOrigin.Begin);
-            }
         }
 
         /// <returns>false if point is classified as noise or is withdrawn</returns>
@@ -220,6 +212,7 @@ namespace Mars.Clouds.Las
 
             lasHeader.FileCreationDayOfYear = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[90..]);
             lasHeader.FileCreationYear = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[92..]);
+
             UInt16 headerSizeInBytes = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[94..]);
             if (headerSizeInBytes != lasHeader.HeaderSize)
             {
@@ -266,7 +259,10 @@ namespace Mars.Clouds.Las
                 }
             }
 
-            lasHeader.Validate();
+            if (this.BaseStream.Position != lasHeader.HeaderSize)
+            {
+                throw new InvalidDataException(".las file header read failed. Ending position of read is " + this.BaseStream.Position + " which is inconsistent with the indicated header size of " + lasHeader.HeaderSize + " bytes.");
+            }
             return lasHeader;
         }
 
@@ -641,7 +637,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadVariableLengthRecords(LasFile lasFile)
+        public void ReadVariableAndExtendedVariableLengthRecords(LasFile lasFile)
         {
             LasHeader10 lasHeader = lasFile.Header;
             if (lasHeader.NumberOfVariableLengthRecords > 0)
@@ -652,7 +648,7 @@ namespace Mars.Clouds.Las
                 }
 
                 lasFile.VariableLengthRecords.Capacity += (int)lasHeader.NumberOfVariableLengthRecords;
-                this.ReadVariableLengthRecords(lasFile, readExtendedRecords: false);
+                this.ReadVariableLengthRecords(lasFile);
             }
 
             if (lasHeader.VersionMinor >= 4)
@@ -666,29 +662,60 @@ namespace Mars.Clouds.Las
                     }
 
                     lasFile.VariableLengthRecords.Capacity += (int)header14.NumberOfExtendedVariableLengthRecords;
-                    this.ReadVariableLengthRecords(lasFile, readExtendedRecords: true);
+                    this.ReadExtendedVariableLengthRecords(lasFile);
                 }
             }
         }
 
-        private void ReadVariableLengthRecords(LasFile lasFile, bool readExtendedRecords)
+        private void ReadExtendedVariableLengthRecords(LasFile lasFile)
         {
-            ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-            Span<byte> vlrBytes = stackalloc byte[readExtendedRecords ? 60 : 54];
+            Span<byte> vlrBytes = stackalloc byte[ExtendedVariableLengthRecord.HeaderSizeInBytes];
             for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
             {
                 this.BaseStream.ReadExactly(vlrBytes);
                 UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
                 string userID = Encoding.UTF8.GetString(vlrBytes.Slice(2, 16)).Trim('\0');
                 UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[18..]);
-                UInt64 recordLengthAfterHeader = readExtendedRecords ? BinaryPrimitives.ReadUInt64LittleEndian(vlrBytes[20..]) : BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[20..]);
-                string description = Encoding.UTF8.GetString(vlrBytes.Slice(readExtendedRecords ? 28 : 22, 32)).Trim('\0');
+                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(vlrBytes[20..]) ;
+                string description = Encoding.UTF8.GetString(vlrBytes.Slice(28, 32)).Trim('\0');
+
+                // create specific object if record has a well known type
+                long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
+
+                byte[] data = new byte[(int)recordLengthAfterHeader];
+                this.BaseStream.ReadExactly(data);
+                ExtendedVariableLengthRecordUntyped vlr = new(reserved, userID, recordID, recordLengthAfterHeader, description, data); ;
+                lasFile.ExtendedVariableLengthRecords.Add(vlr);
+
+                // skip any unused bytes at end of record
+                if (this.BaseStream.Position != endOfRecordPosition)
+                {
+                    this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
+                }
+            }
+        }
+
+        private void ReadVariableLengthRecords(LasFile lasFile)
+        {
+            if (this.BaseStream.Position != lasFile.Header.HeaderSize)
+            {
+                throw new InvalidOperationException("Stream is positioned at " + this.BaseStream.Position + " rather than at the end of the .las file's header (" + lasFile.Header.HeaderSize + " bytes).");
+            }
+
+            Span<byte> vlrBytes = stackalloc byte[VariableLengthRecord.HeaderSizeInBytes];
+            for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
+            {
+                this.BaseStream.ReadExactly(vlrBytes);
+                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
+                string userID = Encoding.UTF8.GetString(vlrBytes.Slice(2, 16)).Trim('\0');
+                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[18..]);
+                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[20..]);
+                string description = Encoding.UTF8.GetString(vlrBytes.Slice(22, 32)).Trim('\0');
 
                 // create specific object if record has a well known type
                 long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
                 UInt16 recordLengthAfterHeader16 = (UInt16)recordLengthAfterHeader;
-                VariableLengthRecordBase? vlr = null;
+                VariableLengthRecord? vlr = null;
                 switch (userID)
                 {
                     case LasFile.LasfProjection:
@@ -741,9 +768,12 @@ namespace Mars.Clouds.Las
                         {
                             throw new NotImplementedException("TextAreaDescriptionRecord");
                         }
-                        else if (recordID == 4)
+                        else if (recordID == ExtraBytesRecord.LasfSpecRecordID)
                         {
-                            throw new NotImplementedException("ExtraBytesRecord");
+                            byte[] extraBytesData = new byte[recordLengthAfterHeader16]; // probably not too long for stackalloc but CA2014
+                            this.BaseStream.ReadExactly(extraBytesData);
+                            ExtraBytesRecord extraBytes = new(reserved, description, extraBytesData);
+                            vlr = extraBytes;
                         }
                         else if (recordID == 7)
                         {
@@ -774,14 +804,7 @@ namespace Mars.Clouds.Las
                 {
                     byte[] data = new byte[(int)recordLengthAfterHeader];
                     this.BaseStream.ReadExactly(data);
-                    if (readExtendedRecords)
-                    {
-                        vlr = new ExtendedVariableLengthRecord(reserved, userID, recordID, recordLengthAfterHeader, description, data);
-                    }
-                    else
-                    {
-                        vlr = new VariableLengthRecord(reserved, userID, recordID, recordLengthAfterHeader16, description, data);
-                    }
+                    vlr = new VariableLengthRecordUntyped(reserved, userID, recordID, recordLengthAfterHeader16, description, data);
                 }
 
                 lasFile.VariableLengthRecords.Add(vlr);
@@ -792,6 +815,18 @@ namespace Mars.Clouds.Las
                     this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
                 }
             }
+
+            if (this.BaseStream.Position > lasFile.Header.OffsetToPointData)
+            {
+                throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + lasFile.Header.OffsetToPointData + " bytes but reader is positioned at " + this.BaseStream.Position + " bytes.");
+            }
+            // for now, ignore malformed .las files with variable length header underruns
+            // Underruns may result from variable length record parsing problems, record construction errors, the .las header
+            // indicating fewer VLRs than are actually present, and likely other problems.
+            //if (this.BaseStream.Position < lasFile.Header.OffsetToPointData)
+            //{
+            //    throw new InvalidDataException(".las file's variable length records ended at " + this.BaseStream.Position + " bytes into the file. The .las file's header indicates variable length records should extend to " + lasFile.Header.OffsetToPointData + " bytes.");
+            //}
         }
 
         protected static void ThrowOnUnsupportedPointFormat(LasHeader10 lasHeader)

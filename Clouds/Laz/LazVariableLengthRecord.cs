@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.IO;
 using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
-    public class LazVariableLengthRecord : VariableLengthRecordBase<UInt16>
+    public class LazVariableLengthRecord : VariableLengthRecord
     {
         public const int CoreSizeInBytes = 34;
         public const int ItemSizeInBytes = 6;
@@ -92,6 +93,31 @@ namespace Mars.Clouds.Las
             this.Type[itemIndex] = (LazItemType)BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
             this.Size[itemIndex] = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[2..]);
             this.Version[itemIndex] = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]);
+        }
+
+        public override void Write(Stream stream)
+        {
+            this.WriteHeader(stream);
+
+            Span<byte> vlrBytes = stackalloc byte[34 + 3 * sizeof(UInt16) * this.NumItems];
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes, (UInt16)this.Compressor);
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[2..], (UInt16)this.Coder);
+            vlrBytes[4] = (byte)this.LazVersion.Major;
+            vlrBytes[5] = (byte)this.LazVersion.Minor;
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[6..], (UInt16)this.LazVersion.Revision);
+            BinaryPrimitives.WriteUInt32LittleEndian(vlrBytes[8..], (UInt32)this.Options);
+            BinaryPrimitives.WriteInt32LittleEndian(vlrBytes[12..], this.ChunkSize);
+            BinaryPrimitives.WriteInt64LittleEndian(vlrBytes[16..], this.NumberOfSpecialEvlrs);
+            BinaryPrimitives.WriteInt64LittleEndian(vlrBytes[24..], this.OffsetToSpecialEvlrs);
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[32..], this.NumItems);
+
+            stream.Write(vlrBytes);
+            for (int itemIndex = 0, itemOffset = 34; itemIndex < this.NumItems; itemIndex++, itemOffset += 6) 
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[itemOffset..], (UInt16)this.Type[itemIndex]);
+                BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[(itemOffset + 2)..], this.Size[itemIndex]);
+                BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[(itemOffset + 4)..], this.Version[itemIndex]);
+            }
         }
     }
 }

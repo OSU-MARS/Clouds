@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
 
 namespace Mars.Clouds.Las
 {
-    public class GeoDoubleParamsTagRecord : VariableLengthRecordBase<UInt16>
+    public class GeoDoubleParamsTagRecord : VariableLengthRecord
     {
         public const UInt16 LasfProjectionRecordID = 34736;
 
@@ -19,10 +22,24 @@ namespace Mars.Clouds.Las
 
             int doubles = doubleBytes.Length / sizeof(double);
             this.Values = new double[doubles];
-            for (int index = 0; index < doubles; ++index)
+            for (int valueIndex = 0; valueIndex < doubles; ++valueIndex)
             {
-                this.Values[index] = BinaryPrimitives.ReadDoubleLittleEndian(doubleBytes[(sizeof(double) * index)..]);
+                this.Values[valueIndex] = BinaryPrimitives.ReadDoubleLittleEndian(doubleBytes[(sizeof(double) * valueIndex)..]);
             }
+        }
+
+        public override void Write(Stream stream)
+        {
+            Debug.Assert(this.RecordLengthAfterHeader == sizeof(double) * this.Values.Length);
+            this.WriteHeader(stream);
+
+            Span<byte> valueBytes = stackalloc byte[sizeof(double) * this.Values.Length];
+            for (int valueIndex = 0; valueIndex < this.Values.Length; ++valueIndex)
+            {
+                BinaryPrimitives.WriteDoubleLittleEndian(valueBytes[(sizeof(double) * valueIndex)..], this.Values[valueIndex]);
+            }
+
+            stream.Write(valueBytes);
         }
     }
 }

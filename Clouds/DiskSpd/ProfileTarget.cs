@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Xml;
 
 namespace Mars.Clouds.DiskSpd
@@ -27,7 +26,7 @@ namespace Mars.Clouds.DiskSpd
         public int ThreadsPerFile { get; private set; }
         public int IOPriority { get; private set; }
         public int Weight { get; private set; }
-        public List<string> WriteBufferContent { get; private init; }
+        public WriteBufferContent WriteBufferContent { get; private init; }
 
         public ProfileTarget()
         {
@@ -50,7 +49,7 @@ namespace Mars.Clouds.DiskSpd
             this.ThreadsPerFile = -1;
             this.IOPriority = -1;
             this.Weight = -1;
-            this.WriteBufferContent = [];
+            this.WriteBufferContent = new();
         }
 
         protected override void ReadStartElement(XmlReader reader)
@@ -104,9 +103,6 @@ namespace Mars.Clouds.DiskSpd
                 case "Random":
                     this.Random = reader.ReadElementContentAsInt();
                     break;
-                case "Pattern":
-                    this.WriteBufferContent.Add(reader.ReadElementContentAsString());
-                    break;
                 case "ThreadStride":
                     this.ThreadStride = reader.ReadElementContentAsInt();
                     break;
@@ -132,7 +128,7 @@ namespace Mars.Clouds.DiskSpd
                     this.Weight = reader.ReadElementContentAsInt();
                     break;
                 case "WriteBufferContent":
-                    reader.Read();
+                    this.WriteBufferContent.ReadXml(reader);
                     break;
                 default:
                     throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");

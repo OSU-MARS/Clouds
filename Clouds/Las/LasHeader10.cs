@@ -229,26 +229,57 @@ namespace Mars.Clouds.Las
             return this.GetRgbOffset() != -1;
         }
 
+        public bool TryRepairFileCreationDate(DateOnly fallbackFileCreationDate)
+        {
+            bool creationDateChanged = false;
+
+            UInt16 fallbackYear = (UInt16)fallbackFileCreationDate.Year;
+            if ((this.FileCreationYear < 2003) || (this.FileCreationYear > 3000))
+            {
+                this.FileCreationYear = fallbackYear;
+                creationDateChanged = true;
+            }
+            else if (this.FileCreationYear != fallbackYear)
+            {
+                // for now, assume scan sets don't cross over December 31-January 1
+                throw new ArgumentOutOfRangeException(nameof(fallbackFileCreationDate), "Fallback file creation date has year " + fallbackYear + " but .las has year " + this.FileCreationYear);
+            }
+
+            UInt16 fallbackDayOfYear = (UInt16)fallbackFileCreationDate.DayOfYear;
+            if ((this.FileCreationDayOfYear < 1) || (this.FileCreationDayOfYear > 366))
+            {
+                this.FileCreationDayOfYear = fallbackDayOfYear;
+                creationDateChanged = true;
+            }
+            else if (DateTime.IsLeapYear(fallbackYear) && (this.FileCreationDayOfYear == fallbackDayOfYear - 1))
+            {
+                this.FileCreationDayOfYear = fallbackDayOfYear;
+                creationDateChanged = true;
+            }
+
+            return creationDateChanged;
+        }
+
         public virtual void Validate()
         {
             if (this.SystemIdentifier.Length > 32)
             {
-                throw new InvalidDataException("SystemIdentifier");
+                throw new InvalidDataException("SystemIdentifier length of " + this.SystemIdentifier.Length + " characters exceeds the maximum of 32 characters.");
             }
             if (this.GeneratingSoftware.Length > 32) 
             {
-                throw new InvalidDataException("GeneratingSoftware");
+                throw new InvalidDataException("GeneratingSoftware has length of " + this.GeneratingSoftware.Length + " characters exceeds the maximum of 32 characters.");
             }
 
             // for now, assume CE
             if ((this.FileCreationDayOfYear == 0) || (this.FileCreationDayOfYear > 366))
             {
                 // if needed, can also check for leap years
-                throw new InvalidDataException("FileCreationDayOfYear");
+                throw new InvalidDataException("FileCreationDayOfYear is " + this.FileCreationDayOfYear + ".");
             }
             if ((this.FileCreationYear < 2003) || (this.FileCreationYear > 3000))
             {
-                throw new InvalidDataException("FileCreationYear");
+                throw new InvalidDataException("FileCreationYear is " + this.FileCreationYear + ".");
             }
 
             if (this.OffsetToPointData < this.HeaderSize)

@@ -60,9 +60,9 @@ namespace Mars.Clouds.Cmdlets
                 // when reading LAS headers and VLRs is negligible to long compute runs but can influence tile indexing time by a factor of
                 // 2-3x if overlarge buffers result in unnecessary prefetching.
                 string lasTilePath = lasTilePaths[tileIndex];
-                using FileStream stream = new(lasTilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4 * 1024);
+                using FileStream stream = new(lasTilePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
                 using LasReader headerVlrReader = new(stream);
-                lasTiles.Add(new(lasTilePath, headerVlrReader));
+                lasTiles.Add(new(lasTilePath, headerVlrReader, fallbackCreationDate: null));
             }
 
             tileIndexProgress.StatusDescription = "Forming grid of point clouds...";
