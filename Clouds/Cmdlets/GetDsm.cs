@@ -191,8 +191,7 @@ namespace Mars.Clouds.Cmdlets
             // the point cloud density, greater initial list capacities. For larger sets of tiles, worker requirements set by tile read
             // speed.
             //
-            // performance baselines, 5950X with Elliott 2021 tiles (914 x 914 m @ ~35 points/m²)
-            //   2.1 GB/s from memory cache or 2TB SN770 @ 1 read thread without any worker threads
+            // older performance baselines, 5950X with Elliott 2021 tiles (914 x 914 m @ ~35 points/m²) with LasReader @ 2.0 GB/s max
             //  ~1.9 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.60 tiles/s (153 tiles in 4:14), tupled lists in PointListGridZs, initial capacity 64 points (~6% degradation at 128 points)
             //  ~1.7 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.54 tiles/s (153 tiles in 4:45), tupled lists in PointListGridZs, initial capacity 32 points
             //  ~1.7 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.49 tiles/s (153 tiles in 5:13), tupled lists in PointListGridZs, initial capacity 16 points
@@ -210,6 +209,8 @@ namespace Mars.Clouds.Cmdlets
             int usablePhysicalMemoryInGB = (int)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024 * 1024)) - 8; // set aside 8 GB for operating system and other programs
             int maxWorkerThreads = Int32.Max(Int32.Min(this.MaxThreads - readThreads, usablePhysicalMemoryInGB / 6), 1); // for now, assume 6 GB/thread, guarantee at least one worker thread
             // minimum bound on workers is at least two, but prefer a minimum of two for margin and enough to fully utilize the read threads
+            // Assumption read and processing bandwidths scale similarly across different hardware configs and therefore that the ratio between
+            // read and worker threads is fairly stable.
             float readBandwidthInGBs = Single.Min(LasReader.ReadPointsToXyzcsSpeedInGBs * readThreads, driveCapabilities.GetSequentialCapabilityInGBs());
             int preferredWorkerThreadsAsymptotic = Int32.Min(maxWorkerThreads, Int32.Max(2, (int)(readBandwidthInGBs / 0.2F + 0.5F)));
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
@@ -244,7 +245,7 @@ namespace Mars.Clouds.Cmdlets
 
             progress.Stopwatch.Stop();
             string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose(dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile).");
+            this.WriteVerbose(dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
             base.ProcessRecord();
         }
 

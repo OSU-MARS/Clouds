@@ -1396,6 +1396,24 @@ namespace Mars.Clouds.Extensions
             return Avx.Blend(Vector128.CreateScalarUnsafe(e0), Avx.Shuffle(data, data, Constant.Simd128.Circular32Up1), Constant.Simd128.BlendA0B123);
         }
 
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector128<Int32> ShuffleInAndUp(Int32 e0, Vector128<Int32> data)
+        //{
+        //    return Avx2.Blend(Vector128.CreateScalarUnsafe(e0), Avx2.Shuffle(data, Constant.Simd128.Circular32Up1), Constant.Simd128.BlendA0B123);
+        //}
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector128<UInt32> ShuffleInAndUp(UInt32 e0, Vector128<UInt32> data)
+        //{
+        //    return Avx2.Blend(Vector128.CreateScalarUnsafe(e0), Avx2.Shuffle(data, Constant.Simd128.Circular32Up1), Constant.Simd128.BlendA0B123);
+        //}
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector128<UInt64> ShuffleInAndUp(UInt64 e0, Vector128<UInt64> data)
+        //{
+        //    return Avx2.Blend(Vector128.CreateScalarUnsafe(e0).AsDouble(), Avx2.Shuffle(data.AsDouble(), data.AsDouble(), Constant.Simd128.Circular64Up1), Constant.Simd128.BlendA0B1).AsUInt64();
+        //}
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector256<float> ToFloat(this Vector256<UInt32> value) 
         {

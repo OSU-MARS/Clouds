@@ -8,7 +8,7 @@ namespace Mars.Clouds.Las
 {
     public class LasWriter : LasStream
     {
-        public const float RegisterSpeedInGBs = 2.0F;
+        public const float RegisterSpeedInGBs = 2.0F; // approximate rate per thread (could definitely be profiled more accurately), 5950X
 
         public LasWriter(Stream stream)
             : base(stream)

@@ -11,12 +11,13 @@ namespace Mars.Clouds.Las
     {
         // basic perf profile on tiles cached in memory: ReadPoints() for xyzcs, 5950X, DDR4-3200, .NET 8, 9 tiles totaling 28.4 GB
         // batch size, points  read speed, GB/s
-        // 1                   1.7
-        // 2                   1.9
-        // 5, 10, 100, 1000    2.0
-        public const int ReadExactSizeInPoints = 8;
+        // 1                   1.4-1.5
+        // 2                   1.8-1.9
+        // 4                   2.0-2.1
+        // 8, 16, 32           2.2-2.4
+        public const int ReadExactSizeInPoints = 16; // might average slightly faster than 8 or 32
 
-        public const float ReadPointsToXyzcsSpeedInGBs = 2.0F;
+        public const float ReadPointsToXyzcsSpeedInGBs = 2.2F; // 5950X
 
         public LasReader(Stream stream)
             : base(stream)
@@ -457,12 +458,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private static UInt16 ReadPointSourceID(ReadOnlySpan<byte> pointBytes, byte pointFormat)
-        {
-            return pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
-        }
-
-        public PointList<PointBatchXyzcs> ReadPoints(LasTile lasTile, ObjectPool<PointBatchXyzcs> pointBatchPool)
+        public unsafe PointList<PointBatchXyzcs> ReadPoints(LasTile lasTile, ObjectPool<PointBatchXyzcs> pointBatchPool)
         {
             LasHeader10 lasHeader = lasTile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
@@ -473,9 +469,32 @@ namespace Mars.Clouds.Las
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
 
-            PointBatchXyzcs pointBatch = tilePoints[0];
             int pointBatchIndex = 0;
+            PointBatchXyzcs pointBatch = tilePoints[pointBatchIndex];
+            //GCHandle classificationHandle = GCHandle.Alloc(pointBatch.Classification, GCHandleType.Pinned);
+            //UInt32* batchClassificationAddress = (UInt32*)classificationHandle.AddrOfPinnedObject();
+            //GCHandle xHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+            //int* batchXaddress = (int*)xHandle.AddrOfPinnedObject();
+            //GCHandle yHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+            //int* batchYaddress = (int*)yHandle.AddrOfPinnedObject();
+            //GCHandle zHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+            //int* batchZaddress = (int*)zHandle.AddrOfPinnedObject();
+            //GCHandle sourceIDhandle = GCHandle.Alloc(pointBatch.SourceID, GCHandleType.Pinned);
+            //UInt64* batchSourceIDaddress = (UInt64*)sourceIDhandle.AddrOfPinnedObject();
+
             int pointIndexInBatch = 0;
+            //int xyzStoreIndex = 0;
+            //int classificationStoreIndex = 0;
+            //int sourceIDstoreIndex = 0;
+
+            //UInt64 classificationBuffer64 = 0;
+            //Vector128<UInt64> classificationBuffer128 = Vector128<UInt64>.Zero;
+            //Vector128<int> xBuffer128 = Vector128<int>.Zero;
+            //Vector128<int> yBuffer128 = Vector128<int>.Zero;
+            //Vector128<int> zBuffer128 = Vector128<int>.Zero;
+            //UInt64 sourceIDbuffer64 = 0;
+            //Vector128<UInt64> sourceIDbuffer128 = Vector128<UInt64>.Zero;
+
             Span<byte> pointReadBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
             {
@@ -484,9 +503,19 @@ namespace Mars.Clouds.Las
                 int bytesToRead = pointsToRead * lasHeader.PointDataRecordLength;
                 this.BaseStream.ReadExactly(pointReadBuffer[..bytesToRead]);
 
+                // ~400 MB/s slower to unroll this loop than to leave it rolled
                 // BinaryPrimitives.ReadInt32LittleEndian(), BitConverter.ToInt32(), and shifting bytes all bench to near identical performance
-                // since batch contains eight points Avx2.GatherVector256() and Store() could be used in the typical case no points
-                // are noise or withheld
+                // MemoryMarshal.Read<int>() may be slightly slower than BinaryPrimitives.ReadInt32LittleEndian(). Benchmarking also shows no benefit
+                // (and suggests maybe some detriment) to MemoryMarshal.Cast<byte, int>() rather than BinaryPrimitives.ReadInt32LittleEndian().
+                // 
+                // Since batch contains eight points Avx2.GatherVector256() and Store() could be used in the typical case no points are noise or
+                // withheld. Testing suggests batching stores, at least, can offer speed increases but realizing meaningful gains in a complete
+                // implementation appears difficult. Of the various SIMD combinations possible within the commented out code, the most effective
+                // appears to be batching just x, y, and z, which increases read speeds by perhaps ~100 MB/s. Profiling shows batching classification
+                // and source ID most likely results in decreased read speeds.
+                //
+                // Because stores and buffer reads are misaligned, gathering x, y, and z from pointReadBuffer is not practical (pointReadBuffer could
+                // easily be allocated on the heap and pinned for access, however).
                 for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += lasHeader.PointDataRecordLength)
                 {
                     ReadOnlySpan<byte> pointBytes = pointReadBuffer[batchOffset..];
@@ -496,21 +525,85 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
+                    //classificationBuffer64 = (classificationBuffer64 << 8) | (byte)classification;
                     pointBatch.Classification[pointIndexInBatch] = classification;
+                    //xBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), xBuffer128);
+                    //yBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), yBuffer128);
+                    //zBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), zBuffer128);
                     pointBatch.X[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                     pointBatch.Y[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
                     pointBatch.Z[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                    pointBatch.SourceID[pointIndexInBatch] = LasReader.ReadPointSourceID(pointBytes, pointFormat);
+                    // somehow ~200 MB/s faster to inline this than to call a static function, even with [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                    pointBatch.SourceID[pointIndexInBatch] = pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                    //UInt16 sourceID = pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                    //sourceIDbuffer64 = (sourceIDbuffer64 << 16) | sourceID;
                     ++pointIndexInBatch;
+                    //++xyzStoreIndex;
 
+                    // noise and withheld points result in pointIndexInBatch not being aligned with batchOffset
+                    // Transition to next batch can therefore occur on at (literally) point.
+                    //if (xyzStoreIndex == 4)
+                    //{
+                    //    Avx2.Store(batchXaddress, xBuffer128);
+                    //    batchXaddress += 4;
+                    //    Avx2.Store(batchYaddress, yBuffer128);
+                    //    batchYaddress += 4;
+                    //    Avx2.Store(batchZaddress, zBuffer128);
+                    //    batchZaddress += 4;
+                    //    xyzStoreIndex = 0;
+                    //
+                    //    sourceIDbuffer128 = AvxExtensions.ShuffleInAndUp(sourceIDbuffer64, sourceIDbuffer128);
+                    //    sourceIDstoreIndex += 4;
+                    //}
+                    //if (sourceIDstoreIndex == 8)
+                    //{
+                    //    Avx2.Store(batchSourceIDaddress, sourceIDbuffer128);
+                    //    batchSourceIDaddress += 2;
+                    //    sourceIDstoreIndex = 0;
+                    //
+                    //    classificationBuffer128 = AvxExtensions.ShuffleInAndUp(classificationBuffer64, classificationBuffer128);
+                    //    classificationBuffer64 = 0;
+                    //    classificationStoreIndex += 8;
+                    //
+                    //}
+                    //if (classificationStoreIndex == 16)
+                    //{
+                    //    Avx2.Store(batchClassificationAddress, classificationBuffer128);
+                    //    batchClassificationAddress += 4;
+                    //    classificationStoreIndex = 0;
+                    //}
                     if (pointIndexInBatch == pointBatch.Capacity)
                     {
+                        //classificationHandle.Free();
+                        //xHandle.Free();
+                        //yHandle.Free();
+                        //zHandle.Free();
+                        //sourceIDhandle.Free();
+
                         pointBatch.Count = pointIndexInBatch;
                         pointBatch = tilePoints[++pointBatchIndex];
                         pointIndexInBatch = 0;
+
+                        //classificationHandle = GCHandle.Alloc(pointBatch.Classification, GCHandleType.Pinned);
+                        //batchClassificationAddress = (UInt32*)classificationHandle.AddrOfPinnedObject();
+                        //xHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+                        //batchXaddress = (int*)xHandle.AddrOfPinnedObject();
+                        //yHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+                        //batchYaddress = (int*)yHandle.AddrOfPinnedObject();
+                        //zHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
+                        //batchZaddress = (int*)zHandle.AddrOfPinnedObject();
+                        //sourceIDhandle = GCHandle.Alloc(pointBatch.SourceID, GCHandleType.Pinned);
+                        //batchSourceIDaddress = (UInt64*)sourceIDhandle.AddrOfPinnedObject();
                     }
                 }
             }
+
+            // TODO if using SIMD: last store
+            //classificationHandle.Free();
+            //xHandle.Free();
+            //yHandle.Free();
+            //zHandle.Free();
+            //sourceIDhandle.Free();
 
             // batch size typically leaves unused capacity at ends of arrays
             // Noise or withheld points also result in unused capacity.

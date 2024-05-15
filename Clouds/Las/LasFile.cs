@@ -135,6 +135,7 @@ namespace Mars.Clouds.Las
                 if ((vlr.RecordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID) && String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
                 {
                     this.VariableLengthRecords.RemoveAt(vlrIndex--);
+                    this.Header.NumberOfVariableLengthRecords -= 1;
                     this.Header.OffsetToPointData -= (UInt32)(VariableLengthRecord.HeaderSizeInBytes + ((GeoKeyDirectoryTagRecord)vlr).RecordLengthAfterHeader);
                 }
                 else if (((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) || (vlr.RecordID == OgcMathTransformWktRecord.LasfProjectionRecordID)) &&
