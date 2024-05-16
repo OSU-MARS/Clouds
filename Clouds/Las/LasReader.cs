@@ -741,7 +741,7 @@ namespace Mars.Clouds.Las
                 }
 
                 lasFile.VariableLengthRecords.Capacity += (int)lasHeader.NumberOfVariableLengthRecords;
-                this.ReadVariableLengthRecords(lasFile);
+                this.ReadVariableLengthRecordsAndTrailingBytes(lasFile);
             }
 
             if (lasHeader.VersionMinor >= 4)
@@ -762,15 +762,15 @@ namespace Mars.Clouds.Las
 
         private void ReadExtendedVariableLengthRecords(LasFile lasFile)
         {
-            Span<byte> vlrBytes = stackalloc byte[ExtendedVariableLengthRecord.HeaderSizeInBytes];
+            Span<byte> evlrBytes = stackalloc byte[ExtendedVariableLengthRecord.HeaderSizeInBytes];
             for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
             {
-                this.BaseStream.ReadExactly(vlrBytes);
-                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
-                string userID = Encoding.UTF8.GetString(vlrBytes.Slice(2, 16)).Trim('\0');
-                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[18..]);
-                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(vlrBytes[20..]) ;
-                string description = Encoding.UTF8.GetString(vlrBytes.Slice(28, 32)).Trim('\0');
+                this.BaseStream.ReadExactly(evlrBytes);
+                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes);
+                string userID = Encoding.UTF8.GetString(evlrBytes.Slice(2, 16)).Trim('\0');
+                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes[18..]);
+                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(evlrBytes[20..]) ;
+                string description = Encoding.UTF8.GetString(evlrBytes.Slice(28, 32)).Trim('\0');
 
                 // create specific object if record has a well known type
                 long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
@@ -788,7 +788,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private void ReadVariableLengthRecords(LasFile lasFile)
+        private void ReadVariableLengthRecordsAndTrailingBytes(LasFile lasFile)
         {
             if (this.BaseStream.Position != lasFile.Header.HeaderSize)
             {
@@ -913,13 +913,19 @@ namespace Mars.Clouds.Las
             {
                 throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + lasFile.Header.OffsetToPointData + " bytes but reader is positioned at " + this.BaseStream.Position + " bytes.");
             }
-            // for now, ignore malformed .las files with variable length header underruns
-            // Underruns may result from variable length record parsing problems, record construction errors, the .las header
-            // indicating fewer VLRs than are actually present, and likely other problems.
-            //if (this.BaseStream.Position < lasFile.Header.OffsetToPointData)
-            //{
-            //    throw new InvalidDataException(".las file's variable length records ended at " + this.BaseStream.Position + " bytes into the file. The .las file's header indicates variable length records should extend to " + lasFile.Header.OffsetToPointData + " bytes.");
-            //}
+            if (this.BaseStream.Position < lasFile.Header.OffsetToPointData)
+            {
+                // capture any extra bytes between the end of the variable length records and the start of point data
+                // These shouldn't do anything and should be droppable as unused padding but, for example, .laz files actually require two trailing bytes
+                // to work (both are zero). So any extra bytes present are captured here in case subsequent code needs to flow them through to another file
+                // or has some other use for them.
+                // See also https://github.com/ASPRSorg/LAS/issues/37
+                //          https://github.com/ASPRSorg/LAS/issues/91
+                //          https://github.com/ASPRSorg/LAS/issues/145
+                int bytesAfterVariableLengthRecords = (int)(lasFile.Header.OffsetToPointData - this.BaseStream.Position);
+                lasFile.BytesAfterVariableLengthRecords = new byte[bytesAfterVariableLengthRecords];
+                this.BaseStream.ReadExactly(lasFile.BytesAfterVariableLengthRecords);
+            }
         }
 
         protected static void ThrowOnUnsupportedPointFormat(LasHeader10 lasHeader)

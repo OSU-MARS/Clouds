@@ -2,7 +2,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 
 namespace Mars.Clouds.Las
 {
@@ -26,6 +25,11 @@ namespace Mars.Clouds.Las
             {
                 this.Values[valueIndex] = BinaryPrimitives.ReadDoubleLittleEndian(doubleBytes[(sizeof(double) * valueIndex)..]);
             }
+        }
+
+        public override int GetSizeInBytes()
+        {
+            return VariableLengthRecord.HeaderSizeInBytes + sizeof(double) * this.Values.Length;
         }
 
         public override void Write(Stream stream)

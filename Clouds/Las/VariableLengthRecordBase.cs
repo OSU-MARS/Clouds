@@ -45,6 +45,7 @@ namespace Mars.Clouds.Las
             this.Description = description;
         }
 
+        public abstract int GetSizeInBytes();
         public abstract void Write(Stream stream);
     }
 }

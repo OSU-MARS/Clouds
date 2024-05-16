@@ -1,5 +1,6 @@
 ﻿using Mars.Clouds.Cmdlets.Drives;
 using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using OSGeo.OGR;
 using OSGeo.OSR;
@@ -30,11 +31,11 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(-420.0, 8848.0)]
         public double Z { get; set; }
 
-        [Parameter(HelpMessage = "EPSG number of projected coordinate system to assign to point cloud. Default is 32610 (WGS 84 / UTM zone 10N).")]
+        [Parameter(HelpMessage = "EPSG of projected coordinate system to assign to point cloud. Default is 32610 (WGS 84 / UTM zone 10N).")]
         [ValidateRange(1024, 32767)]
         public int HorizontalEpsg { get; set; }
 
-        [Parameter(HelpMessage = "EPSG number of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters).")]
+        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters).")]
         [ValidateRange(1024, 32767)]
         public int VerticalEpsg { get; set; }
 
@@ -56,7 +57,7 @@ namespace Mars.Clouds.Cmdlets
             this.SourceID = 1;
         }
 
-        protected override void BeginProcessing()
+        protected override void ProcessRecord()
         {
             // check for input files
             List<string> cloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
@@ -64,22 +65,8 @@ namespace Mars.Clouds.Cmdlets
             // reproject point cloud origin from WGS84 to cloud's coordinate system
             SpatialReference wgs84 = new(String.Empty);
             wgs84.ImportFromEPSG(Constant.Epsg.Wgs84);
-            
-            SpatialReference horizontalCrs = new(String.Empty);
-            if (horizontalCrs.ImportFromEPSG(this.HorizontalEpsg) != 0)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), "Could not create a GDAL spatial reference from -" + nameof(this.HorizontalEpsg) + " " + this.HorizontalEpsg + ".");
-            }
-            SpatialReference verticalCrs = new(String.Empty);
-            if (verticalCrs.ImportFromEPSG(this.VerticalEpsg) != 0)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.VerticalEpsg), "Could not create a GDAL spatial reference from -" + nameof(this.VerticalEpsg) + " " + this.VerticalEpsg + ".");
-            }
-            SpatialReference cloudCrs = new(String.Empty);
-            if (cloudCrs.SetCompoundCS(horizontalCrs.GetName() + " + " + verticalCrs.GetName(), horizontalCrs, verticalCrs) != 0)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.VerticalEpsg), "Could not create a compound GDAL spatial reference from -" + nameof(this.HorizontalEpsg) + " " + this.HorizontalEpsg + " and -" + nameof(this.VerticalEpsg) + " " + this.VerticalEpsg + ".");
-            }
+
+            SpatialReference cloudCrs = SpatialReferenceExtensions.Create(this.HorizontalEpsg, this.VerticalEpsg);
 
             CoordinateTransformation transform = new(wgs84, cloudCrs, new());
             Geometry origin = new(wkbGeometryType.wkbPoint25D);
@@ -95,11 +82,11 @@ namespace Mars.Clouds.Cmdlets
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
             int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
 
-            int cloudReadsInitiated = -1;
-            int cloudReadsCompleted = 0;
+            int cloudRegistrationsInitiated = -1;
+            int cloudRegistrationsCompleted = 0;
             ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
             {
-                for (int cloudIndex = Interlocked.Increment(ref cloudReadsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudReadsInitiated))
+                for (int cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated))
                 {
                     string cloudPath = cloudPaths[cloudIndex];
                     FileInfo cloudFileInfo = new(cloudPath);
@@ -111,10 +98,11 @@ namespace Mars.Clouds.Cmdlets
                     string modifiedCloudPath = PathExtensions.AppendToFileName(cloudPath, " registered");
                     using LasWriter writer = LasWriter.CreateForPointWrite(modifiedCloudPath);
                     writer.WriteHeader(cloud);
-                    writer.WriteVariableLengthRecords(cloud);
+                    writer.WriteVariableLengthRecordsAndUserData(cloud);
                     writer.WritePointsWithSourceID(reader, cloud, (UInt16)(this.SourceID + cloudIndex));
+                    writer.WriteExtendedVariableLengthRecords(cloud);
 
-                    Interlocked.Increment(ref cloudReadsCompleted);
+                    Interlocked.Increment(ref cloudRegistrationsCompleted);
                     if (this.Stopping)
                     {
                         break;
@@ -122,15 +110,15 @@ namespace Mars.Clouds.Cmdlets
                 }
             });
 
-            TimedProgressRecord progress = new("Register-Cloud", "Registered " + cloudReadsCompleted + " of " + cloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Register-Cloud", "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false) 
             {
-                progress.StatusDescription = "Registered " + cloudReadsCompleted + " of " + cloudPaths.Count + " point clouds...";
-                progress.Update(cloudReadsCompleted, cloudPaths.Count);
+                progress.StatusDescription = "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...";
+                progress.Update(cloudRegistrationsCompleted, cloudPaths.Count);
                 this.WriteProgress(progress);
             }
 
-            base.BeginProcessing();
+            base.ProcessRecord();
         }
     }
 }

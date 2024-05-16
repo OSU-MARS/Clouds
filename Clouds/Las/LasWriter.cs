@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO;
 using System.Text;
 
@@ -15,10 +16,53 @@ namespace Mars.Clouds.Las
         {
         }
 
+        /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
+        public void CopyPointsAndExtendedVariableLengthRecords(LasReader reader, LasFile lasFile)
+        {
+            if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
+            {
+                throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasFile.Header.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+            }
+
+            // points don't need to be unpacked so both uncompressed .las and compressed .laz points can be copied
+            Span<byte> copyBuffer = stackalloc byte[512];
+            long sourceLasFileSize = reader.BaseStream.Length;
+            while (reader.BaseStream.Position < sourceLasFileSize)
+            {
+                int bytesToRead = (int)Int64.Min(sourceLasFileSize - reader.BaseStream.Position, copyBuffer.Length);
+                reader.BaseStream.ReadExactly(copyBuffer[..bytesToRead]);
+
+                this.BaseStream.Write(copyBuffer[..bytesToRead]);
+            }
+        }
+
         public static LasWriter CreateForPointWrite(string lasPath)
         {
             FileStream stream = new(lasPath, FileMode.Create, FileAccess.Write, FileShare.Read, 512 * 1024);
             return new LasWriter(stream);
+        }
+
+        public void WriteExtendedVariableLengthRecords(LasFile lasFile)
+        {
+            UInt32 extendedVariableLengthRecords = 0; // extended variable length records were added in LAS 1.4
+            if (lasFile.Header is LasHeader14 lasHeader14)
+            {
+                extendedVariableLengthRecords = lasHeader14.NumberOfExtendedVariableLengthRecords;
+                if (this.BaseStream.Position != (long)lasHeader14.StartOfFirstExtendedVariableLengthRecord)
+                {
+                    throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated extended variable length record offset (" + lasHeader14.StartOfFirstExtendedVariableLengthRecord + " bytes). Extended variable length records should begin immediately after the points.");
+                }
+            }
+            if (extendedVariableLengthRecords != lasFile.ExtendedVariableLengthRecords.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + extendedVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present. This may be because the header's number of extended variable length records is set incorrectly or because the header uses a LAS version prior to 1.4.");
+            }
+
+            for (int evlrIndex = 0; evlrIndex < lasFile.ExtendedVariableLengthRecords.Count; ++evlrIndex)
+            {
+                ExtendedVariableLengthRecord evlr = lasFile.ExtendedVariableLengthRecords[evlrIndex];
+                evlr.Write(this.BaseStream);
+            }
         }
 
         private static void WriteFixedLength(string fixedLengthString, Span<byte> buffer, int length)
@@ -163,8 +207,12 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void WriteVariableLengthRecords(LasFile lasFile)
+        public void WriteVariableLengthRecordsAndUserData(LasFile lasFile)
         {
+            if (lasFile.Header.NumberOfVariableLengthRecords != lasFile.VariableLengthRecords.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + lasFile.Header.NumberOfVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present.");
+            }
             if (this.BaseStream.Position != lasFile.Header.HeaderSize)
             {
                 throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated size (" + lasFile.Header.HeaderSize + " bytes). Variable length records should begin immediately after the header.");
@@ -174,6 +222,11 @@ namespace Mars.Clouds.Las
             {
                 VariableLengthRecord vlr = lasFile.VariableLengthRecords[vlrIndex];
                 vlr.Write(this.BaseStream);
+            }
+
+            if (lasFile.BytesAfterVariableLengthRecords.Length > 0)
+            {
+                this.BaseStream.Write(lasFile.BytesAfterVariableLengthRecords);
             }
 
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)

@@ -29,7 +29,8 @@ Supporting tools are
 - `Get-ScanMetrics`: similar to `Get-GridMetrics` but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
-- `Register-Cloud`: set a .las file's origin, coordinate system, and source ID
+- `Register-Cloud`: set .las files' origin, coordinate system, and source ID
+- `Convert-CloudCrs`: reproject .las files to a new coordinate system, adding a vertical coordinate system if one is not present
 - `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 - `Repair-NoisePoints`: mark z outliers as high and low noise relative to DTM (useful for that one point in low Earth orbit)
 - `Export-VrtBands`: work around QGIS performance limitations in displaying virtual rasters by extracting subsets of the bands in a .vrt
@@ -100,6 +101,8 @@ have not been implemented.
 
 Also,
 
+- Currently NAVD88 is the only well known vertical coordinate system. `Convert-CloudCrs`'s imputation of missing vertical coordinate systems
+  therefore doesn't behave correctly outside of North America.
 - Supported raster data types are real values (8, 16, 32, and 64 bit signed and unsigned integers, single and double precision floating point).
   While GDAL also supports complex values and two other cell types, Clouds does not.
 - The user has to know what thread counts to specify for optimal performance. Thread selection is automatable and cmdlets make an effort to 

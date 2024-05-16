@@ -19,5 +19,13 @@ namespace Mars.Clouds.Las
             this.Count = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[4..]);
             this.ValueOrOffset = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..]);
         }
+
+        public void Write(Span<byte> vlrBytes)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes, this.KeyID);
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[2..], this.TiffTagLocation);
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[4..], this.Count);
+            BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[6..], this.ValueOrOffset);
+        }
     }
 }

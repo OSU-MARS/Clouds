@@ -13,20 +13,20 @@ namespace Mars.Clouds.Las
         public const UInt16 LazEncodingRecordID = 22204;
         public const byte PointDataFormatMask = 0x80; // 128; may also be 64 per LASzip dll source code
 
-        public LazCompressorType Compressor { get; set; }
-        public LazCoderType Coder { get; set; }
+        public LazCompressorType Compressor { get; private init; }
+        public LazCoderType Coder { get; private init; }
 
         /// <summary>
         /// Version of .laz tool (e.g. LASzip) used to create .las file.
         /// </summary>
-        public Version LazVersion { get; set; }
+        public Version LazVersion { get; private init; }
 
-        public LazOptions Options { get; set; }
+        public LazOptions Options { get; private init; }
 
         /// <summary>
         /// Chunk size in points.
         /// </summary>
-        public Int32 ChunkSize { get; set; }
+        public Int32 ChunkSize { get; private init; }
 
         /// <summary>
         /// Number of .laz specific extended variable length records.
@@ -34,7 +34,7 @@ namespace Mars.Clouds.Las
         /// <remarks>
         /// Not used by LASzip. Set to -1 if unused.
         /// </remarks>
-        public Int64 NumberOfSpecialEvlrs { get; set; }
+        public Int64 NumberOfSpecialEvlrs { get; private init; }
 
         /// <summary>
         /// Offset to .laz specific extended variable length records.
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Las
         /// <remarks>
         /// Not used by LASzip. Set to -1 if unused.
         /// </remarks>
-        public Int64 OffsetToSpecialEvlrs { get; set; }
+        public Int64 OffsetToSpecialEvlrs { get; private init; }
 
         /// <summary>
         /// Number of items in a compressed point record. 
@@ -53,22 +53,22 @@ namespace Mars.Clouds.Las
         /// <see cref="LazItemType.Point14"/> respectively) or consists of a point type plus a set of additional fields which are compressed
         /// separately (e.g. <see cref="LazItemType.Rgb14"/> or <see cref="LazItemType.RgbNir14"/>).
         /// </remarks>
-        public UInt16 NumItems { get; set; }
+        public UInt16 NumItems { get; private init; }
 
         /// <summary>
         /// Type of compressed items.
         /// </summary>
-        public LazItemType[] Type { get; set; }
+        public LazItemType[] Type { get; private init; }
 
         /// <summary>
         /// Decompressed size of items in bytes.
         /// </summary>
-        public UInt16[] Size { get; set; }
+        public UInt16[] Size { get; private init; }
 
         /// <summary>
         /// Version of .laz compression used with items.
         /// </summary>
-        public UInt16[] Version { get; set; }
+        public UInt16[] Version { get; private init; }
 
         public LazVariableLengthRecord(UInt16 reserved, UInt16 recordLengthAfterHeader, string description, ReadOnlySpan<byte> vlrBytes)
             : base(reserved, LazVariableLengthRecord.LazEncodingUserID, LazVariableLengthRecord.LazEncodingRecordID, recordLengthAfterHeader, description)
@@ -86,6 +86,11 @@ namespace Mars.Clouds.Las
             this.Type = new LazItemType[this.NumItems];
             this.Size = new UInt16[this.NumItems];
             this.Version = new UInt16[this.NumItems];
+        }
+
+        public override int GetSizeInBytes()
+        {
+            return VariableLengthRecord.HeaderSizeInBytes + LazVariableLengthRecord.CoreSizeInBytes + LazVariableLengthRecord.ItemSizeInBytes * this.NumItems;
         }
 
         public void ReadItem(int itemIndex, ReadOnlySpan<byte> vlrBytes)
@@ -111,13 +116,14 @@ namespace Mars.Clouds.Las
             BinaryPrimitives.WriteInt64LittleEndian(vlrBytes[24..], this.OffsetToSpecialEvlrs);
             BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[32..], this.NumItems);
 
-            stream.Write(vlrBytes);
-            for (int itemIndex = 0, itemOffset = 34; itemIndex < this.NumItems; itemIndex++, itemOffset += 6) 
+            for (int itemIndex = 0, itemOffset = LazVariableLengthRecord.CoreSizeInBytes; itemIndex < this.NumItems; itemIndex++, itemOffset += 6) 
             {
                 BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[itemOffset..], (UInt16)this.Type[itemIndex]);
                 BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[(itemOffset + 2)..], this.Size[itemIndex]);
                 BinaryPrimitives.WriteUInt16LittleEndian(vlrBytes[(itemOffset + 4)..], this.Version[itemIndex]);
             }
+
+            stream.Write(vlrBytes);
         }
     }
 }

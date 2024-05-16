@@ -27,6 +27,11 @@ namespace Mars.Clouds.Las
             this.NumberOfKeys = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes[6..]);
         }
 
+        public override int GetSizeInBytes()
+        {
+            return VariableLengthRecord.HeaderSizeInBytes + 8 + 8 * this.KeyEntries.Count;
+        }
+
         public override void Write(Stream stream)
         {
             this.WriteHeader(stream);
@@ -40,10 +45,7 @@ namespace Mars.Clouds.Las
             for (int keyIndex = 0, keyOffset = 8; keyIndex < this.KeyEntries.Count; ++keyIndex, keyOffset += 8)
             {
                 GeoKeyEntry entry = this.KeyEntries[keyIndex];
-                BinaryPrimitives.WriteDoubleBigEndian(vlrBytes[keyOffset..], entry.KeyID);
-                BinaryPrimitives.WriteDoubleBigEndian(vlrBytes[(keyOffset + 2)..], entry.TiffTagLocation);
-                BinaryPrimitives.WriteDoubleBigEndian(vlrBytes[(keyOffset + 4)..], entry.Count);
-                BinaryPrimitives.WriteDoubleBigEndian(vlrBytes[(keyOffset + 6)..], entry.ValueOrOffset);
+                entry.Write(vlrBytes[keyOffset..]);
             }
 
             stream.Write(vlrBytes);

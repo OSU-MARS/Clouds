@@ -8,6 +8,7 @@ namespace Mars.Clouds
 
         public static class Epsg
         {
+            public const int Navd88ft = 8228; // English units
             public const int Navd88m = 5703; // metric
             public const int Utm10N = 32610;
             public const int Wgs84 = 4326;

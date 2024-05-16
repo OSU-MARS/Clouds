@@ -17,6 +17,18 @@ namespace Mars.Clouds.Las
             this.Values = Encoding.UTF8.GetString(stringBytes).Split('\0', StringSplitOptions.RemoveEmptyEntries);
         }
 
+        public override int GetSizeInBytes()
+        {
+            int sizeInBytes = VariableLengthRecord.HeaderSizeInBytes;
+            for (int valueIndex = 0; valueIndex < this.Values.Length; ++valueIndex)
+            {
+                byte[] valueBytes = Encoding.UTF8.GetBytes(this.Values[valueIndex]);
+                sizeInBytes += valueBytes.Length + 1; // trailing null
+            }
+
+            return sizeInBytes;
+        }
+
         public override void Write(Stream stream)
         {
             this.WriteHeader(stream);
@@ -27,12 +39,8 @@ namespace Mars.Clouds.Las
                 byte[] valueBytes = Encoding.UTF8.GetBytes(this.Values[valueIndex]);
                 stream.Write(valueBytes);
 
-                valueBytesWritten += valueBytes.Length;
-                if (valueBytesWritten < this.RecordLengthAfterHeader)
-                {
-                    stream.WriteByte(0);
-                    ++valueBytesWritten;
-                }
+                stream.WriteByte(0);
+                valueBytesWritten += valueBytes.Length + 1;
             }
 
             Debug.Assert(valueBytesWritten == this.RecordLengthAfterHeader);

@@ -1,4 +1,5 @@
-﻿using OSGeo.OSR;
+﻿using Mars.Clouds.GdalExtensions;
+using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,6 +13,7 @@ namespace Mars.Clouds.Las
         public const byte MaxPointFormat = 10;
         public const string Signature = "LASF";
 
+        public byte[] BytesAfterVariableLengthRecords { get; set; } // unstandardized padding bytes that can end up being requried
         public LasHeader10 Header { get; private init; }
         public List<VariableLengthRecord> VariableLengthRecords { get; private init; }
         public List<ExtendedVariableLengthRecord> ExtendedVariableLengthRecords { get; private init; }
@@ -21,6 +23,7 @@ namespace Mars.Clouds.Las
         /// </summary>
         public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
         {
+            this.BytesAfterVariableLengthRecords = [];
             this.Header = reader.ReadHeader();
             this.VariableLengthRecords = [];
             this.ExtendedVariableLengthRecords = [];
@@ -37,6 +40,39 @@ namespace Mars.Clouds.Las
                 throw new InvalidDataException(".las file header indicates " + this.Header.NumberOfVariableLengthRecords + " should be present but " + this.VariableLengthRecords.Count + " records were read.");
             }
         }
+
+        /// <summary>
+        /// Check offsets are consistent.
+        /// </summary>
+        /// <remarks>
+        /// It's not uncommon .las files aren't tightly aligned, leaving extra bytes between the end of the variable length records and start
+        /// of point data. This is maybe a feature in that it reduces the likelihood of needing to rewrite a .las file when variable length
+        /// record (or version) changes are made.
+        /// </remarks>
+        //public void EnsureOffsetsSynchronized()
+        //{
+        //    UInt16 headerSizeInBytes = this.Header.HeaderSize;
+        //    UInt32 offsetToPointData = headerSizeInBytes;
+        //    for (int vlrIndex = 0; vlrIndex < this.VariableLengthRecords.Count; ++vlrIndex)
+        //    {
+        //        offsetToPointData += (UInt32)this.VariableLengthRecords[vlrIndex].GetSizeInBytes();
+        //    }
+
+        //    if (this.Header.OffsetToPointData != offsetToPointData)
+        //    {
+        //        this.Header.OffsetToPointData = offsetToPointData;
+        //    }
+
+        //    if (this.Header is LasHeader14 lasHeader14)
+        //    {
+        //        if (this.IsPointFormatCompressed())
+        //        {
+        //            throw new NotSupportedException("Don't know how to calculate offset to extended variable length records with .laz files.");
+        //        }
+
+        //        lasHeader14.StartOfFirstExtendedVariableLengthRecord = (UInt64)lasHeader14.OffsetToPointData + lasHeader14.NumberOfPointRecords * (UInt64)lasHeader14.PointDataRecordLength;
+        //    }
+        //}
 
         public int GetProjectedCoordinateSystemEpsg()
         {
@@ -82,7 +118,7 @@ namespace Mars.Clouds.Las
                         if (key.KeyID == GeoKey.ProjectedCSTypeGeoKey)
                         {
                             SpatialReference crs = new(null);
-                            crs.ImportFromEPSG(key.ValueOrOffset);
+                            crs.ImportFromEpsg(key.ValueOrOffset);
                             return crs;
                         }
                     }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace Mars.Clouds.Las
 {
@@ -11,6 +12,11 @@ namespace Mars.Clouds.Las
             : base(reserved, userID, recordID, recordLengthAfterHeader, description)
         {
             this.Data = data;
+        }
+
+        public override int GetSizeInBytes()
+        {
+            return VariableLengthRecord.HeaderSizeInBytes + this.Data.Length;
         }
 
         public override void Write(Stream stream)

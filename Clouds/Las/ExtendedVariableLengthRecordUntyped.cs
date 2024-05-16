@@ -13,6 +13,11 @@ namespace Mars.Clouds.Las
             this.Data = data;
         }
 
+        public override int GetSizeInBytes()
+        {
+            return ExtendedVariableLengthRecord.HeaderSizeInBytes + this.Data.Length;
+        }
+
         public override void Write(Stream stream)
         {
             this.WriteHeader(stream);

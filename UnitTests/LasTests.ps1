@@ -78,6 +78,11 @@ $megaPoints | Measure -AllStats
 Repair-NoisePoints -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles testing\s03780w06390.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM"
 
 ## georeferencing
+# cloud registration
 $scanDir = [System.IO.Path]::Combine($env:USERPROFILE, "PhD\data\McDonald-Dunn\Stand 50603")
 Register-Cloud -Lat 44.64663 -Long -123.27204 -Z 428 -HorizontalEpsg 6556 -FallbackDate ([System.DateOnly]::new(2024, 5, 11)) -Las (([System.IO.Path]::Combine($scanDir, "scan 1\scan 1 RGB+class.las")), ([System.IO.Path]::Combine($scanDir, "scan 2\scan 2 RGB+class.las")), ([System.IO.Path]::Combine($scanDir, "scan 3\scan 3 RGB+class.las")), ([System.IO.Path]::Combine($scanDir, "scan 4\scan 4 RGB+class.las")))
 Register-Cloud -Lat 44.64800 -Long -123.27089 -Z 428 -HorizontalEpsg 6556 -FallbackDate ([System.DateOnly]::new(2024, 5, 11)) -SourceID 5 -Las (([System.IO.Path]::Combine($scanDir, "scan 5\scan 5 RGB+class.las")), ([System.IO.Path]::Combine($scanDir, "scan 6\scan 6 RGB+class.las")))
+
+# cloud reprojection (EPSG:2994, English units, to 6556, metric, in this case)
+$lazPath = [System.IO.Path]::Combine($env:USERPROFILE, "PhD\data\McDonald-Dunn\LDQ-44123F3 Airlie South\2012_OLC_Central Coast\pointz\44123F3419.laz")
+Convert-CloudCrs -Las $lazPath -HorizontalEpsg 6556

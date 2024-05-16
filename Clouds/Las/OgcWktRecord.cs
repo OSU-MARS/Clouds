@@ -22,6 +22,13 @@ namespace Mars.Clouds.Las
             this.SpatialReference = crs;
         }
 
+        public override int GetSizeInBytes()
+        {
+            string wkt = this.SpatialReference.GetWkt();
+            byte[] wktBytes = Encoding.UTF8.GetBytes(wkt);
+            return VariableLengthRecord.HeaderSizeInBytes + wktBytes.Length;
+        }
+
         public void SetSpatialReference(SpatialReference crs)
         {
             string wkt = crs.GetWkt();

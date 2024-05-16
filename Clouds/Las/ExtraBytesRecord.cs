@@ -58,6 +58,11 @@ namespace Mars.Clouds.Las
             this.DescriptionExtra = Encoding.UTF8.GetString(vlrBytes[160..]).Trim('\0');
         }
 
+        public override int GetSizeInBytes()
+        {
+            return VariableLengthRecord.HeaderSizeInBytes + ExtraBytesRecord.SizeInBytes;
+        }
+
         public override void Write(Stream stream)
         {
             this.WriteHeader(stream);

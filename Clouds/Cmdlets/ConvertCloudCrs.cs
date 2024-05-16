@@ -1,0 +1,139 @@
+﻿using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
+using OSGeo.OGR;
+using OSGeo.OSR;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Management.Automation;
+using System.Threading;
+
+namespace Mars.Clouds.Cmdlets
+{
+    [Cmdlet(VerbsData.Convert, "CloudCrs")]
+    public class ConvertCloudCrs : GdalCmdlet
+    {
+        [Parameter(Mandatory = true, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
+        [ValidateNotNullOrEmpty]
+        public List<string> Las { get; set; }
+
+        [Parameter(HelpMessage = "EPSG of projected coordinate system to assign to point cloud. Default is 32610 (WGS 84 / UTM zone 10N).")]
+        [ValidateRange(1024, 32767)]
+        public int HorizontalEpsg { get; set; }
+
+        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters). If an input cloud does not have a vertical coordinate system it is assumed its z values are in NAVD88 with the same units as its horizontal coordinate system.")]
+        [ValidateRange(1024, 32767)]
+        public int VerticalEpsg { get; set; }
+
+        public ConvertCloudCrs() 
+        {
+            this.Las = [];
+            this.HorizontalEpsg = Constant.Epsg.Utm10N;
+            this.VerticalEpsg = Constant.Epsg.Navd88m;
+        }
+
+        protected override void ProcessRecord()
+        {
+            // check for input files
+            List<string> cloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+
+            // create coordinate system to reproject to
+            SpatialReference horizontalCrs = new(String.Empty);
+            horizontalCrs.ImportFromEpsg(this.HorizontalEpsg);
+            SpatialReference verticalCrs = new(String.Empty);
+            verticalCrs.ImportFromEpsg(this.VerticalEpsg);
+            SpatialReference newCrs = SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
+
+            // set point clouds' origins, coordinate systems, and source IDs
+            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
+            int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
+
+            int cloudReprojectionsInitiated = -1;
+            int cloudReprojectionsCompleted = 0;
+            ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
+            {
+                for (int cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated))
+                {
+                    // load cloud and get its current coordinate system
+                    // If cloud is missing a vertical coordinate system.
+                    string cloudPath = cloudPaths[cloudIndex];
+                    FileInfo cloudFileInfo = new(cloudPath);
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, cloudFileInfo.Length);
+                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    SpatialReference cloudCrs = cloud.GetSpatialReference();
+                    if (cloudCrs.IsVertical() == 0)
+                    {
+                        cloudCrs = SpatialReferenceExtensions.CreateCompoundCrs(cloudCrs);
+                    }
+                    
+                    if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs))
+                    {
+                        // TODO: pass message back to caller indicating cloud was skipped
+                        continue; // nothing to do as cloud is already in desired coordinate system
+                    }
+
+                    // change cloud's coordinate system
+                    cloud.SetSpatialReference(newCrs);
+
+                    // transform cloud's origin
+                    CoordinateTransformation transform = new(cloudCrs, newCrs, new());
+                    Geometry origin = new(wkbGeometryType.wkbPoint25D);
+                    origin.AddPoint(cloud.Header.XOffset, cloud.Header.YOffset, cloud.Header.ZOffset);
+                    if (origin.Transform(transform) != 0)
+                    {
+                        throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), "Could not transform point cloud origin " + cloud.Header.XOffset + ", " + cloud.Header.YOffset + ", " + cloud.Header.ZOffset + " to EPSG:" + this.HorizontalEpsg + ".");
+                    }
+                    double[] newOriginXyz = new double[3];
+                    origin.GetPoint(0, newOriginXyz);
+                    cloud.SetOrigin(newOriginXyz);
+
+                    // update scale factors and extent if linear units have changed
+                    double scaleFactorChange = cloudCrs.GetLinearUnits() / newCrs.GetLinearUnits();
+                    if (scaleFactorChange != 1.0)
+                    {
+                        double xOrigin = cloud.Header.XOffset;
+                        cloud.Header.MaxX = scaleFactorChange * (cloud.Header.MaxX - xOrigin);
+                        cloud.Header.MinX = scaleFactorChange * (cloud.Header.MinX - xOrigin);
+
+                        double yOrigin = cloud.Header.YOffset;
+                        cloud.Header.MaxY = scaleFactorChange * (cloud.Header.MaxY - yOrigin);
+                        cloud.Header.MinY = scaleFactorChange * (cloud.Header.MinY - yOrigin);
+
+                        double zOrigin = cloud.Header.ZOffset;
+                        cloud.Header.MaxZ = scaleFactorChange * (cloud.Header.MaxZ - zOrigin);
+                        cloud.Header.MinZ = scaleFactorChange * (cloud.Header.MinZ - zOrigin);
+
+                        cloud.Header.XScaleFactor *= scaleFactorChange;
+                        cloud.Header.YScaleFactor *= scaleFactorChange;
+                        cloud.Header.ZScaleFactor *= scaleFactorChange;
+                    }
+
+                    // write out copy of cloud with reprojected origin, scale, and coordinate system
+                    string modifiedCloudPath = PathExtensions.AppendToFileName(cloudPath, " reprojected");
+                    using LasWriter writer = LasWriter.CreateForPointWrite(modifiedCloudPath);
+                    writer.WriteHeader(cloud);
+                    writer.WriteVariableLengthRecordsAndUserData(cloud);
+                    writer.CopyPointsAndExtendedVariableLengthRecords(reader, cloud);
+
+                    Interlocked.Increment(ref cloudReprojectionsCompleted);
+                    if (this.Stopping)
+                    {
+                        break;
+                    }
+                }
+            });
+
+            TimedProgressRecord progress = new("Register-Cloud", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
+            while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = "Registered " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...";
+                progress.Update(cloudReprojectionsCompleted, cloudPaths.Count);
+                this.WriteProgress(progress);
+            }
+
+            base.ProcessRecord();
+        }
+    }
+}
