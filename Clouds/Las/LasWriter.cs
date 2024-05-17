@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
-using System.Formats.Tar;
 using System.IO;
 using System.Text;
 
@@ -170,7 +169,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public void WritePointsWithSourceID(LasReader reader, LasFile lasFile, UInt16 sourceID)
+        public void WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, double nudgeXinCrsUnits, double nudgeYinCrsUnits, UInt16 sourceID)
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
@@ -181,6 +180,13 @@ namespace Mars.Clouds.Las
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int sourceIDoffset = pointFormat < 6 ? 18 : 20;
+
+            bool hasTransformation = (rotationXYinDegrees != 0.0) || (nudgeXinCrsUnits != 0.0) || (nudgeYinCrsUnits != 0.0);
+            double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
+            double sinRotationXY = Double.Sin(rotationXYinRadians);
+            double cosRotationXY = Double.Cos(rotationXYinRadians);
+            double nudgeXscaled = nudgeXinCrsUnits / lasFile.Header.XScaleFactor;
+            double nudgeYscaled = nudgeXinCrsUnits / lasFile.Header.YScaleFactor;
 
             byte[] pointBuffer = new byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength];
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
@@ -193,6 +199,18 @@ namespace Mars.Clouds.Las
                 for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += lasHeader.PointDataRecordLength)
                 {
                     Span<byte> pointBytes = pointBuffer.AsSpan(batchOffset);
+
+                    if (hasTransformation)
+                    {
+                        double xScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                        double yScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+
+                        double xTransformed = xScaled * cosRotationXY - yScaled * sinRotationXY + nudgeXscaled;
+                        double yTransformed = xScaled * sinRotationXY + yScaled * cosRotationXY + nudgeYscaled;
+
+                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes, (int)(xTransformed + 0.5));
+                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[4..], (int)(yTransformed + 0.5));
+                    }
 
                     // set source ID
                     // If needed, this can be changed to alter only source IDs which are zero.

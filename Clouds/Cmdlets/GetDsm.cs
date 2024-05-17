@@ -4,7 +4,6 @@ using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Management.Automation;
 using System.Reflection.Metadata;
@@ -70,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
                     try
                     {
                         // load DTM tile
-                        string dtmTilePath = LasTilesCmdlet.GetDtmTilePath(this.Dtm, lasTile.Name);
+                        string dtmTilePath = dsmReadCreateWrite.DtmPathIsDirectory ? LasTilesCmdlet.GetDtmTilePath(this.Dtm, lasTile.Name) : this.Dtm;
                         if (dtmTile == null)
                         {
                             dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
@@ -91,6 +90,12 @@ namespace Mars.Clouds.Cmdlets
                         int dsmTileIndexY;
                         lock (dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
                         {
+                            // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
+                            // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
+                            if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.TileCount == 0))
+                            {
+                                dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
+                            }
                             (dsmTileIndexX, dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTileToAdd);
                         }
 
@@ -98,7 +103,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                     catch (Exception exception)
                     {
-                        throw new TaskCanceledException("Failed to create DSM tile '" + lasTile.Name + "'.", exception, dsmReadCreateWrite.CancellationTokenSource.Token);
+                        throw new TaskCanceledException("Failed to create DSM tile '" + lasTile.Name + "' due to error.", exception, dsmReadCreateWrite.CancellationTokenSource.Token);
                     }
 
                     if (this.Stopping || dsmReadCreateWrite.CancellationTokenSource.IsCancellationRequested)
@@ -173,6 +178,7 @@ namespace Mars.Clouds.Cmdlets
 
             string cmdletName = "Get-Dsm";
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
+            bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
             if (this.LayerSeparation < 0.0F)
@@ -182,7 +188,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
-            DsmReadCreateWrite dsmReadCreateWrite = new(lasGrid, dsm, this.MaxPointTiles, dsmPathIsDirectory);
+            DsmReadCreateWrite dsmReadCreateWrite = new(lasGrid, dsm, this.MaxPointTiles, dsmPathIsDirectory, dtmPathIsDirectory);
 
             // spin up point cloud read and tile worker threads
             // For small sets of tiles, runtime is dominated by DSM creation latency after tiles are read into memory (streaming read
@@ -258,6 +264,7 @@ namespace Mars.Clouds.Cmdlets
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, PointList<PointBatchXyzcs>, DigitalSurfaceModel>
         {
             public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
+            public bool DtmPathIsDirectory { get; private init; }
             public LasTileGrid Las { get; private init; }
 
             public float MeanPointsPerTile { get; private init; }
@@ -266,7 +273,7 @@ namespace Mars.Clouds.Cmdlets
             public UInt64 TotalNumberOfPoints { get; private init; }
             public float TotalPointDataInGB { get; private init; }
 
-            public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, int maxSimultaneouslyLoadedTiles, bool dsmPathIsDirectory)
+            public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, int maxSimultaneouslyLoadedTiles, bool dsmPathIsDirectory, bool dtmPathIsDirectory)
                 : base(lasGrid, dsm, maxSimultaneouslyLoadedTiles, dsmPathIsDirectory)
             {
                 // TODO: lasGrid.IsSameExtentAndResolution(dsm)
@@ -276,6 +283,7 @@ namespace Mars.Clouds.Cmdlets
                 }
 
                 this.Dsm = dsm;
+                this.DtmPathIsDirectory = dtmPathIsDirectory;
                 this.Las = lasGrid;
                 this.PointBatchPool = new();
                 this.TileWritesInitiated = 0;

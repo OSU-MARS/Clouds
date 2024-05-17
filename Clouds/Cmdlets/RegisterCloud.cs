@@ -43,6 +43,20 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(0, UInt16.MaxValue)]
         public int SourceID { get; set; }
 
+        [Parameter(HelpMessage = "Rotation, in degrees, to apply in the xy plane. Rotation is in the cartesian coordinate sense of from +x to +y and is therefore in the opposite direction from compass azimuth (use a negative -RotationXY to rotate clockwise).")]
+        [ValidateRange(-360.0F, 360.0F)]
+        public double[] RotationXY { get; set; }
+
+        [Parameter(HelpMessage = "Translation to apply in the x direction relative to the specified latitude and longitude. Units are in the coordinate system specified by -HorizontalEpsg.")]
+        [ValidateNotNullOrEmpty]
+        [ValidateRange(-100.0F, 100.0F)]
+        public double[] NudgeX { get; set; }
+
+        [Parameter(HelpMessage = "Translation to apply in the y direction relative to the specified latitude and longitude. Units are in the coordinate system specified by -HorizontalEpsg.")]
+        [ValidateNotNullOrEmpty]
+        [ValidateRange(-100.0F, 100.0F)]
+        public double[] NudgeY { get; set; }
+
         [Parameter(HelpMessage = "Fallback date to use if .las header is missing year or day of year information.")]
         public DateOnly? FallbackDate { get; set; }
 
@@ -55,12 +69,27 @@ namespace Mars.Clouds.Cmdlets
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
             this.VerticalEpsg = Constant.Epsg.Navd88m;
             this.SourceID = 1;
+            this.RotationXY = [ 0.0 ];
+            this.NudgeX = [ 0.0 ];
+            this.NudgeY = [0.0];
         }
 
         protected override void ProcessRecord()
         {
             // check for input files
             List<string> cloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            if ((this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.RotationXY), "-" + nameof(this.RotationXY) + " must have either single value or as many values as there are clouds to register. There are " + this.RotationXY.Length + " values in -" + nameof(this.RotationXY) + " and " + cloudPaths.Count + " clouds.");
+            }
+            if ((this.NudgeX.Length != 1) && (this.NudgeX.Length != cloudPaths.Count))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.NudgeX), "-" + nameof(this.NudgeX) + " must have either single value or as many values as there are clouds to register. There are " + this.NudgeX.Length + " values in -" + nameof(this.NudgeX) + " and " + cloudPaths.Count + " clouds.");
+            }
+            if ((this.NudgeY.Length != 1) && (this.NudgeY.Length != cloudPaths.Count))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.NudgeY), "-" + nameof(this.NudgeY) + " must have either single value or as many values as there are clouds to register. There are " + this.NudgeY.Length + " values in -" + nameof(this.NudgeY) + " and " + cloudPaths.Count + " clouds.");
+            }
 
             // reproject point cloud origin from WGS84 to cloud's coordinate system
             SpatialReference wgs84 = new(String.Empty);
@@ -99,7 +128,11 @@ namespace Mars.Clouds.Cmdlets
                     using LasWriter writer = LasWriter.CreateForPointWrite(modifiedCloudPath);
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
-                    writer.WritePointsWithSourceID(reader, cloud, (UInt16)(this.SourceID + cloudIndex));
+
+                    double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
+                    double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
+                    double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
+                    writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, nudgeXinCrsUnits, nudgeYinCrsUnits, (UInt16)(this.SourceID + cloudIndex));
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     Interlocked.Increment(ref cloudRegistrationsCompleted);

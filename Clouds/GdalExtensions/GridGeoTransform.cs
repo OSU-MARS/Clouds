@@ -161,6 +161,16 @@ namespace Mars.Clouds.GdalExtensions
             this.SetTransform(padfTransform);
         }
 
+        public void SetTransform(GridGeoTransform other)
+        {
+            this.OriginX = other.OriginX;
+            this.CellWidth = other.CellWidth;
+            this.RowRotation = other.RowRotation;
+            this.OriginY = other.OriginY;
+            this.ColumnRotation = other.ColumnRotation;
+            this.CellHeight = other.CellHeight;
+        }
+
         public void SetTransform(ReadOnlySpan<double> padfTransform)
         {
             if (padfTransform.Length != 6)
