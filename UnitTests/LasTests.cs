@@ -1,3 +1,4 @@
+using Mars.Clouds.Cmdlets.Drives;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -19,6 +20,25 @@ namespace Mars.Clouds.UnitTests
         public static void AssemblyInitialize(TestContext _)
         {
             GdalBase.ConfigureAll();
+        }
+
+        [TestMethod]
+        public void FixedDriveCapabilities()
+        {
+            // sanity test of whatever fixed local drives are available
+            // Assumes, for now, no SAS drives.
+            DriveInfo[] drives = DriveInfo.GetDrives();
+            for (int logicalDriveIndex = 0; logicalDriveIndex < drives.Length; ++logicalDriveIndex) 
+            {
+                DriveInfo drive = drives[logicalDriveIndex];
+                if (drive.DriveType == DriveType.Fixed)
+                {
+                    DriveCapabilities capabilities = DriveCapabilities.Create([drive.RootDirectory.Name]);
+                    Assert.IsTrue((capabilities.BusType == BusType.NVMe) || (capabilities.BusType == BusType.SATA));
+                    Assert.IsTrue((capabilities.MediaType == MediaType.SolidStateDrive) || (capabilities.MediaType == MediaType.HardDrive));
+                    Assert.IsTrue((1 <= capabilities.NumberOfDataCopies) && (capabilities.NumberOfDataCopies <= 8));
+                }
+            }
         }
 
         private VirtualRaster<Raster<float>> ReadDtm()

@@ -117,6 +117,17 @@ Also,
   `BlockYSize` values with 1, dramatically reducing performance for virtual rasters composed of GeoTIFF tiles once the QGIS project is reopened.
   Clouds can't do much about this QGIS-GDAL behavior but `Remove-VrtBlockSize` can be used to strip out the reintroduced `BlockXSize` and 
   `BlockYSize` attributes (find/replace in a text editor also works).
+- Windows does not appear to have a documented, programmatic, non-administrative mechanism for determining the RAID level of arrays created with
+  Disk Management (dynamic disks). As a result, Clouds assumes dynamic disks are RAID0 volumes with read speeds slow enough a single read thread
+  can fully utilize the array. If this is not the case, setting `-ReadThreads` to the number of data copies present in an array of SATA (or SAS) 
+  connected drives will likely result in full utiliation (_e.g._ `-ReadThreads 2` to use both mirrors of a two disk RAID1 or four disk RAID10). 
+  The same mechanism can be used to push utilization of NVMe RAIDs. Clouds does use the documented API Windows provides for obtaining the number 
+  data copies in a Storage Space.
+- Clouds does not try to schedule reads optimally across drives. So, for example, if .las tiles are sourced from two RAID arrays of hard drives, 
+  Clouds is likely to read all of the files on one array and then all of the files on the next array rather than using both arrays in parallel.
+  This inefficiency can be addressed if needed but, for now, it's assumed project data is not striped across RAIDs or JBOD disks. Clouds does
+  look at capabilities of all of the data sources indicated but, if they're heterogeneous, will fail saying it doesn't know how to reconcile the
+  differences.
 
 In certain situations GDAL bypasses its callers and writes directly to the console. The common case for this is `ERROR 4` when a malformed dataset
 (GIS file) is encountered. If error 4 occurs during a raster write Clouds catches it and tries to recreate the raster (which typically succeeds).
