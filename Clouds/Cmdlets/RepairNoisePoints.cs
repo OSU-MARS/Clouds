@@ -38,7 +38,7 @@ namespace Mars.Clouds.Cmdlets
 
         private int MaybeReclassifyPoints(LasTile lasTile, RepairNoiseReadWrite lasTileRead)
         {
-            string dtmTilePath = LasTilesCmdlet.GetDtmTilePath(this.Dtm, Tile.GetName(lasTile.FilePath));
+            string dtmTilePath = LasTilesCmdlet.GetRasterTilePath(this.Dtm, Tile.GetName(lasTile.FilePath));
             RasterBand<float> dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
             using LasReaderWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
             return pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);

@@ -69,15 +69,8 @@ namespace Mars.Clouds.Cmdlets
                     try
                     {
                         // load DTM tile
-                        string dtmTilePath = dsmReadCreateWrite.DtmPathIsDirectory ? LasTilesCmdlet.GetDtmTilePath(this.Dtm, lasTile.Name) : this.Dtm;
-                        if (dtmTile == null)
-                        {
-                            dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
-                        }
-                        else
-                        {
-                            dtmTile.Read(dtmTilePath);
-                        }
+                        string dtmTilePath = dsmReadCreateWrite.DtmPathIsDirectory ? LasTilesCmdlet.GetRasterTilePath(this.Dtm, lasTile.Name) : this.Dtm;
+                        dtmTile = RasterBand<float>.CreateOrLoad(dtmTilePath, this.DtmBand, dtmTile);
 
                         // create DSM tile
                         // DigitalSurfaceModel..ctor() verifies point and DTM tiles have compatible extents in the same CRS.

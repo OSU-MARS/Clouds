@@ -45,6 +45,11 @@ namespace Mars.Clouds.Cmdlets
             return (directoryPath, searchPattern);
         }
 
+        protected static string GetRasterTilePath(string directoryPath, string tileName)
+        {
+            return Path.Combine(directoryPath, tileName + Constant.File.GeoTiffExtension);
+        }
+
         protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IRasterSerializable<TTile>
         {
             VirtualRaster<TTile> vrt = [];

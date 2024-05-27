@@ -84,7 +84,6 @@ namespace Mars.Clouds.Segmentation
                     {
                         ringMaximumZ = searchZ;
                     }
-
                 }
 
                 if (higherCellWithinInnerRings)

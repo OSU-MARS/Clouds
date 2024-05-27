@@ -278,6 +278,20 @@ namespace Mars.Clouds.GdalExtensions
             get { return this.Data.Length > 0; }
         }
 
+        public static RasterBand<TBand> CreateOrLoad(string rasterPath, string? bandNameForCreate, RasterBand<TBand>? band)
+        {
+            if (band == null)
+            {
+                return RasterBand<TBand>.Read(rasterPath, bandNameForCreate);
+            }
+            else
+            {
+                band.Read(rasterPath);
+            }
+
+            return band;
+        }
+
         public static TBand GetDefaultNoDataValue()
         {
             return Type.GetTypeCode(typeof(TBand)) switch

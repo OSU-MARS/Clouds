@@ -2,7 +2,6 @@
 using Mars.Clouds.GdalExtensions;
 using OSGeo.OGR;
 using System;
-using System.IO;
 
 namespace Mars.Clouds.Segmentation
 {
@@ -19,7 +18,7 @@ namespace Mars.Clouds.Segmentation
             if (ringFilePath != null)
             {
                 string tileName = Tile.GetName(ringFilePath);
-                this.ringLayer = File.Exists(ringFilePath) ? Ogr.Open(ringFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(ringFilePath, null);
+                this.ringLayer = OgrExtensions.Open(ringFilePath);
                 this.RingDiagnostics = RingLayer.CreateOrOverwrite(this.ringLayer, dsmNeighborhood.Center.Crs, tileName);
             }
             else

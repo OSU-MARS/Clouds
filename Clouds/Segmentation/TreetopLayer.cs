@@ -28,7 +28,7 @@ namespace Mars.Clouds.Segmentation
 
         public void Add(int id, double x, double y, double elevation, double height, double radius)
         {
-            Debug.Assert(this.TileFieldIndex == -1);
+            Debug.Assert(this.IsInEditMode && (this.TileFieldIndex == -1));
 
             Feature treetopCandidate = new(this.Definition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Segmentation
 
         public void Add(string tileName, Treetops treetops, IList<string> classNames)
         {
-            Debug.Assert(this.TileFieldIndex >= 0);
+            Debug.Assert(this.IsInEditMode && (this.TileFieldIndex >= 0));
             if (classNames.Count < treetops.ClassCounts.GetLength(1))
             {
                 throw new ArgumentOutOfRangeException(nameof(classNames), "Names for some class fields are missing. Treetrops have counts for " + treetops.ClassCounts.GetLength(1) + " classes but only " + classNames.Count + " class names were provided.");

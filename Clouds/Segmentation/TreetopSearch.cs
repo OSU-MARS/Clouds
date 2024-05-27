@@ -113,7 +113,7 @@ namespace Mars.Clouds.Segmentation
             }
 
             // search for treetops in this tile
-            using DataSource treetopFile = File.Exists(treetopFilePath) ? Ogr.Open(treetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(treetopFilePath, null);
+            using DataSource treetopFile = OgrExtensions.Open(treetopFilePath);
             using TreetopLayer treetopLayer = TreetopLayer.CreateOrOverwrite(treetopFile, tileSearch.Dsm.Crs);
             double dsmCellSize = tileSearch.Dsm.Transform.GetCellSize();
             for (int dsmIndex = 0, dsmYindex = 0; dsmYindex < tileSearch.Dsm.SizeY; ++dsmYindex) // y for north up rasters

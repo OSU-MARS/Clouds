@@ -35,11 +35,6 @@ namespace Mars.Clouds.Cmdlets
             this.Snap = false;
         }
 
-        protected static string GetDtmTilePath(string dtmDirectoryPath, string tileName)
-        {
-            return Path.Combine(dtmDirectoryPath, tileName + Constant.File.GeoTiffExtension);
-        }
-
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
             List<string> lasTilePaths = GdalCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);

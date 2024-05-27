@@ -205,7 +205,7 @@ namespace Mars.Clouds.Cmdlets
             // write merged and classified treetops
             // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
             int totalTreetops = 0;
-            using DataSource mergedTreetopFile = File.Exists(mergedTreetopFilePath) ? Ogr.Open(mergedTreetopFilePath, update: 1) : Ogr.GetDriverByName("GPKG").CreateDataSource(mergedTreetopFilePath, []);
+            using DataSource mergedTreetopFile = OgrExtensions.Open(mergedTreetopFilePath);
             TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
             TimedProgressRecord progress = new("Get-Treetops", "placeholder");
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)
