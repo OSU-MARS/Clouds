@@ -60,6 +60,12 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Fallback date to use if .las header is missing year or day of year information.")]
         public DateOnly? FallbackDate { get; set; }
 
+        [Parameter(HelpMessage = "Change never classified points to unclassified and unclassified points to ground (FJ Dynamics Trion Model).")]
+        public SwitchParameter RepairClassification { get; set; }
+
+        [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Zeb Horizon, FJ Dynamics Trion S1) to single returns and return number 1.")]
+        public SwitchParameter RepairReturn { get; set; }
+
         public RegisterCloud()
         {
             this.Las = [];
@@ -72,6 +78,9 @@ namespace Mars.Clouds.Cmdlets
             this.RotationXY = [ 0.0 ];
             this.NudgeX = [ 0.0 ];
             this.NudgeY = [0.0];
+            this.FallbackDate = null;
+            this.RepairClassification = false;
+            this.RepairReturn = false;
         }
 
         protected override void ProcessRecord()
@@ -132,7 +141,7 @@ namespace Mars.Clouds.Cmdlets
                     double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
                     double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
                     double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
-                    writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, nudgeXinCrsUnits, nudgeYinCrsUnits, (UInt16)(this.SourceID + cloudIndex));
+                    writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, nudgeXinCrsUnits, nudgeYinCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     Interlocked.Increment(ref cloudRegistrationsCompleted);

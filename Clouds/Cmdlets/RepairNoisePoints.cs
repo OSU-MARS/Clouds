@@ -21,7 +21,7 @@ namespace Mars.Clouds.Cmdlets
         public string? DtmBand { get; set; }
 
         [Parameter(HelpMessage = "Elevation threshold, in point cloud CRS units, above which points are classified as high noise. Default is 100 m for point clouds with metric units or 400 feet for point clouds with English units.")]
-        [ValidateRange(0.0F, 30000.0F)] // upper bound: Everest in feet
+        [ValidateRange(0.0F, 30000.0F)] // upper bound: Chomolungma/Sagarmatha (Everest) in feet
         public float HighNoise { get; set; }
 
         [Parameter(HelpMessage = "Elevation threshold, in point cloud CRS units, below which points are classified as low noise. Default is -30 m for point clouds with metric units or -100 feet for point clouds with English units.")]

@@ -248,6 +248,7 @@ namespace Mars.Clouds.Las
             UInt16 fallbackDayOfYear = (UInt16)fallbackFileCreationDate.DayOfYear;
             if ((this.FileCreationDayOfYear < 1) || (this.FileCreationDayOfYear > 366))
             {
+                // if needed, check for day 366 in non-leap years
                 this.FileCreationDayOfYear = fallbackDayOfYear;
                 creationDateChanged = true;
             }

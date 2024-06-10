@@ -169,7 +169,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public void WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, double nudgeXinCrsUnits, double nudgeYinCrsUnits, UInt16 sourceID)
+        public void WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, double nudgeXinCrsUnits, double nudgeYinCrsUnits, UInt16 sourceID, bool repairClassification, bool repairReturnNumbers)
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
@@ -179,6 +179,7 @@ namespace Mars.Clouds.Las
             LasHeader10 lasHeader = lasFile.Header;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
+            int classificationOffset = pointFormat < 6 ? 15 : 16;
             int sourceIDoffset = pointFormat < 6 ? 18 : 20;
 
             bool hasTransformation = (rotationXYinDegrees != 0.0) || (nudgeXinCrsUnits != 0.0) || (nudgeYinCrsUnits != 0.0);
@@ -186,7 +187,7 @@ namespace Mars.Clouds.Las
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
             double nudgeXscaled = nudgeXinCrsUnits / lasFile.Header.XScaleFactor;
-            double nudgeYscaled = nudgeXinCrsUnits / lasFile.Header.YScaleFactor;
+            double nudgeYscaled = nudgeYinCrsUnits / lasFile.Header.YScaleFactor;
 
             byte[] pointBuffer = new byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength];
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
@@ -210,6 +211,53 @@ namespace Mars.Clouds.Las
 
                         BinaryPrimitives.WriteInt32LittleEndian(pointBytes, (int)(xTransformed + 0.5));
                         BinaryPrimitives.WriteInt32LittleEndian(pointBytes[4..], (int)(yTransformed + 0.5));
+                    }
+                    if (repairClassification) 
+                    {
+                        PointClassification classification = (PointClassification)pointBytes[classificationOffset];
+                        // workaround bug in Trion Model v113
+                        if (classification == PointClassification.NeverClassified)
+                        {
+                            classification = PointClassification.Unclassified;
+                        }
+                        else if (classification == PointClassification.Unclassified)
+                        {
+                            classification = PointClassification.Ground;
+                        }
+                        pointBytes[classificationOffset] = (byte)classification;
+                    }
+                    if (repairReturnNumbers)
+                    {
+                        byte returnNumberAndNumberOfReturns = pointBytes[14];
+                        if (pointFormat < 6)
+                        {
+                            int returnNumber = returnNumberAndNumberOfReturns & 0x07;
+                            int numberOfReturns = returnNumberAndNumberOfReturns & 0x38;
+                            int scanAndEdgeFlags = returnNumberAndNumberOfReturns & 0xc0;
+                            if (returnNumber == 0)
+                            {
+                                returnNumber = 1;
+                            }
+                            if (numberOfReturns == 0)
+                            {
+                                numberOfReturns = 1;
+                            }
+                            pointBytes[14] = (byte)(scanAndEdgeFlags | returnNumber | numberOfReturns);
+                        }
+                        else
+                        {
+                            int returnNumber = returnNumberAndNumberOfReturns & 0x0f;
+                            int numberOfReturns = returnNumberAndNumberOfReturns & 0xf0;
+                            if (returnNumber == 0)
+                            {
+                                returnNumber = 1;
+                            }
+                            if (numberOfReturns == 0)
+                            {
+                                numberOfReturns = 1;
+                            }
+                            pointBytes[14] = (byte)(returnNumber | numberOfReturns);
+                        }
                     }
 
                     // set source ID
