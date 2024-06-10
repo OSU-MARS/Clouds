@@ -21,7 +21,7 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         protected Raster(Dataset rasterDataset)
-            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), -1, -1)
+            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), rasterDataset.RasterXSize, rasterDataset.RasterYSize)
         {
             this.FilePath = rasterDataset.GetFirstFile(); // for now, assume primary source file is always the first file in the raster's sources
         }
@@ -160,19 +160,11 @@ namespace Mars.Clouds.GdalExtensions
             {
                 int gdalBandIndex = bandIndex + 1;
                 using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
-                if (this.SizeX == -1)
-                {
-                    this.SizeX = gdalBand.XSize;
-                }
-                else if (this.SizeX != gdalBand.XSize)
+                if (this.SizeX != gdalBand.XSize)
                 {
                     throw new NotSupportedException("Previous bands are " + this.SizeX + " by " + this.SizeY + " cells but band " + gdalBandIndex + " is " + gdalBand.XSize + " by " + gdalBand.YSize + " cells.");
                 }
-                if (this.SizeY == -1)
-                {
-                    this.SizeY = gdalBand.YSize;
-                }
-                else if (this.SizeY != gdalBand.YSize)
+                if (this.SizeY != gdalBand.YSize)
                 {
                     throw new NotSupportedException("Previous bands are " + this.SizeX + " by " + this.SizeY + " cells but band " + gdalBandIndex + " is " + gdalBand.XSize + " by " + gdalBand.YSize + " cells.");
                 }

@@ -47,6 +47,11 @@
             return (this.XMax - this.XMin) * (this.YMax - this.YMin);
         }
 
+        public string GetExtentString()
+        {
+            return this.XMin + ", " + this.XMax + ", " + this.YMin + ", " + this.YMax;
+        }
+
         public bool Intersects(Extent other)
         {
             // assume both this and the other extent are in the same CRS

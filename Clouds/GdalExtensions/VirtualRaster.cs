@@ -8,12 +8,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {
     // could derive from Grid but naming becomes confusing as differences between tiles and cells are obscured
-    // Also, indexing differs because tiles are sparse where grid is dense, so a grid index is not a tile index.
     public class VirtualRaster<TTile> : IEnumerable<TTile> where TTile : Raster
     {
         private SpatialReference? crs;
@@ -187,7 +187,7 @@ namespace Mars.Clouds.GdalExtensions
                 Debug.Assert(Double.IsNaN(this.TileCellSizeX) && Double.IsNaN(this.TileCellSizeY) && (this.TileSizeInCellsY == -1));
                 this.TileCellSizeX = tile.Transform.CellWidth;
                 this.TileCellSizeY = tile.Transform.CellHeight;
-                if ((this.TileCellSizeX <= 0.0) || (this.TileCellSizeY >= 0.0))
+                if ((this.TileCellSizeX <= 0.0) || (Double.Abs(this.TileCellSizeY) == 0.0))
                 {
                     throw new ArgumentOutOfRangeException(nameof(tile), "Tile '" + tile.FilePath + "' has cell size of " + this.TileCellSizeX + " by " + this.TileCellSizeY + " has zero or negative width or zero or positive height. Tiles are expected to have negative heights such that raster indices increase with southing.");
                 }
@@ -262,7 +262,10 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            Debug.Assert(this.TileCellSizeY < 0.0, "Tile y indices do not increase with southing.");
+            if (this.TileCellSizeY >= 0.0)
+            {
+                throw new NotSupportedException("Tile y indices do not increase with southing. Tile cell size is " + this.TileCellSizeX + " by " + this.TileCellSizeY + ".");
+            }
             double tileSizeInTileUnitsX = this.TileCellSizeX * this.TileSizeInCellsX;
             double tileSizeInTileUnitsY = this.TileCellSizeY * this.TileSizeInCellsY;
             this.VirtualRasterSizeInTilesX = (int)Double.Round((maximumOriginX - minimumOriginX) / tileSizeInTileUnitsX) + 1;
@@ -379,6 +382,28 @@ namespace Mars.Clouds.GdalExtensions
             };
         }
 
+        /// <returns><see cref="bool"/> array whose values are true where cells are null</returns>
+        /// <remarks>
+        /// Necessarily same code as <see cref="GridNullable{TCell}.GetUnpopulatedCellMap()"/> due to class split.
+        /// </remarks>
+        public bool[,] GetUnpopulatedTileMap()
+        {
+            bool[,] cellMap = new bool[this.VirtualRasterSizeInTilesX, this.VirtualRasterSizeInTilesY];
+            for (int yIndex = 0; yIndex < this.VirtualRasterSizeInTilesY; ++yIndex)
+            {
+                for (int xIndex = 0; xIndex < this.VirtualRasterSizeInTilesX; ++xIndex)
+                {
+                    TTile? value = this[xIndex, yIndex];
+                    if (value == null)
+                    {
+                        cellMap[xIndex, yIndex] = true;
+                    }
+                }
+            }
+
+            return cellMap;
+        }
+
         public string GetTileName(int tileGridIndexX, int tileGridIndexY)
         {
             Debug.Assert(this.tileGrid != null);
@@ -448,12 +473,17 @@ namespace Mars.Clouds.GdalExtensions
             return (tileIndexX, tileIndexY);
         }
 
-        public void SetRowToNull(int yIndex)
+        public void ReturnRowToObjectPool(int yIndex, ObjectPool<TTile> tilePool)
         {
             Debug.Assert(this.tileGrid != null);
 
             for (int xIndex = 0; xIndex < this.VirtualRasterSizeInTilesX; ++xIndex)
             {
+                TTile? tile = this.tileGrid[xIndex, yIndex];
+                if (tile != null)
+                {
+                    tilePool.Return(tile);
+                }
                 this.tileGrid[xIndex, yIndex] = null;
             }
         }

@@ -26,7 +26,7 @@ namespace Mars.Clouds.Segmentation
 
         public void AddTile(string dsmTilePath, string dtmTilePath)
         {
-            DigitalSurfaceModel dsmTile = DigitalSurfaceModel.Read(dsmTilePath, loadData: true);
+            DigitalSurfaceModel dsmTile = DigitalSurfaceModel.Read(dsmTilePath, readData: true);
             Raster<float> dtmTile = Raster<float>.Read(dtmTilePath, readData: true);
 
             lock (this.Dsm)

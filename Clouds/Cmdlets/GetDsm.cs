@@ -78,7 +78,14 @@ namespace Mars.Clouds.Cmdlets
                         PointListGridZs.CreateRecreateOrReset(dtmTile, dsmReadCreateWrite.MeanPointsPerTile, ref aerialPointZs);
 
                         string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, lasTile.Name + Constant.File.GeoTiffExtension) : this.Dsm;
-                        DigitalSurfaceModel dsmTileToAdd = new(dsmTilePath, tilePoints, dtmTile, aerialPointZs, this.LayerSeparation);
+                        if (dsmReadCreateWrite.TilePool.TryGetThreadSafe(out DigitalSurfaceModel? dsmTileToAdd) == false)
+                        {
+                            dsmTileToAdd = new(dsmTilePath, tilePoints, dtmTile, aerialPointZs, this.LayerSeparation);
+                        }
+                        else
+                        {
+                            dsmTileToAdd.ResetAllBandsToDefaultValues();
+                        }
                         int dsmTileIndexX;
                         int dsmTileIndexY;
                         lock (dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
@@ -221,7 +228,7 @@ namespace Mars.Clouds.Cmdlets
             Task[] dsmTasks = new Task[readThreads + workerThreads];
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {
-                dsmTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, this.ReadTile, dsmReadCreateWrite), dsmReadCreateWrite.CancellationTokenSource.Token);
+                dsmTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, GetDsm.ReadTile, dsmReadCreateWrite), dsmReadCreateWrite.CancellationTokenSource.Token);
             }
             for (int workerThread = readThreads; workerThread < dsmTasks.Length; ++workerThread)
             {
@@ -248,7 +255,7 @@ namespace Mars.Clouds.Cmdlets
             base.ProcessRecord();
         }
 
-        private PointList<PointBatchXyzcs> ReadTile(LasTile lasTile, DsmReadCreateWrite dsmReadCreateWrite)
+        private static PointList<PointBatchXyzcs> ReadTile(LasTile lasTile, DsmReadCreateWrite dsmReadCreateWrite)
         {
             using LasReader pointReader = lasTile.CreatePointReader();
             return pointReader.ReadPoints(lasTile, dsmReadCreateWrite.PointBatchPool);

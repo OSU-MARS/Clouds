@@ -34,7 +34,11 @@ namespace Mars.Clouds.Las
             UInt64 pointCount = lasTile.Header.GetNumberOfPoints();
             int completeBatches = (int)(pointCount / PointBatch.DefaultCapacity);
             int batches = completeBatches + (pointCount % PointBatch.DefaultCapacity != 0 ? 1 : 0);
-            pointBatchPool.GetThreadSafe(this, batches);
+            int batchesObtainedFromPool = pointBatchPool.TryGetThreadSafe(this, batches);
+            for (int batchIndex = batchesObtainedFromPool; batchIndex < batches; ++batchIndex)
+            {
+                this.Add(new()); // object pool is empty so additional point batches need to be created
+            }
         }
 
         //public long GetNumberOfPoints()

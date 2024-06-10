@@ -4,7 +4,6 @@ using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;
 using OSGeo.OGR;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
@@ -22,16 +21,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
 
-        [Parameter(HelpMessage = "Name of bands with DSM height values in surface raster. Default is [ \"dsm\", \"cmm3\", \"chm\" ].")]
-        public List<string> DsmBands { get; set; }
-
-        [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles.")]
+        [Parameter(HelpMessage = "DSM band to find local maxima in. Default is 'dsm'.")]
         [ValidateNotNullOrWhiteSpace]
-        public string Dtm { get; set; }
-
-        [Parameter(HelpMessage = "Name of DTM band to use in calculating mean ground elevations. Default is the first band.")]
-        [ValidateNotNullOrWhiteSpace]
-        public string? DtmBand { get; set; }
+        public string DsmBand { get; set; }
 
         [Parameter(Position = 2, HelpMessage = "1) path to write local maxima as a raster or a vector or 2,3) path to a directory to local maxima raster and vector tiles to.")]
         [ValidateNotNullOrEmpty]
@@ -41,91 +33,306 @@ namespace Mars.Clouds.Cmdlets
         {
             this.CompressRasters = false;
             this.Dsm = String.Empty;
-            this.DsmBands = [ "dsm", "cmm3", "chm" ];
-            this.Dtm = String.Empty;
-            this.DtmBand = null;
+            this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
             this.LocalMaxima = String.Empty;
         }
 
-        private static void FindLocalMaxima(LocalMaximaState state)
+        private static int FindLocalMaxima(LocalMaximaState state)
         {
-            VirtualRasterNeighborhood8<float> dsmNeighborhood = state.DsmNeighborhood;
-            RasterBand<float> dsmTile = state.DsmTile;
-            RasterBand<byte> maximaRadii = state.MaximaRadii;
-            for (int tileYindex = 0; tileYindex < dsmTile.SizeY; ++tileYindex)
+            VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            RasterBand<float> currentSurface = currentNeighborhood.Center;
+            RasterBand<byte> currentRadii = state.CurrentRadii;
+            int localMaximaFound = 0;
+            for (int tileYindex = 0; tileYindex < currentSurface.SizeY; ++tileYindex)
             {
                 // test cells 0..n-1 in row
                 // Since ~95% of cells are not local maxima at any radius, test neighbors in same row before calling GetLocalMaximaRadius() for more
                 // extensive checking. Similarly, GetLocalMaximaRadius() checks the remaining six neighbors (queen adjacency) before testing at larger
                 // radii.
-                bool hasPreviousDsmZ = dsmNeighborhood.TryGetValue(-1, tileYindex, out float previousDsmZ);
-                float dsmZ = dsmTile[0, tileYindex];
-                bool hasDsmZ = dsmTile.IsNoData(dsmZ) == false;
-                float nextDsmZ;
-                bool hasNextDsmZ;
-                for (int tileNextXindex = 1; tileNextXindex < dsmTile.SizeX - 1; ++tileNextXindex)
+                bool hasPreviousSurfaceZ = currentNeighborhood.TryGetValue(-1, tileYindex, out float previousSurfaceZ);
+                float surfaceZ = currentSurface[0, tileYindex];
+                bool hasSurfaceZ = currentSurface.IsNoData(surfaceZ) == false;
+                float nextSurfaceZ;
+                bool hasNextSurfaceZ;
+                for (int tileNextXindex = 1; tileNextXindex < currentSurface.SizeX - 1; ++tileNextXindex)
                 {
-                    nextDsmZ = dsmTile[tileNextXindex, tileYindex];
-                    hasNextDsmZ = dsmTile.IsNoData(nextDsmZ) == false;
+                    nextSurfaceZ = currentSurface[tileNextXindex, tileYindex];
+                    hasNextSurfaceZ = currentSurface.IsNoData(nextSurfaceZ) == false;
 
-                    if (hasDsmZ)
+                    if (hasSurfaceZ)
                     {
-                        if (((hasPreviousDsmZ == false) || (previousDsmZ <= dsmZ)) && ((hasNextDsmZ == false) || (nextDsmZ <= dsmZ)))
+                        if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                         {
-                            GetLocalMaxima.GetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, dsmZ, state);
+                            float ring1minimumZ;
+                            float ring1maximumZ;
+                            if (hasPreviousSurfaceZ && hasNextSurfaceZ)
+                            {
+                                ring1maximumZ = previousSurfaceZ > nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                                ring1minimumZ = previousSurfaceZ < nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                            }
+                            else if (hasPreviousSurfaceZ)
+                            {
+                                ring1maximumZ = previousSurfaceZ;
+                                ring1minimumZ = previousSurfaceZ;
+                            }
+                            else if (hasNextSurfaceZ)
+                            {
+                                ring1maximumZ = nextSurfaceZ;
+                                ring1minimumZ = nextSurfaceZ;
+                            }
+                            else
+                            {
+                                ring1maximumZ = Single.MinValue;
+                                ring1minimumZ = Single.MaxValue;
+                            }
+                            if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, surfaceZ, ring1maximumZ, ring1minimumZ, state))
+                            {
+                                ++localMaximaFound;
+                            }
                         }
                         else
                         {
-                            maximaRadii[tileNextXindex - 1, tileYindex] = 0; // not a local maximum as either previous or next z is higher
+                            currentRadii[tileNextXindex - 1, tileYindex] = 0; // not a local maximum as either previous or next z is higher
                             // not a maxima so nothing for vector output
                         }
                     } // else no z value for cell so local maxima radius is undefined; leave as no data
 
                     // advance
-                    previousDsmZ = dsmZ;
-                    hasPreviousDsmZ = hasDsmZ;
-                    dsmZ = nextDsmZ;
-                    hasDsmZ = hasNextDsmZ;
+                    previousSurfaceZ = surfaceZ;
+                    hasPreviousSurfaceZ = hasSurfaceZ;
+                    surfaceZ = nextSurfaceZ;
+                    hasSurfaceZ = hasNextSurfaceZ;
                 }
 
                 // last cell in row
-                if (hasDsmZ)
+                if (hasSurfaceZ)
                 {
-                    hasNextDsmZ = dsmNeighborhood.TryGetValue(dsmTile.SizeX, tileYindex, out nextDsmZ);
-                    int tileXIndex = dsmTile.SizeX - 1;
-                    if (((hasPreviousDsmZ == false) || (previousDsmZ <= dsmZ)) && ((hasNextDsmZ == false) || (nextDsmZ <= dsmZ)))
+                    hasNextSurfaceZ = currentNeighborhood.TryGetValue(currentSurface.SizeX, tileYindex, out nextSurfaceZ);
+                    int tileXIndex = currentSurface.SizeX - 1;
+                    if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                     {
-                        GetLocalMaxima.GetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, dsmZ, state);
+                        float ring1minimumZ;
+                        float ring1maximumZ;
+                        if (hasPreviousSurfaceZ && hasNextSurfaceZ)
+                        {
+                            ring1maximumZ = previousSurfaceZ > nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                            ring1minimumZ = previousSurfaceZ < nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                        }
+                        else if (hasPreviousSurfaceZ)
+                        {
+                            ring1maximumZ = previousSurfaceZ;
+                            ring1minimumZ = previousSurfaceZ;
+                        }
+                        else if (hasNextSurfaceZ)
+                        {
+                            ring1maximumZ = nextSurfaceZ;
+                            ring1minimumZ = nextSurfaceZ;
+                        }
+                        else
+                        {
+                            ring1maximumZ = Single.MinValue;
+                            ring1minimumZ = Single.MaxValue;
+                        }
+                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, ring1maximumZ, ring1minimumZ, surfaceZ, state))
+                        {
+                            ++localMaximaFound;
+                        }
                     }
                     else
                     {
-                        maximaRadii[tileXIndex, tileYindex] = 0;
+                        currentRadii[tileXIndex, tileYindex] = 0;
                         // not a maxima so nothing for vector output
                     }
                 } // else no z value for cell so local maxima radius is undefined; leave as no data
             }
+
+            return localMaximaFound;
         }
 
-        private static void GetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, float dsmZ, LocalMaximaState state)
+        protected override void ProcessRecord()
+        {
+            // setup
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRaster<DigitalSurfaceModel>("Get-LocalMaxima", this.Dsm, readData: false);
+            TileReadWriteStreaming<DigitalSurfaceModel> maximaReadWrite = new(dsm, Directory.Exists(this.LocalMaxima));
+            if ((dsm.TileCount > 1) && (maximaReadWrite.OutputPathIsDirectory == false))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.LocalMaxima), "-" + nameof(this.LocalMaxima) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
+            }
+
+            // find local maxima in all tiles
+            // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
+            // locality advantage.
+            // perf baseline (5950X, SN770 on CPU lanes, 2024-06-12 build)
+            //          tiles   maxima   compute threads   time, min   memory, GB  write speed, MB/s
+            // debug    562     99.7M    16                16.8        ~5.5        ~32
+            // release  562     99.7M    14                17.1        ~5.2        ~33
+            long dsmMaximaTotal = 0;
+            long cmmMaximaTotal = 0;
+            long chmMaximaTotal = 0;
+            int geopackageSqlBackgroundThreads = this.MaxThreads / 8; // for now, best guess/crude estimate
+            int maxComputeThreads = this.MaxThreads - geopackageSqlBackgroundThreads;
+            ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxComputeThreads, dsm.TileCount), () =>
+            {
+                LocalMaximaRaster? localMaximaRaster = null; // cache for reuse to offload GC
+                for (int tileIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileIndex < maximaReadWrite.MaxTileIndex; tileIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe())
+                {
+                    DigitalSurfaceModel? dsmTile = dsm[tileIndex];
+                    if (dsmTile == null) 
+                    {
+                        continue;
+                    }
+
+                    // assist in read until neighborhood complete or no more tiles left to read
+                    // If necessary, the outer while loop spin waits for other threads to complete neighborhood read.
+                    int maxNeighborhoodIndex = maximaReadWrite.GetMaximumIndexNeighborhood8(tileIndex);
+                    while (maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex) == false)
+                    {
+                        if (maximaReadWrite.TileReadIndex < maximaReadWrite.MaxTileIndex) // guard against integer overflow of read index if a significant amount of spin waiting occurs
+                        {
+                            for (int tileDataReadIndex = maximaReadWrite.GetNextTileReadIndexThreadSafe(); tileDataReadIndex < maximaReadWrite.MaxTileIndex; tileDataReadIndex = maximaReadWrite.GetNextTileReadIndexThreadSafe())
+                            {
+                                DigitalSurfaceModel? tileToRead = dsm[tileDataReadIndex];
+                                if (tileToRead == null)
+                                {
+                                    continue;
+                                }
+
+                                // must load DSM tile at given index even if it's beyond the necessary neighborhood
+                                // Otherwise some tiles would not get loaded.
+                                tileToRead.Read(DigitalSufaceModelBands.Required | DigitalSufaceModelBands.SourceIDSurface, maximaReadWrite.TilePool);
+                                if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                                {
+                                    return;
+                                }
+
+                                lock (maximaReadWrite)
+                                {
+                                    maximaReadWrite.OnTileRead(tileDataReadIndex);
+                                }
+                                if (maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex))
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // create local maxima raster and vector tiles
+                    string tileName = Tile.GetName(dsmTile.FilePath);
+                    localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile);
+                    localMaximaRaster.FilePath = this.LocalMaxima;
+                    if (maximaReadWrite.OutputPathIsDirectory)
+                    {
+                        localMaximaRaster.FilePath = Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension);
+                    }
+
+                    string vectorTilePath = this.LocalMaxima;
+                    if (maximaReadWrite.OutputPathIsDirectory)
+                    {
+                        vectorTilePath = Path.Combine(vectorTilePath, tileName + Constant.File.GeoPackageExtension);
+                    }
+                    using DataSource localMaximaVector = OgrExtensions.Open(vectorTilePath);
+                    using LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, dsmTile, "dsmMaxima");
+
+                    // find DSM maxima radii and statistics
+                    LocalMaximaState state = new(tileName, dsm, tileIndex, localMaximaRaster)
+                    {
+                        CurrentStatistics = dsmMaximaPoints
+                    };
+                    int dsmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
+                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    // find CMM maxima radii
+                    state.CurrentNeighborhood = state.CmmNeighborhood;
+                    state.CurrentStatistics = null;
+                    state.CurrentRadii = localMaximaRaster.CmmMaxima;
+                    int cmmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
+                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    // find CHM maxima radii
+                    state.CurrentNeighborhood = state.ChmNeighborhood;
+                    state.CurrentRadii = localMaximaRaster.ChmMaxima;
+                    int chmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
+                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    Debug.Assert(localMaximaRaster != null);
+                    localMaximaRaster.Write(localMaximaRaster.FilePath, this.CompressRasters);
+
+                    lock (maximaReadWrite)
+                    {
+                        maximaReadWrite.OnTileWritten(tileIndex);
+                        dsmMaximaTotal += dsmMaximaFound;
+                        cmmMaximaTotal += cmmMaximaFound;
+                        chmMaximaTotal += chmMaximaFound;
+                    }
+                }
+            });
+
+            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...");
+            this.WriteProgress(progress);
+            while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...";
+                progress.Update(maximaReadWrite.TilesWritten, dsm.TileCount);
+                this.WriteProgress(progress);
+            }
+
+            // processing rates are constrained by GDAL load speeds but still overload the garbage collector
+            // 5950X 16 thread read speed is ~1.8 GB/s (SN770 on CPU lanes).
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+
+            long meanMaximaPerTile = dsmMaximaTotal / dsm.TileCount;
+            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.TileCount + " " + (dsm.TileCount > 1 ? "tiles" : "tile") + " in " + stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " maxima/tile).");
+            base.ProcessRecord();
+        }
+
+        private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, float surfaceZ, float ring1maximumZ, float ring1minimumZ, LocalMaximaState state)
         {
             // check remainder of first ring: caller has checked xOffset = ±1, yOffset = 0
-            VirtualRasterNeighborhood8<float> dsmNeighborhood = state.DsmNeighborhood;
+            VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            Span<float> maxRingZ = stackalloc float[LocalMaximaVector.RingCount];
+            Span<float> minRingZ = stackalloc float[LocalMaximaVector.RingCount];
+            float ringMaximumZ = ring1maximumZ;
+            float ringMinimumZ = ring1minimumZ;
             for (int yOffset = -1; yOffset < 2; yOffset += 2)
             {
                 int cellYindex = tileYindex + yOffset;
                 for (int xOffset = -1; xOffset < 2; ++xOffset)
                 {
                     int cellXindex = tileXindex + xOffset;
-                    if (dsmNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
+                    if (currentNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
                     {
-                        if (z > dsmZ)
+                        if (z > surfaceZ)
                         {
-                            state.MaximaRadii[tileXindex, tileYindex] = 0;
-                            return;
+                            state.CurrentRadii[tileXindex, tileYindex] = 0;
+                            return false;
+                        }
+
+                        if (z < ringMinimumZ)
+                        {
+                            ringMinimumZ = z;
+                        }
+                        if (z > ringMaximumZ)
+                        {
+                            ringMaximumZ = z;
                         }
                     }
                 }
             }
+
+            maxRingZ[0] = ringMaximumZ;
+            minRingZ[0] = ringMinimumZ;
 
             // local maxima radius is one minus the ring radius when a higher z value is encountered
             // Ring index is also one minus the ring radius so can just be returned as the local maxima radius.
@@ -136,27 +343,36 @@ namespace Mars.Clouds.Cmdlets
             // investment here is well into diminishing returns as Get-LocalMaxima is limited by GDAL read speeds. DSM+CMM+CHM local maxima
             // identification runs at ~200 2000 x 2000 cell tiles per second (5950X).
             // Indices in rings are also sorted in row major order for performance.
-            Span<float> maxRingZ = stackalloc float[LocalMaximaLayer.RingCount];
-            Span<float> minRingZ = stackalloc float[LocalMaximaLayer.RingCount];
+            bool hasStatistics = state.CurrentStatistics != null;
             bool ringRadiusFound = false;
             byte ringRadiusInCells = (byte)Ring.Rings.Count; // default to no higher z value found within search radius
-            for (byte ringIndex = 1; ringIndex < LocalMaximaLayer.RingCount; ++ringIndex)
+            for (byte ringIndex = 1; ringIndex < LocalMaximaVector.RingCount; ++ringIndex)
             {
                 Ring ring = Ring.Rings[ringIndex];
-                float ringMinimumZ = Single.MaxValue;
-                float ringMaximumZ = Single.MinValue;
+                ringMinimumZ = Single.MaxValue;
+                ringMaximumZ = Single.MinValue;
 
                 for (int offsetIndex = 0; offsetIndex < ring.Count; ++offsetIndex)
                 {
                     int cellYindex = tileYindex + ring.XIndices[offsetIndex];
                     int cellXindex = tileXindex + ring.YIndices[offsetIndex];
-                    if (dsmNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
+                    if (currentNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
                     {
-                        if (z > dsmZ)
+                        if (z > surfaceZ)
                         {
-                            ringRadiusInCells = ringIndex;
-                            ringRadiusFound = true;
+                            if (ringRadiusFound == false)
+                            {
+                                ringRadiusInCells = ringIndex;
+                                ringRadiusFound = true;
+                            }
+
+                            // ring minimum and maximum are needed only if vector output is enabled
+                            if (hasStatistics == false)
+                            {
+                                break;
+                            }
                         }
+
                         if (z < ringMinimumZ)
                         {
                             ringMinimumZ = z;
@@ -174,16 +390,16 @@ namespace Mars.Clouds.Cmdlets
 
             if (ringRadiusFound == false)
             {
-                for (byte ringIndex = LocalMaximaLayer.RingCount; ringIndex < Ring.Rings.Count; ++ringIndex)
+                for (byte ringIndex = LocalMaximaVector.RingCount; ringIndex < Ring.Rings.Count; ++ringIndex)
                 {
                     Ring ring = Ring.Rings[ringIndex];
                     for (int offsetIndex = 0; offsetIndex < ring.Count; ++offsetIndex)
                     {
                         int cellYindex = tileYindex + ring.XIndices[offsetIndex];
                         int cellXindex = tileXindex + ring.YIndices[offsetIndex];
-                        if (dsmNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
+                        if (currentNeighborhood.TryGetValue(cellXindex, cellYindex, out float z))
                         {
-                            if (z > dsmZ)
+                            if (z > surfaceZ)
                             {
                                 ringRadiusInCells = ringIndex;
                                 ringRadiusFound = true;
@@ -199,134 +415,54 @@ namespace Mars.Clouds.Cmdlets
                 }
             }
 
-            state.MaximaRadii[tileXindex, tileYindex] = ringRadiusInCells;
+            state.CurrentRadii[tileXindex, tileYindex] = ringRadiusInCells;
 
-            (double x, double y) = state.DsmTile.Transform.GetCellCenter(tileXindex, tileYindex);
-            float elevation = state.DtmTile[tileXindex, tileYindex];
-            state.MaximaStatistics.Add(x, y, elevation, dsmZ, ringRadiusInCells, maxRingZ, minRingZ);
-        }
+            if (hasStatistics)
+            {
+                Debug.Assert((state.CurrentStatistics != null) && (state.DsmTile.SourceIDSurface != null)); // VS 17.8.7 nullability can't figure out hasStatistics == true means state.CurrentStatistics != null
 
-        protected override void ProcessRecord()
-        {
-            // setup
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            VirtualRaster<Raster<float>> dsm = this.ReadVirtualRaster<Raster<float>>("Get-LocalMaxima", this.Dsm);
-            TileReadWrite tileReadWrite = new(Directory.Exists(this.LocalMaxima))
-            {
-                TilesRead = dsm.TileCount
-            };
-            if ((dsm.TileCount > 1) && (tileReadWrite.OutputPathIsDirectory == false))
-            {
-                throw new ParameterOutOfRangeException(nameof(this.LocalMaxima), "-" + nameof(this.LocalMaxima) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
+                (double x, double y) = state.DsmTile.Transform.GetCellCenter(tileXindex, tileYindex);
+                UInt16 sourceID = state.DsmTile.SourceIDSurface[tileXindex, tileYindex];
+                float cmmZ = state.DsmTile.CanopyMaxima3[tileXindex, tileYindex];
+                float chmHeight = state.DsmTile.CanopyHeight[tileXindex, tileYindex];
+                state.CurrentStatistics.Add(sourceID, x, y, chmHeight, surfaceZ, cmmZ, ringRadiusInCells, maxRingZ, minRingZ);
             }
 
-            string[] localMaximaBandNames = new string[this.DsmBands.Count];
-            for (int bandIndex = 0; bandIndex < this.DsmBands.Count; ++bandIndex)
-            {
-                string bandName = this.DsmBands[bandIndex];
-                if (dsm.BandNames.Contains(bandName) == false)
-                {
-                    throw new ParameterOutOfRangeException(nameof(this.DsmBands), "-" + nameof(this.DsmBands) + " includes band '" + bandName + "' but this band is not present in DSM '" + this.Dsm + "'.");
-                }
-
-                localMaximaBandNames[bandIndex] = bandName + "LocalMaximaRadiusInCells";
-            }
-
-            // find local maxima in all tiles
-            // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
-            // locality advantage.
-            bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
-            ParallelTasks findLocalMaximaTasks = new(Int32.Min(this.MaxThreads, dsm.TileCount), () =>
-            {
-                Raster<byte>? localMaximaRaster = null; // cache for reuse to offload GC
-                RasterBand<float>? dtmTile = null;
-                for (int tileIndex = tileReadWrite.GetNextTileWriteIndexThreadSafe(); tileIndex < dsm.TileCount; tileIndex = tileReadWrite.GetNextTileWriteIndexThreadSafe())
-                {
-                    Raster<float>? dsmTile = dsm[tileIndex];
-                    if (dsmTile == null) 
-                    {
-                        continue;
-                    }
-
-                    // load DTM tile
-                    string tileName = Tile.GetName(dsmTile.FilePath);
-                    string dtmTilePath = dtmPathIsDirectory ? LasTilesCmdlet.GetRasterTilePath(this.Dtm, tileName) : this.Dtm;
-                    dtmTile = RasterBand<float>.CreateOrLoad(dtmTilePath, this.DtmBand, dtmTile);
-
-                    // create local maxima raster and vector tiles
-                    localMaximaRaster = Raster<byte>.CreateRecreateOrReset(localMaximaRaster, dsmTile, localMaximaBandNames, Byte.MaxValue);
-                    localMaximaRaster.FilePath = this.LocalMaxima;
-                    if (tileReadWrite.OutputPathIsDirectory)
-                    {
-                        localMaximaRaster.FilePath = Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension);
-                    }
-
-                    string vectorTilePath = this.LocalMaxima;
-                    if (tileReadWrite.OutputPathIsDirectory)
-                    {
-                        vectorTilePath = Path.Combine(vectorTilePath, tileName + Constant.File.GeoPackageExtension);
-                    }
-                    using DataSource localMaximaVector = OgrExtensions.Open(vectorTilePath);
-
-                    (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileIndex);
-                    for (int bandIndex = 0; bandIndex < this.DsmBands.Count; ++bandIndex)
-                    {
-                        string bandName = this.DsmBands[bandIndex];
-                        VirtualRasterNeighborhood8<float> dsmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, bandName);
-
-                        RasterBand<byte> maximaRadii = localMaximaRaster.Bands[bandIndex];
-                        using LocalMaximaLayer maximaPoints = LocalMaximaLayer.CreateOrOverwrite(localMaximaVector, dsmTile, tileName);
-
-                        LocalMaximaState state = new(tileName, dsmNeighborhood, dtmTile, maximaRadii, maximaPoints);
-                        GetLocalMaxima.FindLocalMaxima(state);
-
-                        if (this.Stopping || tileReadWrite.CancellationTokenSource.IsCancellationRequested)
-                        {
-                            return;
-                        }
-                    }
-
-                    Debug.Assert(localMaximaRaster != null);
-                    localMaximaRaster.Write(localMaximaRaster.FilePath, this.CompressRasters);
-                    tileReadWrite.IncrementTilesWrittenThreadSafe();
-                }
-            });
-
-            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + tileReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...");
-            this.WriteProgress(progress);
-            while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
-            {
-                progress.StatusDescription = "Found local maxima in " + tileReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...";
-                progress.Update(tileReadWrite.TilesWritten, dsm.TileCount);
-                this.WriteProgress(progress);
-            }
-
-            // processing rates are constrained by GDAL load speeds but still overload the garbage collector
-            // 5950X 16 thread read speed is ~1.8 GB/s (SN770 on CPU lanes).
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-
-            this.WriteVerbose(dsm.TileCount + " " + (dsm.TileCount > 1 ? "tiles" : "tile") + " in " + stopwatch.ToElapsedString() + ".");
-            base.ProcessRecord();
+            return true;
         }
 
         private class LocalMaximaState
         {
+            public RasterBand<byte> CurrentRadii { get; set; }
+            public VirtualRasterNeighborhood8<float> CurrentNeighborhood { get; set; }
+            public LocalMaximaVector? CurrentStatistics { get; set; }
+            public VirtualRasterNeighborhood8<float> ChmNeighborhood { get; private init; }
+            public VirtualRasterNeighborhood8<float> CmmNeighborhood { get; private init; }
             public VirtualRasterNeighborhood8<float> DsmNeighborhood { get; private init; }
-            public RasterBand<float> DsmTile { get; private init; }
-            public RasterBand<float> DtmTile { get; private init; }
-            public RasterBand<byte> MaximaRadii { get; private init; }
-            public LocalMaximaLayer MaximaStatistics { get; private init; }
+            public DigitalSurfaceModel DsmTile { get; private init; }
+            public LocalMaximaRaster MaximaRaster { get; private init; }
             public string TileName { get; private init; }
 
-            public LocalMaximaState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, RasterBand<float> dtmTile, RasterBand<byte> maximaRadii, LocalMaximaLayer maximaStatistics)
+            public LocalMaximaState(string tileName, VirtualRaster<DigitalSurfaceModel> dsm, int tileIndex, LocalMaximaRaster maximaRaster)
             {
-                this.DsmNeighborhood = dsmNeighborhood;
-                this.DsmTile = dsmNeighborhood.Center;
-                this.DtmTile = dtmTile;
-                this.MaximaRadii = maximaRadii;
-                this.MaximaStatistics = maximaStatistics;
+                DigitalSurfaceModel? dsmTile = dsm[tileIndex];
+                if ((dsmTile == null) || (dsmTile.Surface.Data.Length != dsmTile.Cells) || (dsmTile.CanopyMaxima3.Data.Length != dsmTile.Cells) || (dsmTile.CanopyHeight.Data.Length != dsmTile.Cells) || (dsmTile.SourceIDSurface == null) || (dsmTile.SourceIDSurface.Data.Length != dsmTile.Cells))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(dsm), "DSM tile at index " + tileIndex + " is missing or not fully loaded.");
+                }
+
+                (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileIndex);
+                this.CurrentRadii = maximaRaster.DsmMaxima;
+                this.CurrentStatistics = null;
+                this.CurrentNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.SurfaceBandName);
+                this.ChmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
+                this.CmmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyMaximaBandName);
+                this.DsmNeighborhood = this.CurrentNeighborhood;
+                this.DsmTile = dsmTile;
+                this.MaximaRaster = maximaRaster;
                 this.TileName = tileName;
+
+                // TODO: also check neighborhoods are fully loaded (in debug builds?)
             }
         }
     }

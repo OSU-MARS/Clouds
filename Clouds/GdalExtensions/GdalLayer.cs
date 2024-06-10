@@ -1,11 +1,15 @@
 ﻿using OSGeo.OGR;
 using OSGeo.OSR;
 using System;
+using System.Diagnostics;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    internal class GdalLayer : IDisposable // wrap OSGeo.OGR.Layer as GDAL classes don't implement dispose pattern
+    // wrap OSGeo.OGR.Layer as GDAL classes implement IDisposable but lack the standard dispose pattern's Dispose(bool)
+    internal class GdalLayer : IDisposable
     {
+        protected static int MaximumTransactionSizeInFeatures = 10000;
+
         private bool isInEditMode;
         private bool isDisposed;
 
@@ -59,6 +63,17 @@ namespace Mars.Clouds.GdalExtensions
         public SpatialReference GetSpatialReference()
         {
             return this.Layer.GetSpatialRef();
+        }
+
+        protected void RestartTransaction()
+        {
+            Debug.Assert(this.IsInEditMode);
+
+            // commit any pending changes and open a new transaction for further changes
+            // For GeoPackages this, in principle, allows background processing and writes to disk by SQLite threads while remaining
+            // modifications are made to a layer. This interleaving might shorten runtimes.
+            this.Layer.CommitTransaction();
+            this.Layer.StartTransaction();
         }
     }
 }

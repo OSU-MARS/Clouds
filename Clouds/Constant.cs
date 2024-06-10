@@ -26,7 +26,7 @@ namespace Mars.Clouds
 
         public static class Las
         {
-            public const int HeaderAndVlrReadBufferSizeInBytes = 4 * 1024; // use 4k as compromise: header bytes + GeoTIFF CRS VLRs are ~512 bytes but wkt CRS VLRs are 5+ kB
+            public const int HeaderAndVlrReadBufferSizeInBytes = 8 * 1024; // use 8k as default: header bytes + GeoTIFF CRS VLRs are ~512 bytes but recent-ish .las/.laz files often use 5+ kB wkt compound CRS VLRs
             public const UInt16 VlrReservedHeaderValue = 0;
         }
 

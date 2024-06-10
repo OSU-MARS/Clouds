@@ -50,7 +50,7 @@ namespace Mars.Clouds.Cmdlets
             return Path.Combine(directoryPath, tileName + Constant.File.GeoTiffExtension);
         }
 
-        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath) where TTile : Raster, IRasterSerializable<TTile>
+        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData) where TTile : Raster, IRasterSerializable<TTile>
         {
             VirtualRaster<TTile> vrt = [];
 
@@ -58,7 +58,7 @@ namespace Mars.Clouds.Cmdlets
             if (tilePaths.Count == 1)
             {
                 // synchronous read for single tiles
-                TTile tile = TTile.Read(tilePaths[0], readData: true);
+                TTile tile = TTile.Read(tilePaths[0], readData);
                 vrt.Add(tile);
             }
             else
@@ -72,7 +72,7 @@ namespace Mars.Clouds.Cmdlets
                     for (int tileIndex = tileRead.GetNextTileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextTileReadIndexThreadSafe())
                     {
                         string tilePath = tilePaths[tileIndex];
-                        TTile tile = TTile.Read(tilePath, readData: true);
+                        TTile tile = TTile.Read(tilePath, readData);
                         lock (vrt)
                         {
                             vrt.Add(tile);

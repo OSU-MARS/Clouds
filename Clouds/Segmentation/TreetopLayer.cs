@@ -11,6 +11,8 @@ namespace Mars.Clouds.Segmentation
     {
         private const string DefaultLayerName = "treetops";
 
+        private int pendingTreetopCommits;
+
         protected int HeightFieldIndex { get; private init; }
         protected int TileFieldIndex { get; private init; }
         protected int RadiusFieldIndex { get; private init; }
@@ -19,6 +21,8 @@ namespace Mars.Clouds.Segmentation
         protected TreetopLayer(Layer gdalLayer)
             : base(gdalLayer)
         {
+            this.pendingTreetopCommits = 0;
+
             this.TileFieldIndex = this.Definition.GetFieldIndex("tile"); // -1 if tile field wasn't created
             this.TreeIDfieldIndex = this.Definition.GetFieldIndex("treeID");
             this.HeightFieldIndex = this.Definition.GetFieldIndex("height");
@@ -38,6 +42,13 @@ namespace Mars.Clouds.Segmentation
             treetopCandidate.SetField(this.HeightFieldIndex, height);
             treetopCandidate.SetField(this.RadiusFieldIndex, radius);
             this.Layer.CreateFeature(treetopCandidate);
+
+            ++this.pendingTreetopCommits;
+            if (this.pendingTreetopCommits >= GdalLayer.MaximumTransactionSizeInFeatures)
+            {
+                this.RestartTransaction();
+                this.pendingTreetopCommits = 0;
+            }
         }
 
         public void Add(string tileName, Treetops treetops, IList<string> classNames)

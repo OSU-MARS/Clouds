@@ -5,7 +5,7 @@ namespace Mars.Clouds.Cmdlets
     public class TileRead
     {
         private int tileReadIndex;
-        public int tilesRead;
+        private int tilesRead;
 
         public CancellationTokenSource CancellationTokenSource { get; private init; }
 
@@ -15,6 +15,11 @@ namespace Mars.Clouds.Cmdlets
             this.tilesRead = 0;
 
             this.CancellationTokenSource = new();
+        }
+
+        public int TileReadIndex
+        {
+            get { return this.tileReadIndex; }
         }
 
         public int TilesRead

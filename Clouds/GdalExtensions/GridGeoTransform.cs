@@ -154,6 +154,12 @@ namespace Mars.Clouds.GdalExtensions
             this.CellHeight = height;
         }
 
+        public void SetOrigin(double x, double y)
+        {
+            this.OriginX = x; 
+            this.OriginY = y;
+        }
+
         public void SetTransform(Dataset dataset)
         {
             double[] padfTransform = new double[6];

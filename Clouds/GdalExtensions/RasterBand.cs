@@ -1,4 +1,5 @@
 ﻿using OSGeo.GDAL;
+using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -402,6 +403,23 @@ namespace Mars.Clouds.GdalExtensions
             return (value, 1);
         }
 
+        public bool IsNoData(Band gdalBand)
+        {
+            if (this.HasNoDataValue)
+            {
+                gdalBand.GetNoDataValue(out double otherNoDataValue, out int otherHasNoDataValue);
+                if (otherHasNoDataValue == 0)
+                {
+                    return false;
+                }
+
+                TBand otherNoDataAsBandValue = TBand.CreateChecked(otherNoDataValue);
+                return this.NoDataIsNaN ? TBand.IsNaN(otherNoDataAsBandValue) : this.NoDataValue == otherNoDataAsBandValue;
+            }
+
+            return false;
+        }
+
         public bool IsNoData(TBand value)
         {
             if (this.HasNoDataValue)
@@ -418,6 +436,38 @@ namespace Mars.Clouds.GdalExtensions
                 return this.IsNoData(this[xIndex, yIndex]);
             }
             return false;
+        }
+
+        public void Read(Dataset rasterDataset)
+        {
+            this.Read(rasterDataset, rasterDataset.GetSpatialRef());
+        }
+
+        public void Read(Dataset rasterDataset, SpatialReference crs)
+        {
+            // update CRS and transform
+            this.Crs = crs;
+            this.Transform.SetTransform(rasterDataset);
+            // update data and no data
+            this.ReadDataInSameCrsAndTransform(rasterDataset);
+        }
+
+        public void Read(Dataset rasterDataset, SpatialReference crs, Band gdalBand)
+        {
+            this.Crs = crs;
+            this.Transform.SetTransform(rasterDataset);
+            this.SizeX = rasterDataset.RasterXSize;
+            this.SizeY = rasterDataset.RasterYSize;
+            this.SetNoDataValue(gdalBand); // also update no data
+
+            DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
+            this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, thisDataType); // update data
+        }
+
+        public void Read(string rasterPath)
+        {
+            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
+            this.Read(rasterDataset);
         }
 
         public static RasterBand<TBand> Read(string rasterPath, string? bandName)
@@ -447,17 +497,6 @@ namespace Mars.Clouds.GdalExtensions
             throw new ArgumentOutOfRangeException(nameof(bandName), "Raster '" + rasterPath + "' does not contain a band named '" + bandName + "'.");
         }
 
-        public void Read(string rasterPath)
-        {
-            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-
-            // update CRS and transform
-            this.Crs = rasterDataset.GetSpatialRef();
-            this.Transform.SetTransform(rasterDataset);
-            // update data and no data
-            this.ReadDataInSameCrsAndTransform(rasterDataset);
-        }
-
         public override void ReadDataInSameCrsAndTransform(Dataset rasterDataset)
         {
             if ((this.SizeX != rasterDataset.RasterXSize) || (this.SizeY != rasterDataset.RasterYSize))
@@ -480,6 +519,11 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Raster does not contain a band named '" + this.Name + "'.");
+        }
+
+        public void ReadDataAssumingSameCrsTransformSizeAndNoData(Band gdalBand)
+        {
+            this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, RasterBand.GetGdalDataType<TBand>());
         }
 
         private void ReadDataAssumingSameCrsTransformSizeAndNoData(Band gdalBand, DataType thisDataType)
@@ -564,6 +608,12 @@ namespace Mars.Clouds.GdalExtensions
             this.HasNoDataValue = true;
             this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
+        }
+
+        public void TakeOwnershipOfDataArray(RasterBand<TBand> other)
+        {
+            this.Data = other.Data;
+            other.Data = [];
         }
 
         public bool TryGetMaximumValue(out TBand maximumValue)
