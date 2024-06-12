@@ -19,9 +19,9 @@ namespace Mars.Clouds.Las
         public List<ExtendedVariableLengthRecord> ExtendedVariableLengthRecords { get; private init; }
 
         /// <summary>
-        /// Create a <see cref="LasFile"/>  by reading the .las or .laz file's header and variable length records.
+        /// Create a <see cref="LasFile"/> by reading the .las or .laz file's header and variable length records.
         /// </summary>
-        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
+        public LasFile(LasReader reader, bool discardOverrunningVlrs, DateOnly? fallbackCreationDate)
         {
             this.BytesAfterVariableLengthRecords = [];
             this.Header = reader.ReadHeader();
@@ -34,7 +34,7 @@ namespace Mars.Clouds.Las
             }
             this.Header.Validate();
 
-            reader.ReadVariableAndExtendedVariableLengthRecords(this);
+            reader.ReadVariableAndExtendedVariableLengthRecords(this, discardOverrunningVlrs);
             if (this.Header.NumberOfVariableLengthRecords != this.VariableLengthRecords.Count)
             {
                 throw new InvalidDataException(".las file header indicates " + this.Header.NumberOfVariableLengthRecords + " should be present but " + this.VariableLengthRecords.Count + " records were read.");
@@ -141,13 +141,100 @@ namespace Mars.Clouds.Las
             return (this.Header.PointDataRecordFormat & LazVariableLengthRecord.PointDataFormatMask) == LazVariableLengthRecord.PointDataFormatMask;
         }
 
-        public void SetOrigin(ReadOnlySpan<double> originXyz)
+        public void RotateExtents(double rotationXYinDegrees)
         {
-            // translate point cloud to new origin
-            double originX = originXyz[0];
-            double originY = originXyz[1];
-            double originZ = originXyz[2];
+            double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
+            double sinRotationXY = Double.Sin(rotationXYinRadians);
+            double cosRotationXY = Double.Cos(rotationXYinRadians);
 
+            // rotated x extents
+            double maxX = this.Header.MaxX;
+            double minX = this.Header.MinX;
+            double maxY = this.Header.MaxY;
+            double minY = this.Header.MinY;
+            double minXminYcornerRotatedX = minX * cosRotationXY - minY * sinRotationXY;
+            double minXrotated = minXminYcornerRotatedX;
+            double maxXrotated = minXminYcornerRotatedX;
+
+            double minXmaxYcornerRotatedX = minX * cosRotationXY - maxY * sinRotationXY;
+            if (minXmaxYcornerRotatedX < minXrotated)
+            {
+                minXrotated = minXmaxYcornerRotatedX;
+            }
+            if (minXmaxYcornerRotatedX > maxXrotated)
+            {
+                maxXrotated = minXmaxYcornerRotatedX;
+            }
+
+            double maxXminYcornerRotatedX = maxX * cosRotationXY - minY * sinRotationXY;
+            if (maxXminYcornerRotatedX < minXrotated)
+            {
+                minXrotated = maxXminYcornerRotatedX;
+            }
+            if (maxXminYcornerRotatedX > maxXrotated)
+            {
+                maxXrotated = maxXminYcornerRotatedX;
+            }
+
+            double maxXmaxYcornerRotatedX = maxX * cosRotationXY - maxY * sinRotationXY;
+            if (maxXmaxYcornerRotatedX < minXrotated)
+            {
+                minXrotated = maxXmaxYcornerRotatedX;
+            }
+            if (maxXmaxYcornerRotatedX > maxXrotated)
+            {
+                maxXrotated = maxXmaxYcornerRotatedX;
+            }
+
+            // rotated y extents
+            double minXminYcornerRotatedY = minX * sinRotationXY + minY * cosRotationXY;
+            double minYrotated = minXminYcornerRotatedY;
+            double maxYrotated = minXminYcornerRotatedY;
+
+            double minXmaxYcornerRotatedY = minX * sinRotationXY + maxY * cosRotationXY;
+            if (minXmaxYcornerRotatedY < minYrotated)
+            {
+                minYrotated = minXmaxYcornerRotatedY;
+            }
+            if (minXmaxYcornerRotatedY > maxYrotated)
+            {
+                maxYrotated = minXmaxYcornerRotatedY;
+            }
+
+            double maxXminYcornerRotatedY = maxX * sinRotationXY + minY * cosRotationXY;
+            if (maxXminYcornerRotatedY < minYrotated)
+            {
+                minYrotated = maxXminYcornerRotatedY;
+            }
+            if (maxXminYcornerRotatedY > maxYrotated)
+            {
+                maxYrotated = maxXminYcornerRotatedY;
+            }
+
+            double maxXmaxYcornerRotatedY = maxX * sinRotationXY + maxY * cosRotationXY;
+            if (maxXmaxYcornerRotatedY < minYrotated)
+            {
+                minYrotated = maxXmaxYcornerRotatedY;
+            }
+            if (maxXmaxYcornerRotatedY > maxYrotated)
+            {
+                maxYrotated = maxXmaxYcornerRotatedY;
+            }
+
+            // update extents
+            this.Header.MaxX = maxXrotated;
+            this.Header.MinX = minXrotated;
+            this.Header.MaxY = maxYrotated;
+            this.Header.MinY = minYrotated;
+        }
+
+        public void SetOrigin(double originX, double originY, double originZ)
+        {
+            // if needed, the origin's precision can be matched to the cloud's scale precision
+            // LAStools wants origin and extent doubles are truncated to match the scale but this is not required by the LAS 1.4 R15
+            // specification (§2.4). Other software emits full precision origins.
+
+            // translate point cloud to new origin
             double xShift = originX - this.Header.XOffset;
             this.Header.MinX += xShift;
             this.Header.MaxX += xShift;
@@ -200,8 +287,8 @@ namespace Mars.Clouds.Las
     {
         public new THeader Header { get; private init; }
 
-        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
-            : base(reader, fallbackCreationDate)
+        public LasFile(LasReader reader, bool discardOverrunningVlrs, DateOnly? fallbackCreationDate)
+            : base(reader, discardOverrunningVlrs, fallbackCreationDate)
         {
             this.Header = (THeader)base.Header;
         }

@@ -169,7 +169,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public void WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, double nudgeXinCrsUnits, double nudgeYinCrsUnits, UInt16 sourceID, bool repairClassification, bool repairReturnNumbers)
+        public void WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, UInt16 sourceID, bool repairClassification, bool repairReturnNumbers)
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
@@ -182,12 +182,10 @@ namespace Mars.Clouds.Las
             int classificationOffset = pointFormat < 6 ? 15 : 16;
             int sourceIDoffset = pointFormat < 6 ? 18 : 20;
 
-            bool hasTransformation = (rotationXYinDegrees != 0.0) || (nudgeXinCrsUnits != 0.0) || (nudgeYinCrsUnits != 0.0);
+            bool hasRotation = rotationXYinDegrees != 0.0;
             double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
-            double nudgeXscaled = nudgeXinCrsUnits / lasFile.Header.XScaleFactor;
-            double nudgeYscaled = nudgeYinCrsUnits / lasFile.Header.YScaleFactor;
 
             byte[] pointBuffer = new byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength];
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
@@ -201,13 +199,13 @@ namespace Mars.Clouds.Las
                 {
                     Span<byte> pointBytes = pointBuffer.AsSpan(batchOffset);
 
-                    if (hasTransformation)
+                    if (hasRotation)
                     {
                         double xScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
                         double yScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
 
-                        double xTransformed = xScaled * cosRotationXY - yScaled * sinRotationXY + nudgeXscaled;
-                        double yTransformed = xScaled * sinRotationXY + yScaled * cosRotationXY + nudgeYscaled;
+                        double xTransformed = xScaled * cosRotationXY - yScaled * sinRotationXY;
+                        double yTransformed = xScaled * sinRotationXY + yScaled * cosRotationXY;
 
                         BinaryPrimitives.WriteInt32LittleEndian(pointBytes, (int)(xTransformed + 0.5));
                         BinaryPrimitives.WriteInt32LittleEndian(pointBytes[4..], (int)(yTransformed + 0.5));
@@ -215,7 +213,7 @@ namespace Mars.Clouds.Las
                     if (repairClassification) 
                     {
                         PointClassification classification = (PointClassification)pointBytes[classificationOffset];
-                        // workaround bug in Trion Model v113
+                        // workaround bugs in Trion Model v113
                         if (classification == PointClassification.NeverClassified)
                         {
                             classification = PointClassification.Unclassified;

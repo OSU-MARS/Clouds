@@ -14,7 +14,7 @@ namespace Mars.Clouds.Las
         public Extent GridExtent { get; set; }
 
         public LasTile(string lasFilePath, LasReader reader, DateOnly? fallbackCreationDate)
-            : base(reader, fallbackCreationDate)
+            : base(reader, discardOverrunningVlrs: false, fallbackCreationDate)
         {
             this.FilePath = lasFilePath;
             this.FileSizeInBytes = reader.BaseStream.Length;

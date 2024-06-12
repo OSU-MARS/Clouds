@@ -113,8 +113,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), "Could not transform point cloud origin " + this.Lat + ", " + this.Long + ", " + this.Z + " to EPSG:" + this.HorizontalEpsg + ".");
             }
-            double[] originXyz = new double[3];
-            origin.GetPoint(0, originXyz);
+            double[] commonOriginXyz = new double[3]; // can't use stackalloc as GDAL 3.8.3 C# bindings don't support Span<T>
+            origin.GetPoint(0, commonOriginXyz);
+            double scanAnchorX = commonOriginXyz[0];
+            double scanAnchorY = commonOriginXyz[1];
+            double scanAnchorZ = commonOriginXyz[2];
 
             // set point clouds' origins, coordinate systems, and source IDs
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
@@ -129,19 +132,32 @@ namespace Mars.Clouds.Cmdlets
                     string cloudPath = cloudPaths[cloudIndex];
                     FileInfo cloudFileInfo = new(cloudPath);
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath, cloudFileInfo.Length);
-                    LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
-                    cloud.SetOrigin(originXyz);
+                    LasFile cloud = new(reader, discardOverrunningVlrs: false, this.FallbackDate); // leaves reader positioned at start of points
+
+                    // update cloud extents
+                    double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
+                    if (rotationXY != 0.0)
+                    {
+                        cloud.RotateExtents(rotationXY); // update extents to match rotation of points below
+                    }
+
+                    // translate cloud
+                    double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
+                    double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
+                    double originX = scanAnchorX + nudgeXinCrsUnits;
+                    double originY = scanAnchorY + nudgeYinCrsUnits;
+                    cloud.SetOrigin(originX, originY, scanAnchorZ);
+
+                    // assign cloud coordinate system
                     cloud.SetSpatialReference(cloudCrs);
 
+                    // rotate points
                     string modifiedCloudPath = PathExtensions.AppendToFileName(cloudPath, " registered");
                     using LasWriter writer = LasWriter.CreateForPointWrite(modifiedCloudPath);
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
 
-                    double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
-                    double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
-                    double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
-                    writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, nudgeXinCrsUnits, nudgeYinCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
+                    writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     Interlocked.Increment(ref cloudRegistrationsCompleted);

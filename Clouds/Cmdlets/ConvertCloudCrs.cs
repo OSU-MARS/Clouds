@@ -61,7 +61,7 @@ namespace Mars.Clouds.Cmdlets
                     string cloudPath = cloudPaths[cloudIndex];
                     FileInfo cloudFileInfo = new(cloudPath);
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath, cloudFileInfo.Length);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(reader, discardOverrunningVlrs: false, fallbackCreationDate: null);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     if (cloudCrs.IsVertical() == 0)
                     {
@@ -87,7 +87,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                     double[] newOriginXyz = new double[3];
                     origin.GetPoint(0, newOriginXyz);
-                    cloud.SetOrigin(newOriginXyz);
+                    cloud.SetOrigin(newOriginXyz[0], newOriginXyz[1], newOriginXyz[2]);
 
                     // update scale factors and extent if linear units have changed
                     double scaleFactorChange = cloudCrs.GetLinearUnits() / newCrs.GetLinearUnits();

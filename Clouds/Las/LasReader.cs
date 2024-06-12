@@ -730,7 +730,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadVariableAndExtendedVariableLengthRecords(LasFile lasFile)
+        public void ReadVariableAndExtendedVariableLengthRecords(LasFile lasFile, bool discardOverrunningVlrs)
         {
             LasHeader10 lasHeader = lasFile.Header;
             if (lasHeader.NumberOfVariableLengthRecords > 0)
@@ -741,7 +741,7 @@ namespace Mars.Clouds.Las
                 }
 
                 lasFile.VariableLengthRecords.Capacity += (int)lasHeader.NumberOfVariableLengthRecords;
-                this.ReadVariableLengthRecordsAndTrailingBytes(lasFile);
+                this.ReadVariableLengthRecordsAndTrailingBytes(lasFile, discardOverrunningVlrs);
             }
 
             if (lasHeader.VersionMinor >= 4)
@@ -788,7 +788,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private void ReadVariableLengthRecordsAndTrailingBytes(LasFile lasFile)
+        private void ReadVariableLengthRecordsAndTrailingBytes(LasFile lasFile, bool discardOverrunningVlrs)
         {
             if (this.BaseStream.Position != lasFile.Header.HeaderSize)
             {
@@ -798,6 +798,20 @@ namespace Mars.Clouds.Las
             Span<byte> vlrBytes = stackalloc byte[VariableLengthRecord.HeaderSizeInBytes];
             for (int recordIndex = 0; recordIndex < lasFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
             {
+                // not enough bytes remaining before points for read of a variable length header's public header block
+                if ((this.BaseStream.Position + VariableLengthRecord.HeaderSizeInBytes) >= lasFile.Header.OffsetToPointData)
+                {
+                    // workaround for Applied Imagery's QT Modler's tendency to set the number of variable length records too high by one record
+                    if (discardOverrunningVlrs)
+                    {
+                        continue; // extra bytes will be placed into BytesAfterVariableLengthRecords
+                    }
+                    else
+                    {
+                        throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + lasFile.Header.OffsetToPointData + " bytes but variable length record " + recordIndex + "'s header extends to " + (this.BaseStream.Position + VariableLengthRecord.HeaderSizeInBytes) + " bytes.");
+                    }
+                }
+
                 this.BaseStream.ReadExactly(vlrBytes);
                 UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(vlrBytes);
                 string userID = Encoding.UTF8.GetString(vlrBytes.Slice(2, 16)).Trim('\0');
@@ -806,7 +820,21 @@ namespace Mars.Clouds.Las
                 string description = Encoding.UTF8.GetString(vlrBytes.Slice(22, 32)).Trim('\0');
 
                 // create specific object if record has a well known type
-                long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
+                long endOfRecordPositionExclusive = this.BaseStream.Position + (long)recordLengthAfterHeader;
+                if (endOfRecordPositionExclusive > lasFile.Header.OffsetToPointData)
+                {
+                    // workaround for Applied Imagery's QT Modler's tendency to set the number of variable length records too high by one record
+                    if (discardOverrunningVlrs)
+                    {
+                        this.BaseStream.Seek(-VariableLengthRecord.HeaderSizeInBytes, SeekOrigin.Current); // move back to end of VLR
+                        continue; // extra bytes will be placed into BytesAfterVariableLengthRecords
+                    }
+                    else
+                    {
+                        throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + lasFile.Header.OffsetToPointData + " bytes but variable length record " + recordIndex + " extends to " + endOfRecordPositionExclusive + " bytes.");
+                    }
+                }
+
                 UInt16 recordLengthAfterHeader16 = (UInt16)recordLengthAfterHeader;
                 VariableLengthRecord? vlr = null;
                 switch (userID)
@@ -903,16 +931,12 @@ namespace Mars.Clouds.Las
                 lasFile.VariableLengthRecords.Add(vlr);
 
                 // skip any unused bytes at end of record
-                if (this.BaseStream.Position != endOfRecordPosition)
+                if (this.BaseStream.Position != endOfRecordPositionExclusive)
                 {
-                    this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
+                    this.BaseStream.Seek(endOfRecordPositionExclusive, SeekOrigin.Begin);
                 }
             }
 
-            if (this.BaseStream.Position > lasFile.Header.OffsetToPointData)
-            {
-                throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + lasFile.Header.OffsetToPointData + " bytes but reader is positioned at " + this.BaseStream.Position + " bytes.");
-            }
             if (this.BaseStream.Position < lasFile.Header.OffsetToPointData)
             {
                 // capture any extra bytes between the end of the variable length records and the start of point data
