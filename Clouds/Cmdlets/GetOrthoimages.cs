@@ -5,6 +5,7 @@ using System.Management.Automation;
 using System.Threading.Tasks;
 using Mars.Clouds.GdalExtensions;
 using System.IO;
+using Mars.Clouds.Extensions;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -69,8 +70,7 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = this.WaitForLasReadTileWriteTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
 
             progress.Stopwatch.Stop();
-            string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + " point cloud tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + " point cloud tiles in " + progress.Stopwatch.ToElapsedString() + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 

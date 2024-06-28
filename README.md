@@ -31,10 +31,11 @@ Supporting tools are
 - `Get-LasInfo`: read a .las or .laz file's header
 - `Register-Cloud`: set .las files' origin, coordinate system, and source ID
 - `Convert-CloudCrs`: reproject .las files to a new coordinate system, adding a vertical coordinate system if one is not present
-- `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
+- `Remove-Points`: remove high noise, low noise, and withheld points from a point cloud
 - `Repair-NoisePoints`: mark z outliers as high and low noise relative to DTM (useful for that one point in low Earth orbit)
 - `Export-VrtBands`: work around QGIS performance limitations in displaying virtual rasters by extracting subsets of the bands in a .vrt
 - `Remove-VrtBlockSize`: work around QGIS's tendency to further degrade its performance displaying virtual rasters (see below)
+- `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 - `Convert-DiskSpd`: reformat [DiskSpd](https://github.com/microsoft/diskspd) .xml result files as longform data
 
 ### Dataset structure

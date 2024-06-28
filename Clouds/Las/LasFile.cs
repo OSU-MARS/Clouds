@@ -21,7 +21,7 @@ namespace Mars.Clouds.Las
         /// <summary>
         /// Create a <see cref="LasFile"/> by reading the .las or .laz file's header and variable length records.
         /// </summary>
-        public LasFile(LasReader reader, bool discardOverrunningVlrs, DateOnly? fallbackCreationDate)
+        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
         {
             this.BytesAfterVariableLengthRecords = [];
             this.Header = reader.ReadHeader();
@@ -34,10 +34,10 @@ namespace Mars.Clouds.Las
             }
             this.Header.Validate();
 
-            reader.ReadVariableAndExtendedVariableLengthRecords(this, discardOverrunningVlrs);
-            if (this.Header.NumberOfVariableLengthRecords != this.VariableLengthRecords.Count)
+            reader.ReadVariableAndExtendedVariableLengthRecords(this);
+            if (reader.DiscardOverrunningVlrs && (this.Header.NumberOfVariableLengthRecords != this.VariableLengthRecords.Count))
             {
-                throw new InvalidDataException(".las file header indicates " + this.Header.NumberOfVariableLengthRecords + " should be present but " + this.VariableLengthRecords.Count + " records were read.");
+                this.Header.NumberOfVariableLengthRecords = (UInt32)this.VariableLengthRecords.Count;
             }
         }
 
@@ -259,7 +259,7 @@ namespace Mars.Clouds.Las
                 {
                     this.VariableLengthRecords.RemoveAt(vlrIndex--);
                     this.Header.NumberOfVariableLengthRecords -= 1;
-                    this.Header.OffsetToPointData -= (UInt32)(VariableLengthRecord.HeaderSizeInBytes + ((GeoKeyDirectoryTagRecord)vlr).RecordLengthAfterHeader);
+                    this.Header.ShiftOffsetToPointData(-(Int64)(VariableLengthRecord.HeaderSizeInBytes + ((GeoKeyDirectoryTagRecord)vlr).RecordLengthAfterHeader));
                 }
                 else if (((vlr.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID) || (vlr.RecordID == OgcMathTransformWktRecord.LasfProjectionRecordID)) &&
                          String.Equals(vlr.UserID, LasFile.LasfProjection, StringComparison.Ordinal))
@@ -268,7 +268,7 @@ namespace Mars.Clouds.Las
                     UInt16 initialRecordLengthAfterHeader = wktRecord.RecordLengthAfterHeader;
                     wktRecord.SetSpatialReference(crs);
                     UInt16 updatedRecordLengthAfterHeader = wktRecord.RecordLengthAfterHeader;
-                    this.Header.OffsetToPointData += (UInt32)(updatedRecordLengthAfterHeader - initialRecordLengthAfterHeader);
+                    this.Header.ShiftOffsetToPointData((Int64)(updatedRecordLengthAfterHeader - initialRecordLengthAfterHeader));
                     wktRecordUpdated = true;
                 }
             }
@@ -278,7 +278,12 @@ namespace Mars.Clouds.Las
                 OgcCoordinateSystemWktRecord wktVlr = OgcCoordinateSystemWktRecord.Create(crs);
                 this.VariableLengthRecords.Add(wktVlr);
                 this.Header.NumberOfVariableLengthRecords += 1;
-                this.Header.OffsetToPointData += (UInt32)(VariableLengthRecord.HeaderSizeInBytes + wktVlr.RecordLengthAfterHeader);
+                this.Header.ShiftOffsetToPointData((Int64)(VariableLengthRecord.HeaderSizeInBytes + wktVlr.RecordLengthAfterHeader));
+            }
+
+            if (this.Header is LasHeader12 lasHeader12)
+            {
+                lasHeader12.GlobalEncoding |= GlobalEncoding.WellKnownText;
             }
         }
     }
@@ -287,8 +292,8 @@ namespace Mars.Clouds.Las
     {
         public new THeader Header { get; private init; }
 
-        public LasFile(LasReader reader, bool discardOverrunningVlrs, DateOnly? fallbackCreationDate)
-            : base(reader, discardOverrunningVlrs, fallbackCreationDate)
+        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
+            : base(reader, fallbackCreationDate)
         {
             this.Header = (THeader)base.Header;
         }

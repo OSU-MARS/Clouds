@@ -6,7 +6,6 @@ using OSGeo.OGR;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Management.Automation;
 using System.Threading;
 
@@ -48,7 +47,7 @@ namespace Mars.Clouds.Cmdlets
 
             // set point clouds' origins, coordinate systems, and source IDs
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
 
             int cloudReprojectionsInitiated = -1;
             int cloudReprojectionsCompleted = 0;
@@ -57,20 +56,19 @@ namespace Mars.Clouds.Cmdlets
                 for (int cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated))
                 {
                     // load cloud and get its current coordinate system
-                    // If cloud is missing a vertical coordinate system.
+                    // If cloud is missing a vertical coordinate system, assign a default vertical CRS.
                     string cloudPath = cloudPaths[cloudIndex];
-                    FileInfo cloudFileInfo = new(cloudPath);
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, cloudFileInfo.Length);
-                    LasFile cloud = new(reader, discardOverrunningVlrs: false, fallbackCreationDate: null);
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
+                    LasFile cloud = new(reader, fallbackCreationDate: null);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     if (cloudCrs.IsVertical() == 0)
                     {
-                        cloudCrs = SpatialReferenceExtensions.CreateCompoundCrs(cloudCrs);
+                        cloudCrs = SpatialReferenceExtensions.CreateCompoundCrs(cloudCrs, verticalCrs);
                     }
                     
                     if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs))
                     {
-                        // TODO: pass message back to caller indicating cloud was skipped
+                        // TODO: pass message back to main cmdlet thread indicating cloud was skipped
                         continue; // nothing to do as cloud is already in desired coordinate system
                     }
 

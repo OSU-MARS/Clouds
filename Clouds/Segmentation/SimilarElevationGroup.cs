@@ -14,7 +14,7 @@ namespace Mars.Clouds.Segmentation
 
         public SimilarElevationGroup(TCell height, int yIndex1, int xIndex1, TCell elevation1, int yIndex2, int xIndex2, TCell elevation2, int radiusInCells)
         {
-            this.cellsInPatch = new(2) { (xIndex1, yIndex1, elevation1), (xIndex2, yIndex2, elevation2) };
+            this.cellsInPatch = [ (xIndex1, yIndex1, elevation1), (xIndex2, yIndex2, elevation2) ];
             this.radiusFromSingleCell = radiusInCells;
 
             this.ID = -1;

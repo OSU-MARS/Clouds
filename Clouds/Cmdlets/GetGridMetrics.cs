@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using OSGeo.GDAL;
 using OSGeo.OSR;
@@ -85,8 +86,7 @@ namespace Mars.Clouds.Cmdlets
             this.WriteObject(metricsRaster);
             
             progress.Stopwatch.Stop();
-            string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesRead + " tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesRead + " tiles in " + progress.Stopwatch.ToElapsedString() + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 

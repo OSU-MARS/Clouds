@@ -224,7 +224,7 @@ namespace Mars.Clouds.UnitTests
 
             Raster<UInt16> gridCellDefinitions = this.SnapPointCloudTileToGridCells(lasTile);
             GridGeoTransform lasFileTransform = new(lasTile.GridExtent, gridCellDefinitions.Transform.CellWidth, gridCellDefinitions.Transform.CellHeight);
-            LasTileGrid lasGrid = new(lasTile.GetSpatialReference(), lasFileTransform, 1, 1, new List<LasTile>() { lasTile });
+            LasTileGrid lasGrid = new(lasTile.GetSpatialReference(), lasFileTransform, 1, 1, [ lasTile ]);
             GridMetricsPointLists abaGrid = new(gridCellDefinitions.Bands[0], lasGrid);
 
             Assert.IsTrue((gridCellDefinitions.Crs.IsSame(abaGrid.Crs, []) == 1) && SpatialReferenceExtensions.IsSameCrs(gridCellDefinitions.Crs, abaGrid.Crs));

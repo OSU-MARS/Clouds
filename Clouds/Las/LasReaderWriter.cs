@@ -8,7 +8,7 @@ namespace Mars.Clouds.Las
 {
     public class LasReaderWriter(Stream stream) : LasReader(stream)
     {
-        public const float RepairNoisePointsSpeedInGBs = 2.0F; // TODO: get benchmark values
+        public const float FindUnclassifiedNoisePointsSpeedInGBs = 2.0F; // TODO: get benchmark values
 
         public static new LasReaderWriter CreateForPointRead(string lasPath, long fileSizeInBytes)
         {

@@ -26,7 +26,7 @@ namespace Mars.Clouds.Cmdlets.Drives
             throw new NotSupportedException("Unhandled operating system " + RuntimeInformation.OSDescription + ".");
         }
 
-        public int GetPracticalThreadCount(float workloadRatePerThreadInGBs)
+        public int GetPracticalReadThreadCount(float workloadRatePerThreadInGBs)
         {
             int threads = (int)(this.GetSequentialCapabilityInGBs() / workloadRatePerThreadInGBs);
             if (this.MediaType == MediaType.HardDrive)

@@ -9,14 +9,15 @@ namespace Mars.Clouds.Las
     public class LasHeader14 : LasHeader13
     {
         public new const int HeaderSizeInBytes = 375;
+        public const int SupportedNumberOfReturns = 15;
 
         /// <summary>
         /// 
         /// </summary>
         /// <remarks>
-        /// Of type <see cref="UInt64"/> in LAS specification but functionally restricted to <see cref="Int64"/> in this implementation as C# \
-        /// streams do not support seeking to <see cref="UInt64"/> positions. This is only an issue for .las or .laz files larger than 9.2 EB 
-        /// (exabytes), which are unlikely to occur.
+        /// Of type <see cref="UInt64"/> as required by the LAS 1.4 R15 specification but functionally restricted to <see cref="Int64"/> in 
+        /// this implementation as C# streams do not support seeking to <see cref="UInt64"/> positions. This is only an issue for .las or 
+        /// .laz files larger than 9.2 EB (exabytes), which are unlikely to occur.
         /// </remarks>
         public UInt64 StartOfFirstExtendedVariableLengthRecord { get; set; }
         public UInt32 NumberOfExtendedVariableLengthRecords { get; set; }
@@ -27,7 +28,7 @@ namespace Mars.Clouds.Las
         {
             this.VersionMinor = 4;
             this.HeaderSize = LasHeader14.HeaderSizeInBytes;
-            this.NumberOfPointsByReturn = new UInt64[15];
+            this.NumberOfPointsByReturn = new UInt64[LasHeader14.SupportedNumberOfReturns];
         }
 
         public override UInt64 GetNumberOfPoints()
@@ -44,6 +45,51 @@ namespace Mars.Clouds.Las
             }
 
             throw new InvalidDataException("Number of point records (" + this.NumberOfPointRecords.ToString(",") + ") is inconsistent with legacy number of point records (" + this.LegacyNumberOfPointRecords.ToString(",") + ").");
+        }
+
+        public override UInt64[] GetNumberOfPointsByReturn()
+        {
+            return this.NumberOfPointsByReturn;
+        }
+
+        public override void SetNumberOfPointsByReturn(UInt64[] numberOfPointsByReturn)
+        {
+            if (numberOfPointsByReturn.Length > this.NumberOfPointsByReturn.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), "A maximum of " + this.NumberOfPointsByReturn.Length + " returns is supported but " + numberOfPointsByReturn.Length + " returns were passed.");
+            }
+
+            UInt64 numberOfPointRecords = 0;
+            for (int returnIndex = 0; returnIndex < this.NumberOfPointsByReturn.Length; ++returnIndex)
+            {
+                UInt64 numberOfPoints = numberOfPointsByReturn[returnIndex];
+                this.NumberOfPointsByReturn[returnIndex] = numberOfPoints;
+                numberOfPointRecords += numberOfPoints;
+            }
+
+            this.NumberOfPointRecords = numberOfPointRecords;
+
+            if ((this.PointDataRecordFormat < 6) && (numberOfPointRecords <= UInt32.MaxValue))
+            {
+                // support backwards compatibility as permitted by LAS 1.4 R15 §2.3
+                this.LegacyNumberOfPointRecords = (UInt32)numberOfPointRecords;
+            }
+            else
+            {
+                this.LegacyNumberOfPointRecords = 0;
+            }
+
+            if (this.NumberOfExtendedVariableLengthRecords > 0)
+            {
+                this.StartOfFirstExtendedVariableLengthRecord = this.OffsetToPointData + this.PointDataRecordLength * this.NumberOfPointRecords;
+            }
+            // otherwise leave this.StartOfFirstExtendedVariableLengthRecord at zero
+        }
+
+        public override void ShiftOffsetToPointData(Int64 shift)
+        {
+            base.ShiftOffsetToPointData(shift);
+            this.StartOfFirstExtendedVariableLengthRecord = (UInt64)((Int64)this.StartOfFirstExtendedVariableLengthRecord + shift);
         }
 
         public override void Validate()

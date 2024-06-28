@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DocumentFormat.OpenXml.Drawing;
+using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
@@ -9,10 +10,115 @@ namespace Mars.Clouds.Las
     public class LasWriter : LasStream
     {
         public const float RegisterSpeedInGBs = 2.0F; // approximate rate per thread (could definitely be profiled more accurately), 5950X
+        public const float RemoveNoisePointSpeedInGBs = 2.0F; // TODO: get benchmark values
 
         public LasWriter(Stream stream)
             : base(stream)
         {
+        }
+
+        /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
+        /// <returns>Number of remaining points by return.</returns>
+        public LasFilteringResult CopyNonNoisePoints(LasReader reader, LasFile lasFile)
+        {
+            LasHeader10 lasHeader = lasFile.Header;
+            if (reader.BaseStream.Position != lasHeader.OffsetToPointData)
+            {
+                throw new ArgumentOutOfRangeException(nameof(reader), "Reader is at offset " + reader.BaseStream.Position + " rather than at the " + lasHeader.OffsetToPointData + " byte offset to the start of point data.");
+            }
+            if (this.BaseStream.Position != lasHeader.OffsetToPointData)
+            {
+                throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasHeader.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+            }
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
+            int returnNumberMask = pointFormat < 6 ? 0x07 : 0x0f;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+
+            Span<UInt64> numberOfPointsRemovedByReturn = stackalloc UInt64[LasHeader14.SupportedNumberOfReturns];
+            Span<byte> pointBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * pointRecordLength]; // for now, assume small enough to stackalloc
+            float zMin = Single.MaxValue;
+            float zMax = Single.MinValue;
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
+            {
+                UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
+                int bytesToRead = pointsToRead * pointRecordLength;
+                reader.BaseStream.ReadExactly(pointBuffer[..bytesToRead]);
+
+                int noiseOrWithheldPoints = 0;
+                int pointMask = 0;
+                for (int batchOffset = 0, pointFlag = 0x1; batchOffset < bytesToRead; batchOffset += pointRecordLength, pointFlag <<= 1)
+                {
+                    ReadOnlySpan<byte> pointBytes = pointBuffer[batchOffset..];
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                    if (notNoiseOrWithheld == false)
+                    {
+                        int returnNumber = pointBytes[14] & returnNumberMask;
+                        ++numberOfPointsRemovedByReturn[returnNumber];
+
+                        pointMask |= pointFlag;
+                        ++noiseOrWithheldPoints;
+                    }
+                    else
+                    {
+                        float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                        if (z < zMin)
+                        {
+                            zMin = z;
+                        }
+                        if (z > zMax)
+                        {
+                            zMax = z;
+                        }
+                    }
+                }
+
+                int bytesToWrite = bytesToRead;
+                if (noiseOrWithheldPoints > 0)
+                {
+                    bytesToWrite -= noiseOrWithheldPoints * pointRecordLength;
+                    if (bytesToWrite > 0)
+                    {
+                        int destinationOffset = 0;
+                        for (int sourceOffset = 0, pointFlag = 0x1; sourceOffset < bytesToRead; sourceOffset += pointRecordLength, pointFlag <<= 1)
+                        {
+                            if ((pointMask & pointFlag) != 0)
+                            {
+                                // skip point
+                                continue;
+                            }
+
+                            if (destinationOffset != sourceOffset)
+                            {
+                                // point is retained but needs to be shifted to an earlier position in the buffer
+                                pointBuffer.Slice(sourceOffset, pointRecordLength).CopyTo(pointBuffer[destinationOffset..]);
+                            }
+                            // no bytes to move if points have been skipped yet
+                            // Could use a more complex approach which tries to identify larger blocks to move within the buffer but, as most
+                            // points are retained, it's likely any performance gain would be negligible.
+
+                            destinationOffset += pointRecordLength;
+                        }
+                    }
+                }
+
+                if (bytesToWrite > 0)
+                {
+                    this.BaseStream.Write(pointBuffer[..bytesToWrite]);
+                }
+            }
+
+            Debug.Assert(zMax >= zMin);
+            return new(lasFile.Header.GetNumberOfPointsByReturn(), numberOfPointsRemovedByReturn)
+            {
+                ZMax = zMax,
+                ZMin = zMin
+            };
         }
 
         /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
@@ -43,18 +149,24 @@ namespace Mars.Clouds.Las
 
         public void WriteExtendedVariableLengthRecords(LasFile lasFile)
         {
-            UInt32 extendedVariableLengthRecords = 0; // extended variable length records were added in LAS 1.4
+            // extended variable length records were added in LAS 1.4
             if (lasFile.Header is LasHeader14 lasHeader14)
             {
-                extendedVariableLengthRecords = lasHeader14.NumberOfExtendedVariableLengthRecords;
-                if (this.BaseStream.Position != (long)lasHeader14.StartOfFirstExtendedVariableLengthRecord)
+                UInt32 extendedVariableLengthRecords = lasHeader14.NumberOfExtendedVariableLengthRecords;
+                if ((extendedVariableLengthRecords > 0) && (this.BaseStream.Position != (long)lasHeader14.StartOfFirstExtendedVariableLengthRecord))
                 {
                     throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated extended variable length record offset (" + lasHeader14.StartOfFirstExtendedVariableLengthRecord + " bytes). Extended variable length records should begin immediately after the points.");
                 }
+                // if there are no extended variable length records then StartOfFirstExtendedVariableLengthRecord may be zero
+
+                if (extendedVariableLengthRecords != lasFile.ExtendedVariableLengthRecords.Count)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + extendedVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present. This may be because the header's number of extended variable length records is set incorrectly or because the header uses a LAS version prior to 1.4.");
+                }
             }
-            if (extendedVariableLengthRecords != lasFile.ExtendedVariableLengthRecords.Count)
+            else if (lasFile.ExtendedVariableLengthRecords.Count > 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + extendedVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present. This may be because the header's number of extended variable length records is set incorrectly or because the header uses a LAS version prior to 1.4.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), "LAS file version " + lasFile.Header.VersionMajor + "." + lasFile.Header.VersionMinor + " does not support extended variable length records (EVLRs) but the file has " + lasFile.ExtendedVariableLengthRecords.Count + " EVLRs.");
             }
 
             for (int evlrIndex = 0; evlrIndex < lasFile.ExtendedVariableLengthRecords.Count; ++evlrIndex)
@@ -73,13 +185,11 @@ namespace Mars.Clouds.Las
             }
         }
 
+        /// <remarks>
+        /// If needed, seeks underlying stream to start of file.
+        /// </remarks>
         public void WriteHeader(LasFile lasFile)
         {
-            if (this.BaseStream.Position != 0)
-            {
-                throw new InvalidOperationException(".las writer must be positioned at the beginning of a .las file stream to write a header. Writer is currently at position " + this.BaseStream.Position + ".");
-            }
-
             byte versionMinor = lasFile.Header.VersionMinor;
             if (versionMinor < 2)
             {
@@ -136,12 +246,12 @@ namespace Mars.Clouds.Las
                 if (versionMinor > 3)
                 {
                     LasHeader14 lasHeader14 = (LasHeader14)lasHeader;
-                    BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[8..], lasHeader14.StartOfFirstExtendedVariableLengthRecord);
-                    BinaryPrimitives.WriteUInt32LittleEndian(headerBytes[16..], lasHeader14.NumberOfExtendedVariableLengthRecords);
-                    BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[20..], lasHeader14.NumberOfPointRecords);
+                    BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[235..], lasHeader14.StartOfFirstExtendedVariableLengthRecord);
+                    BinaryPrimitives.WriteUInt32LittleEndian(headerBytes[243..], lasHeader14.NumberOfExtendedVariableLengthRecords);
+                    BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[247..], lasHeader14.NumberOfPointRecords);
                     for (int returnIndex = 0; returnIndex < lasHeader14.NumberOfPointsByReturn.Length; ++returnIndex)
                     {
-                        BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[(28 + 8 * returnIndex)..], lasHeader14.NumberOfPointsByReturn[returnIndex]);
+                        BinaryPrimitives.WriteUInt64LittleEndian(headerBytes[(255 + 8 * returnIndex)..], lasHeader14.NumberOfPointsByReturn[returnIndex]);
                     }
                 }
             }
@@ -275,7 +385,7 @@ namespace Mars.Clouds.Las
         {
             if (lasFile.Header.NumberOfVariableLengthRecords != lasFile.VariableLengthRecords.Count)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + lasFile.Header.NumberOfVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + lasFile.Header.NumberOfVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + (lasFile.VariableLengthRecords.Count > 1 ? " records are present." : " record is present."));
             }
             if (this.BaseStream.Position != lasFile.Header.HeaderSize)
             {

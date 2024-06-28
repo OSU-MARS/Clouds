@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using DocumentFormat.OpenXml.Bibliography;
+using Mars.Clouds.Cmdlets.Drives;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -85,8 +86,12 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            // check for input files
+            // check inputs
             List<string> cloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            if (cloudPaths.Count < 1)
+            {
+                throw new ParameterOutOfRangeException(nameof(this.Las), "-" + nameof(this.Las) + " = '" + String.Join(", ", this.Las) + "' does not match any existing point clouds.");
+            }
             if ((this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
             {
                 throw new ParameterOutOfRangeException(nameof(this.RotationXY), "-" + nameof(this.RotationXY) + " must have either single value or as many values as there are clouds to register. There are " + this.RotationXY.Length + " values in -" + nameof(this.RotationXY) + " and " + cloudPaths.Count + " clouds.");
@@ -121,7 +126,7 @@ namespace Mars.Clouds.Cmdlets
 
             // set point clouds' origins, coordinate systems, and source IDs
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
 
             int cloudRegistrationsInitiated = -1;
             int cloudRegistrationsCompleted = 0;
@@ -130,9 +135,8 @@ namespace Mars.Clouds.Cmdlets
                 for (int cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated))
                 {
                     string cloudPath = cloudPaths[cloudIndex];
-                    FileInfo cloudFileInfo = new(cloudPath);
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, cloudFileInfo.Length);
-                    LasFile cloud = new(reader, discardOverrunningVlrs: false, this.FallbackDate); // leaves reader positioned at start of points
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
+                    LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
 
                     // update cloud extents
                     double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
@@ -159,6 +163,13 @@ namespace Mars.Clouds.Cmdlets
 
                     writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
+
+                    // debatable: should synthetic return numbers flag be set for LAS 1.3+ files if return numbers are, in fact, repaired?
+                    // if (this.RepairReturn && returnNumbersRepaired)
+                    // {
+                    //   cloud.Header13.GlobalEncoding |= GlobalEncoding.SyntheticReturnNumbers
+                    // }
+                    // writer.WriteHeader(cloud);
 
                     Interlocked.Increment(ref cloudRegistrationsCompleted);
                     if (this.Stopping)

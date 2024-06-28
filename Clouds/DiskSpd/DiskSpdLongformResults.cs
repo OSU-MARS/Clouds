@@ -67,7 +67,6 @@ namespace Mars.Clouds.DiskSpd
                     for (int targetIndex = 0; targetIndex < timeSpan.Targets.Count; ++targetIndex)
                     {
                         ProfileTarget target = timeSpan.Targets[targetIndex];
-                        string path = target.Path;
                         targetByPath.Add(target.Path, target);
                     }
                 }

@@ -11,14 +11,12 @@ namespace Mars.Clouds.GdalExtensions
     {
         private readonly List<string> bandNames;
         private readonly List<RasterBandStatistics> bandStatistics;
-        private readonly List<string> sharedStringBandNames;
         private readonly List<string> tileNames;
 
         public TileStatisticsTable()
         {
             this.bandNames = [];
             this.bandStatistics = [];
-            this.sharedStringBandNames = [];
             this.tileNames = [];
         }
 

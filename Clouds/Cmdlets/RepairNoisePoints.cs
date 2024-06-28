@@ -40,8 +40,13 @@ namespace Mars.Clouds.Cmdlets
         {
             string dtmTilePath = LasTilesCmdlet.GetRasterTilePath(this.Dtm, Tile.GetName(lasTile.FilePath));
             RasterBand<float> dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
+
+            // marks points as noise but (currently) does not offer the option of removing them from the file
+            // Since no points are removed the header's bounding box does not need to be updated. If needed, an integrated repair and
+            // remove flow can be created.
             using LasReaderWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
-            return pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);
+            int pointsReclassified = pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);
+            return pointsReclassified;
         }
 
         protected override void ProcessRecord()
@@ -65,7 +70,7 @@ namespace Mars.Clouds.Cmdlets
 
             // spin up point cloud read and tile worker threads
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalThreadCount(LasReaderWriter.RepairNoisePointsSpeedInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs), this.MaxThreads);
 
             RepairNoiseReadWrite tileChecks = new();
             Task[] checkTasks = new Task[Int32.Min(readThreads, lasGrid.NonNullCells)];
@@ -77,8 +82,7 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = this.WaitForCheckTasks(cmdletName, checkTasks, lasGrid, tileChecks);
 
             progress.Stopwatch.Stop();
-            string elapsedTimeFormat = progress.Stopwatch.Elapsed.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.Elapsed.ToString(elapsedTimeFormat) + ".");
+            this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
         }
 

@@ -10,6 +10,9 @@ namespace Mars.Clouds.Cmdlets
     {
         protected static TimeSpan ProgressUpdateInterval { get; private set; }
 
+        [Parameter(HelpMessage = "Whether or not to ignore cases where a .las file's header indicates more variable length records (VLRs) than fit between the header and point data. Default is false but this is a common issue with .las files, particularly a two byte fragment between the last VLR and the start of the points.")]
+        public SwitchParameter DiscardOverrunningVlrs { get; set; }
+
         [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Las { get; set; }
@@ -30,6 +33,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected LasTilesCmdlet() 
         {
+            this.DiscardOverrunningVlrs = false;
             this.Las = [];
             this.MaxPointTiles = Int32.Max(25, Environment.ProcessorCount / 2);
             this.Snap = false;
@@ -56,7 +60,10 @@ namespace Mars.Clouds.Cmdlets
                 // 2-3x if overlarge buffers result in unnecessary prefetching.
                 string lasTilePath = lasTilePaths[tileIndex];
                 using FileStream stream = new(lasTilePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
-                using LasReader headerVlrReader = new(stream);
+                using LasReader headerVlrReader = new(stream)
+                {
+                    DiscardOverrunningVlrs = this.DiscardOverrunningVlrs
+                };
                 lasTiles.Add(new(lasTilePath, headerVlrReader, fallbackCreationDate: null));
             }
 

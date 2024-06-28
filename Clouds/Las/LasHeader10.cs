@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 
 namespace Mars.Clouds.Las
 {
@@ -189,6 +190,17 @@ namespace Mars.Clouds.Las
             return this.LegacyNumberOfPointRecords;
         }
 
+        public virtual UInt64[] GetNumberOfPointsByReturn()
+        {
+            UInt64[] numberOfPointsByReturn = new UInt64[this.LegacyNumberOfPointsByReturn.Length];
+            for (int returnIndex = 0; returnIndex < this.LegacyNumberOfPointsByReturn.Length; ++returnIndex)
+            {
+                numberOfPointsByReturn[returnIndex] = this.LegacyNumberOfPointsByReturn[returnIndex];
+            }
+
+            return numberOfPointsByReturn;
+        }
+
         public byte GetReturnNumberMask()
         {
             if (this.PointDataRecordFormat <= 5)
@@ -227,6 +239,32 @@ namespace Mars.Clouds.Las
         public bool PointsHaveRgb()
         {
             return this.GetRgbOffset() != -1;
+        }
+
+        public virtual void SetNumberOfPointsByReturn(UInt64[] numberOfPointsByReturn)
+        {
+            UInt32 numberOfPointRecords = 0;
+            for (int returnIndex = 0; returnIndex < this.LegacyNumberOfPointsByReturn.Length; ++returnIndex)
+            {
+                UInt32 numberOfPoints = (UInt32)numberOfPointsByReturn[returnIndex];
+
+                this.LegacyNumberOfPointsByReturn[returnIndex] = numberOfPoints;
+                numberOfPointRecords += numberOfPoints;
+            }
+            for (int returnIndex = this.LegacyNumberOfPointsByReturn.Length; returnIndex < numberOfPointsByReturn.Length; ++returnIndex)
+            {
+                if (numberOfPointsByReturn[returnIndex] != 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), "Return " + (returnIndex + 1) + " has " + numberOfPointsByReturn[returnIndex] + " points but a maximum of " + this.LegacyNumberOfPointsByReturn.Length + " returns is supported.");
+                }
+            }
+
+            this.LegacyNumberOfPointRecords = numberOfPointRecords;
+        }
+
+        public virtual void ShiftOffsetToPointData(Int64 shift)
+        {
+            this.OffsetToPointData = (UInt32)(this.OffsetToPointData + shift);
         }
 
         public bool TryRepairFileCreationDate(DateOnly fallbackFileCreationDate)

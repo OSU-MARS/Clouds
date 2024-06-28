@@ -74,8 +74,12 @@ for($index = 0; $index -lt $megaPoints.Length; ++$index)
 $megaPoints | Measure -AllStats
 
 
-## outlier detection
-Repair-NoisePoints -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles testing\s03780w06390.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM"
+## point management
+# mark outliers as high or low noise
+Repair-NoisePoints -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles testing\s03780w06390.las" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Verbose
+# remove noise and withheld points
+Remove-Points -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\interleave 1\s03480w06540.las" -Filtered "F:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR" -Verbose
+
 
 ## georeferencing
 # handheld cloud registration and DSM generation

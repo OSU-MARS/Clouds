@@ -42,21 +42,13 @@ namespace Mars.Clouds.GdalExtensions
             return SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
         }
 
-        public static SpatialReference CreateCompoundCrs(SpatialReference horizontalCrs)
+        public static SpatialReference CreateCompoundCrs(SpatialReference horizontalCrs, SpatialReference verticalCrs)
         {
-            double linearUnits = horizontalCrs.GetLinearUnits();
-            SpatialReference verticalCrs = new(String.Empty);
-            if (linearUnits == 1.0)
+            double horizontalLinearUnits = horizontalCrs.GetLinearUnits();
+            double verticalLinearUnits = verticalCrs.GetLinearUnits();
+            if (horizontalLinearUnits != verticalLinearUnits)
             {
-                verticalCrs.ImportFromEpsg(Constant.Epsg.Navd88m);
-            }
-            else if (linearUnits == 0.3048)
-            {
-                verticalCrs.ImportFromEpsg(Constant.Epsg.Navd88ft);
-            }
-            else
-            {
-                throw new NotSupportedException("Unhandled linear units " + linearUnits + " for horizontal CRS " + horizontalCrs.GetName() + ".");
+                throw new NotSupportedException("Horizontal linear units of " + horizontalLinearUnits + " m for " + horizontalCrs.GetName() + " do not match vertical units of " + verticalLinearUnits + " m for " + verticalCrs.GetName() + ".");
             }
 
             return SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
