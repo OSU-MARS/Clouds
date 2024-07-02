@@ -9,6 +9,8 @@ namespace Mars.Clouds.Cmdlets
     {
         protected override void ProcessRecord()
         {
+            base.ValidateParameters(minWorkerThreads: 0);
+
             LasTileGrid lasTileGrid = this.ReadLasHeadersAndFormGrid("Get-LasInfo", requiredEpsg: null);
             List<LasTile> tiles = new(lasTileGrid.NonNullCells);
             for (int tileIndex = 0; tileIndex < lasTileGrid.Cells; ++tileIndex)

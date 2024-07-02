@@ -90,7 +90,7 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord readWriteProgress = new(cmdletName, tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid));
             this.WriteProgress(readWriteProgress);
 
-            while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
+            while (Task.WaitAll(tasks, Constant.DefaultProgressInterval) == false)
             {
                 // unlike Task.WaitAll(Task[]), Task.WaitAll(Task[], TimeSpan) does not unblock and throw the exception if any task faults
                 // If one task has faulted then cancellation is therefore desirable to stop the other tasks. If tile read faults metrics

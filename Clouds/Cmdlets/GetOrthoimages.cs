@@ -21,22 +21,23 @@ namespace Mars.Clouds.Cmdlets
 
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to write image to as a GeoTIFF or 2,3) path to a directory to write image tiles to.")]
         [ValidateNotNullOrEmpty]
-        public string? Image { get; set; }
+        public string Image { get; set; }
 
         public GetOrthoimages() 
         {
             this.BitDepth = 16;
             this.CellSize = -1.0;
+            this.Image = String.Empty;
             this.MaxThreads = 8; // for now, default to a single read thread and seven write threads
         }
 
         protected override void ProcessRecord() 
         {
+            base.ValidateParameters(minWorkerThreads: 0);
             if ((this.BitDepth != 16) && (this.BitDepth != 32) && (this.BitDepth != 64))
             {
                 throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per channel.");
             }
-            Debug.Assert(this.Image != null);
             if (this.MaxThreads < 8)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least eight.");

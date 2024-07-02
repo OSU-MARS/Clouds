@@ -51,6 +51,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
+            base.ValidateParameters(minWorkerThreads: 0);
             if (this.MaxThreads > this.MaxPointTiles)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxPointTiles), "-" + nameof(this.MaxPointTiles) + " must be greater than or equal to the maximum number of threads (" + this.MaxThreads + ") as each thread requires a tile to work with.");
@@ -70,7 +71,7 @@ namespace Mars.Clouds.Cmdlets
 
             // spin up point cloud read and tile worker threads
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs), this.MaxThreads);
+            int readThreads = this.GetLasTileReadThreadCount(LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs, minWorkerThreadsPerReadThread: 0);
 
             RepairNoiseReadWrite tileChecks = new();
             Task[] checkTasks = new Task[Int32.Min(readThreads, lasGrid.NonNullCells)];
@@ -114,7 +115,7 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord tileCheckProgress = new(cmdletName, "Checking tiles: " + tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
             this.WriteProgress(tileCheckProgress);
 
-            while (Task.WaitAll(checkTasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
+            while (Task.WaitAll(checkTasks, Constant.DefaultProgressInterval) == false)
             {
                 // see remarks in LasTilesToTilesCmdlet.WaitForTasks()
                 for (int taskIndex = 0; taskIndex < checkTasks.Length; ++taskIndex)

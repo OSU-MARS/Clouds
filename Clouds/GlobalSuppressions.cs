@@ -5,7 +5,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.Drives.DriveCapabilitesWindows.GetPathRoots(System.Collections.Generic.List{System.String})~System.Collections.Generic.List{System.String}")]
+[assembly: SuppressMessage("Maintainability", "CA1507:Use nameof to express symbol names", Justification = "CA1507 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.Drives.PhysicalDisk.#ctor(System.Management.ManagementBaseObject)")]
+[assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.Drives.DriveCapabilitiesWindows.GetPathRoots(System.Collections.Generic.List{System.String})~System.Collections.Generic.List{System.String}")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.AssembleVrts~Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CreateTileStatisticsTable(Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics)~Mars.Clouds.GdalExtensions.TileStatisticsTable")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.ProcessRecord")]
@@ -51,3 +52,4 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "readability, debuggability", Scope = "type", Target = "~T:Mars.Clouds.Segmentation.Treetops")]
 [assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetOrthoimages.SetCellSize(Mars.Clouds.Las.LasTileGrid)~System.ValueTuple{System.Int32,System.Int32}")]
 [assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CheckBands(Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics)~System.Int32")]
+[assembly: SuppressMessage("Usage", "CA2208:Instantiate argument exceptions correctly", Justification = "CA2208 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.LasTilesCmdlet.ValidateParameters(System.Int32)")]
