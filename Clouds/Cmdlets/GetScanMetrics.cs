@@ -1,9 +1,8 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using OSGeo.GDAL;
-using System;
-using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading.Tasks;
 
@@ -12,31 +11,26 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "ScanMetrics")]
     public class GetScanMetrics : LasTilesToRasterCmdlet
     {
-        // TODO: LasTileCmdlet.MaxTiles is unused
-
-        public GetScanMetrics()
-        {
-            this.MaxThreads = 1;
-        }
-
         protected override void ProcessRecord()
         {
-            Debug.Assert(String.IsNullOrEmpty(this.Cells) == false);
+            this.ValidateParameters(minWorkerThreads: 0);
+            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
             Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
 
-            string cmdletName = "Get-GridMetrics";
+            const string cmdletName = "Get-ScanMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, gridEpsg);
+
+            ScanMetricsRaster scanMetrics = new(cellDefinitions); // metrics grid inherits cellDefinitions's CRS, grid CRS can differ from LAS tiles' CRS
 
             TileRead tileRead = new();
-            ScanMetricsRaster scanMetrics = new(cellDefinitions);
             Task readPoints = Task.Run(() => this.ReadTiles(lasGrid, scanMetrics, tileRead), tileRead.CancellationTokenSource.Token);
 
             TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...");
             this.WriteProgress(scanMetricsProgress);
-            while (readPoints.Wait(LasTilesCmdlet.ProgressUpdateInterval) == false)
+            while (readPoints.Wait(Constant.DefaultProgressInterval) == false)
             {
                 scanMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...";
                 scanMetricsProgress.Update(tileRead.TilesRead, lasGrid.NonNullCells);

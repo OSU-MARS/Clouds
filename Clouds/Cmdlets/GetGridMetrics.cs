@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using OSGeo.GDAL;
@@ -6,7 +7,6 @@ using OSGeo.OSR;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading.Tasks;
 
@@ -23,12 +23,11 @@ namespace Mars.Clouds.Cmdlets
     public class GetGridMetrics : LasTilesToRasterCmdlet
     {
         [Parameter(HelpMessage = "Name of band in -Cells to use in defining grid cells. Default is the first band.")]
-        [ValidateNotNullOrWhiteSpace]
         public string? CellBand { get; set; }
 
         [Parameter(Mandatory = true, HelpMessage = "1) path to a single digital terrain model (DTM) raster to estimate DSM height above ground from or 2,3) path to a directory containing DTM tiles whose file names match the DSM tiles. Each DSM must be a  single band, single precision floating point raster whose band contains surface heights in its coordinate reference system's units.")]
         [ValidateNotNullOrWhiteSpace]
-        public string? Dtm { get; set; }
+        public string Dtm { get; set; }
 
         [Parameter(HelpMessage = "Name of DTM band to use in calculating mean ground elevations. Default is null, which accepts any single band raster.")]
         public string? DtmBand { get; set; }
@@ -40,7 +39,7 @@ namespace Mars.Clouds.Cmdlets
         public GetGridMetrics()
         {
             this.CellBand = null;
-            // this.Dtm is mandatory
+            this.Dtm = String.Empty;
             this.DtmBand = null;
             // leave this.MaxThreads at default for DTM read
             this.Settings = new();
@@ -48,18 +47,21 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            Debug.Assert((String.IsNullOrEmpty(this.Cells) == false) && (String.IsNullOrEmpty(this.Dtm) == false));
+            this.ValidateParameters(minWorkerThreads: 1);
             if (this.MaxThreads < 2)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
             }
 
+            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
+
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
             Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
-            string cmdletName = "Get-GridMetrics";
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
+            const string cmdletName = "Get-GridMetrics";
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, gridEpsg);
+
             VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm, readData: true);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
@@ -67,26 +69,46 @@ namespace Mars.Clouds.Cmdlets
             }
 
             RasterBand cellMask = cellDefinitions.GetBand(this.CellBand);
-            GridMetricsPointLists metricsGrid = new(cellMask, lasGrid); // convert band number from ones based numbering to zero based indexing
-            GridMetricsRaster metricsRaster = new(metricsGrid, this.Settings);
+            GridMetricsPointLists gridMetrics = new(cellMask, lasGrid); // metrics grid inherits cellDefinitions's CRS, grid CRS can differ from LAS tiles' CRS
+            GridMetricsRaster metricsRaster = new(gridMetrics, this.Settings);
 
-            MetricsTileRead metricsRead = new(dtm, gridEpsg, metricsGrid.NonNullCells, this.MaxPointTiles);
-            Task[] gridMetricsTasks = new Task[2];
-            int readThreads = gridMetricsTasks.Length / 2;
+            MetricsTileRead metricsTileRead = new(dtm, gridEpsg, gridMetrics.NonNullCells, this.MaxPointTiles);
+            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToGridSpeedInGBs, minWorkerThreadsPerReadThread: 1);
+            Task[] gridMetricsTasks = new Task[2]; // not currently thread safe so limit ot single thread, default to one calculate thread per read thread
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {
-                gridMetricsTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, metricsGrid, metricsRead), metricsRead.CancellationTokenSource.Token);
+                gridMetricsTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, gridMetrics, metricsTileRead), metricsTileRead.CancellationTokenSource.Token);
             }
             for (int calculateThread = readThreads; calculateThread < gridMetricsTasks.Length; ++calculateThread)
             {
-                gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsRead), metricsRead.CancellationTokenSource.Token);
+                gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsTileRead), metricsTileRead.CancellationTokenSource.Token);
             }
 
-            TimedProgressRecord progress = this.WaitForTasks("Get-GridMetrics", gridMetricsTasks, lasGrid, metricsRead);
+            TimedProgressRecord gridMetricsProgress = new(cmdletName, "Calculating metrics: " + metricsTileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + metricsTileRead.RasterCells.ToString("#,0") + " cells (" + metricsTileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
+            this.WriteProgress(gridMetricsProgress);
+
+            while (Task.WaitAll(gridMetricsTasks, Constant.DefaultProgressInterval) == false)
+            {
+                // see remarks in LasTilesToTilesCmdlet.WaitForTasks()
+                for (int taskIndex = 0; taskIndex < gridMetricsTasks.Length; ++taskIndex)
+                {
+                    Task task = gridMetricsTasks[taskIndex];
+                    if (task.IsFaulted)
+                    {
+                        metricsTileRead.CancellationTokenSource.Cancel();
+                        throw task.Exception;
+                    }
+                }
+
+                gridMetricsProgress.StatusDescription = "Calculating metrics: " + metricsTileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + metricsTileRead.RasterCells.ToString("#,0") + " cells (" + metricsTileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles)...";
+                gridMetricsProgress.Update(metricsTileRead.RasterCellsCompleted, metricsTileRead.RasterCells);
+                this.WriteProgress(gridMetricsProgress);
+            }
+
             this.WriteObject(metricsRaster);
-            
-            progress.Stopwatch.Stop();
-            this.WriteVerbose("Calculated metrics for " + metricsRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsRead.TilesRead + " tiles in " + progress.Stopwatch.ToElapsedString() + ": " + (metricsRead.RasterCellsCompleted / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
+
+            gridMetricsProgress.Stopwatch.Stop();
+            this.WriteVerbose("Calculated metrics for " + metricsTileRead.RasterCellsCompleted.ToString("n0") + " cells from " + metricsTileRead.TilesRead + " tiles in " + gridMetricsProgress.Stopwatch.ToElapsedString() + ": " + (metricsTileRead.RasterCellsCompleted / gridMetricsProgress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " cells/s.");
             base.ProcessRecord();
         }
 
@@ -184,19 +206,23 @@ namespace Mars.Clouds.Cmdlets
             }
         }
 
-        private class MetricsTileRead : TileReadToRaster
+        private class MetricsTileRead : TileRead
         {
             public SpatialReference Crs { get; private init; }
             public VirtualRaster<Raster<float>> DtmTiles { get; private init; }
             public BlockingCollection<List<PointListZirnc>> FullyPopulatedCells { get; private init; }
 
+            public int RasterCells { get; private init; }
+            public int RasterCellsCompleted { get; set; }
+
             public MetricsTileRead(VirtualRaster<Raster<float>> dtmTiles, int gridEpsg, int metricsCells, int maxSimultaneouslyLoadedTiles) 
-                : base(metricsCells)
             {
                 this.Crs = new(null);
                 this.Crs.ImportFromEpsg(gridEpsg);
                 this.DtmTiles = dtmTiles;
                 this.FullyPopulatedCells = new(maxSimultaneouslyLoadedTiles);
+                this.RasterCells = metricsCells;
+                this.RasterCellsCompleted = 0;
             }
         }
     }

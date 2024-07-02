@@ -34,10 +34,6 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(0.0F, 500.0F)] // arbitrary upper bound
         public float LayerSeparation { get; set; }
 
-        [Parameter(HelpMessage = "Number of threads, out of -MaxThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
-        [ValidateRange(1, 32)] // arbitrary upper bound
-        public int ReadThreads { get; set; }
-
         public GetDsm()
         {
             this.Dsm = String.Empty;
@@ -45,7 +41,6 @@ namespace Mars.Clouds.Cmdlets
             this.DtmBand = null;
             this.LayerSeparation = -1.0F;
             // leave this.MaxThreads at default
-            this.ReadThreads = -1;
         }
 
         private void CreateAndWriteTiles(DsmReadCreateWrite dsmReadCreateWrite)
@@ -159,6 +154,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
+            base.ValidateParameters(minWorkerThreads: 1);
             if (this.MaxThreads < 2)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
@@ -167,19 +163,17 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxPointTiles), "-" + nameof(this.MaxPointTiles) + " must be greater than or equal to the maximum number of threads (" + this.MaxThreads + ") as each thread requires a tile to work with.");
             }
-            if (this.ReadThreads >= this.MaxThreads)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.ReadThreads), "-" + nameof(this.ReadThreads) + " (" + this.ReadThreads + " threads) must be less than -" + nameof(this.MaxThreads) + " (" + this.MaxThreads + " threads) in order for at least one worker thread to process the tiles being read.");
-            }
             if (Fma.IsSupported == false)
             {
                 throw new NotSupportedException("Generation of a canopy maxima model requires FMA instructions.");
             }
 
+            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
+
             string cmdletName = "Get-Dsm";
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
             bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, nameof(this.Dsm), dsmPathIsDirectory);
 
             if (this.LayerSeparation < 0.0F)
             {
@@ -203,12 +197,7 @@ namespace Mars.Clouds.Cmdlets
             //  ~1.7 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.49 tiles/s (153 tiles in 5:13), tupled lists in PointListGridZs, initial capacity 16 points
             //  ~1.1 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.41 tiles/s (153 tiles in 6:21), z + point source IDs lists in PointListGridZs, initial capacity 16 points
             //   250 MB/s read from 3.5 inch hard drive @ 1 read thread -> ~64 GB system memory used, one, maybe two worker threads
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = this.ReadThreads;
-            if (this.ReadThreads == -1)
-            {
-                readThreads = driveCapabilities.MediaType == MediaType.HardDrive ? driveCapabilities.NumberOfDataCopies : 1;
-            }
+            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToXyzcsSpeedInGBs, minWorkerThreadsPerReadThread: 1);
 
             // upper bound on workers is set by -MaxThreads and available memory
             // TODO: estimate memory requirements from point tiles (also sample DTM resolution?)
@@ -217,7 +206,7 @@ namespace Mars.Clouds.Cmdlets
             // minimum bound on workers is at least two, but prefer a minimum of two for margin and enough to fully utilize the read threads
             // Assumption read and processing bandwidths scale similarly across different hardware configs and therefore that the ratio between
             // read and worker threads is fairly stable.
-            float readBandwidthInGBs = Single.Min(LasReader.ReadPointsToXyzcsSpeedInGBs * readThreads, driveCapabilities.GetSequentialCapabilityInGBs());
+            float readBandwidthInGBs = LasReader.ReadPointsToXyzcsSpeedInGBs * readThreads;
             int preferredWorkerThreadsAsymptotic = Int32.Min(maxWorkerThreads, Int32.Max(2, (int)(readBandwidthInGBs / 0.2F + 0.5F)));
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
             int preferredWorkerThreadsLimitedTiles = Int32.Min(maxWorkerThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles

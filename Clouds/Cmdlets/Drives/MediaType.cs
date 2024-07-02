@@ -2,7 +2,7 @@
 
 namespace Mars.Clouds.Cmdlets.Drives
 {
-    internal enum MediaType : UInt16
+    public enum MediaType : UInt16
     {
         Unspecified = 0,
         HardDrive = 3,

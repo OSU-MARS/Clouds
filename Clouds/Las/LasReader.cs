@@ -17,6 +17,7 @@ namespace Mars.Clouds.Las
         // 8, 16, 32           2.2-2.4
         public const int ReadExactSizeInPoints = 16; // might average slightly faster than 8 or 32
 
+        public const float ReadPointsToGridSpeedInGBs = 0.67F; // TODO: update profile
         public const float ReadPointsToXyzcsSpeedInGBs = 2.2F; // 5950X
 
         public bool DiscardOverrunningVlrs { get; set; }
@@ -25,6 +26,17 @@ namespace Mars.Clouds.Las
             : base(stream)
         {
             this.DiscardOverrunningVlrs = false;
+        }
+
+        public static LasReader CreateForHeaderAndVlrRead(string lasPath, bool discardOverrunningVlrs)
+        {
+            using FileStream stream = new(lasPath, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
+            LasReader reader = new(stream)
+            {
+                DiscardOverrunningVlrs = discardOverrunningVlrs
+            };
+
+            return reader;
         }
 
         public static LasReader CreateForPointRead(string lasPath)

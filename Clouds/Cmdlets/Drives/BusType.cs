@@ -2,7 +2,7 @@
 
 namespace Mars.Clouds.Cmdlets.Drives
 {
-    internal enum BusType : UInt16
+    public enum BusType : UInt16
     {
         Unknown = 0,
         SCSI = 1,

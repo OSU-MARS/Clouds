@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using System;
@@ -18,9 +19,9 @@ namespace Mars.Clouds.Cmdlets
             this.CompressRasters = false;
         }
 
-        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, DriveCapabilities driveCapabilities, string outputParameterName, bool outputPathIsDirectory)
         {
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, requiredEpsg: null);
             if ((lasGrid.NonNullCells > 1) && (outputPathIsDirectory == false))
             {
                 throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when " + nameof(this.Las) + " indicates multiple files.");
@@ -90,7 +91,7 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord readWriteProgress = new(cmdletName, tileReadWrite.GetLasReadTileWriteStatusDescription(lasGrid));
             this.WriteProgress(readWriteProgress);
 
-            while (Task.WaitAll(tasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
+            while (Task.WaitAll(tasks, Constant.DefaultProgressInterval) == false)
             {
                 // unlike Task.WaitAll(Task[]), Task.WaitAll(Task[], TimeSpan) does not unblock and throw the exception if any task faults
                 // If one task has faulted then cancellation is therefore desirable to stop the other tasks. If tile read faults metrics

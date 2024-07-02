@@ -4,15 +4,26 @@ using System.Runtime.InteropServices;
 
 namespace Mars.Clouds.Cmdlets.Drives
 {
-    internal class DriveCapabilities
+    public class DriveCapabilities
     {
-        public BusType BusType { get; protected set; }
-        public MediaType MediaType { get; protected set; }
-        public int NumberOfDataCopies { get; protected set; }
+        private const float HardDriveMultipleAccessDerating = 0.7F; // for now, assume tiles are laid out more or less adjacently
+
+        public const float HardDriveDefaultTransferRateInGBs = 0.285F; // 18 TB IronWolf Pro benchmark at outer platter edge, same spec for 20, 22, and 24 TB versions
+        public const float Pcie2LaneBandwidthInGBs = 1.7F / 4.0F; // usable bandwidth as commonly implemeted by available NVMe drives
+        public const float Pcie3LaneBandwidthInGBs = 3.5F / 4.0F;
+        public const float Pcie4LaneBandwidthInGBs = 7.0F / 4.0F;
+        public const float Pcie5LaneBandwidthInGBs = 14.0F / 4.0F;
+
+        public float HardDriveTransferRateInGBs { get; set; }
+        public SortedList<int, PhysicalDisk> UtilizedPhysicalDisksByNumber { get; private init; }
+        public SortedList<int, VirtualDisk> UtilizedVirtualDisksByNumber { get; private init; }
 
         protected DriveCapabilities()
         {
-            this.NumberOfDataCopies = 1;
+            // default hard drives to reasonable maximum transfer rate similar to NVMe calculations
+            this.HardDriveTransferRateInGBs = DriveCapabilities.HardDriveDefaultTransferRateInGBs;
+            this.UtilizedPhysicalDisksByNumber = [];
+            this.UtilizedVirtualDisksByNumber = [];
         }
 
         public static DriveCapabilities Create(List<string>? paths)
@@ -20,49 +31,97 @@ namespace Mars.Clouds.Cmdlets.Drives
             ArgumentNullException.ThrowIfNull(paths);
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return new DriveCapabilitesWindows(paths);
+                return new DriveCapabilitiesWindows(paths);
             }
 
             throw new NotSupportedException("Unhandled operating system " + RuntimeInformation.OSDescription + ".");
         }
 
-        public int GetPracticalReadThreadCount(float workloadRatePerThreadInGBs)
+        public int GetPracticalReadThreadCount(float synchronousWorkloadRatePerThreadInGBs)
         {
-            int threads = (int)(this.GetSequentialCapabilityInGBs() / workloadRatePerThreadInGBs);
-            if (this.MediaType == MediaType.HardDrive)
+            int minimumHardDriveThreads = 0;
+            float totalTransferRateFromFlash = 0.0F;
+            float totalTransferRateFromHardDrives = 0.0F;
+            for (int physicalDiskIndex = 0; physicalDiskIndex < this.UtilizedPhysicalDisksByNumber.Count; ++physicalDiskIndex)
             {
-                // for now, limit workloads to one thread per hard drive to limit acutator contention
-                // Underlying assumption is workloads are fast enough to exploit single threaded multi-actuator actuator configurations (e.g. dual
-                // actuators in standard RAID0 or RAID10).
-                threads = Int32.Min(threads, this.NumberOfDataCopies);
+                PhysicalDisk physicalDisk = this.UtilizedPhysicalDisksByNumber.Values[physicalDiskIndex];
+                if (physicalDisk.IsHardDrive)
+                {
+                    ++minimumHardDriveThreads;
+                    totalTransferRateFromHardDrives += this.HardDriveTransferRateInGBs;
+                }
+                else
+                {
+                    totalTransferRateFromFlash += physicalDisk.GetEstimatedMaximumTransferRateInGBs();
+                }
+            }
+            if ((minimumHardDriveThreads > 0) && (totalTransferRateFromFlash > 0))
+            {
+                throw new NotSupportedException("Directly utilized physical disks are " + minimumHardDriveThreads + " hard drives as well as flash drives capable of transferring " + totalTransferRateFromFlash + " GB/s. Mixtures of drive media types are not currently supported.");
             }
 
-            return Int32.Max(threads, 1); // guarantee at least one thread
-        }
-
-        /// <returns>Rough estimate (likely within a factor of two) of upper bound on sequential transfer rates in GB/s based on drive type and connection.</returns>
-        public float GetSequentialCapabilityInGBs()
-        {
-            if (this.MediaType == MediaType.HardDrive) 
+            for (int virtualDiskIndex = 0; virtualDiskIndex < this.UtilizedVirtualDisksByNumber.Count; ++virtualDiskIndex)
             {
-                // default single actuator per mirror approximation, SATA II+ or SAS1+ assumed
-                // TODO: RAID0 support
-                return 0.25F * this.NumberOfDataCopies;
+                VirtualDisk virtualDisk = this.UtilizedVirtualDisksByNumber.Values[virtualDiskIndex];
+                int physicalHardDrivesInVirtualDisk = 0;
+                float virtualDiskTotalTransferRateFromFlash = 0.0F;
+                for (int physicalDiskIndex = 0; physicalDiskIndex < virtualDisk.PhysicalDisks.Count; ++physicalDiskIndex)
+                {
+                    PhysicalDisk physicalDisk = virtualDisk.PhysicalDisks[physicalDiskIndex];
+                    if (physicalDisk.IsHardDrive)
+                    {
+                        ++physicalHardDrivesInVirtualDisk;
+                    }
+                    else
+                    {
+                        virtualDiskTotalTransferRateFromFlash += physicalDisk.GetEstimatedMaximumTransferRateInGBs();
+                    }
+                }
+                
+                if ((physicalHardDrivesInVirtualDisk > 0) && (virtualDiskTotalTransferRateFromFlash > 0))
+                {
+                    throw new NotSupportedException("Virtual disk contains " + physicalHardDrivesInVirtualDisk + " hard drives as well as flash drives capable of transferring " + virtualDiskTotalTransferRateFromFlash + " GB/s. Mixtures of drive media types are not currently supported.");
+                }
+
+                int virtualDiskMinimumHardDriveThreads = 1;
+                if ((virtualDisk.NumberOfDataCopies > 1) && (virtualDisk.NumberOfColumns == 1))
+                {
+                    // RAID0 and RAID10 provide full rate access with a single thread but two drive RAID1 requires two threads
+                    // Until further characterization is done, assume need for more than one read thread is RAID1 specific.
+                    virtualDiskMinimumHardDriveThreads = virtualDisk.NumberOfDataCopies;
+                }
+                minimumHardDriveThreads += virtualDiskMinimumHardDriveThreads;
+                totalTransferRateFromFlash += virtualDiskTotalTransferRateFromFlash / virtualDisk.PhysicalDisks.Count * virtualDisk.NumberOfColumns * virtualDisk.NumberOfDataCopies;
+                totalTransferRateFromHardDrives += this.HardDriveTransferRateInGBs * virtualDisk.NumberOfColumns * virtualDisk.NumberOfDataCopies;
             }
 
-            return this.BusType switch
+            if ((minimumHardDriveThreads > 0) && (totalTransferRateFromFlash > 0))
             {
-                // TODO: utilize bus speed information once available
-                BusType.NVMe => 7.0F, // for now, assume full rate PCIe 4.0 x4
-                // SSDs on SAS or SATA
-                BusType.SAS => 4.3F, // for now, assume SAS4
-                BusType.SATA => 0.55F, // for now, assume SATA III
-                BusType.USB => 0.45F, // for now, assume 3.0 gen 1 (5 Gb/s)
-                BusType.RAID => throw new NotSupportedException("RAID arrays are not currently supported."),
-                BusType.StorageSpace => throw new NotSupportedException("Storage spaces are not currently supported."),
-                // Unknown, (i)SCSI, ATAPI, ATA, FireWire, SSA, FibreChannel, SecureDigital, MultimediaCard, ReservedMax, FileBackedVirtual, MicrosoftReserved
-                _ => throw new NotSupportedException("Unhandled bus type " + this.BusType + ".")
-            };
+                throw new NotSupportedException("Combination of directly utilized physical disks and virtual disks results in data availability form " + minimumHardDriveThreads + " hard drives as well as flash drives capable of transferring " + totalTransferRateFromFlash + " GB/s. Mixtures of drive media types are not currently supported.");
+            }
+
+            int threads;
+            if (minimumHardDriveThreads > 0)
+            {
+                // if read rates are low then drive actuators can support multiple read threads
+                threads = (int)(DriveCapabilities.HardDriveMultipleAccessDerating * totalTransferRateFromHardDrives / synchronousWorkloadRatePerThreadInGBs);
+                if (threads < minimumHardDriveThreads)
+                {
+                    // otherwise require at least one thread per hard drive read channel to encourage full drive utilization
+                    // Synchronous threads with higher workload rates remain pinned to a drive rather than roaming across drives.
+                    threads = minimumHardDriveThreads;
+                }
+            }
+            else
+            {
+                threads = (int)(totalTransferRateFromFlash / synchronousWorkloadRatePerThreadInGBs);
+                if (threads < 1)
+                {
+                    threads = 1; // must have at least one thread
+                }
+            }
+
+            return threads;
         }
     }
 }

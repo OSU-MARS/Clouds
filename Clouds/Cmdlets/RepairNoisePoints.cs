@@ -36,56 +36,6 @@ namespace Mars.Clouds.Cmdlets
             this.LowNoise = Single.NaN;
         }
 
-        private int MaybeReclassifyPoints(LasTile lasTile, RepairNoiseReadWrite lasTileRead)
-        {
-            string dtmTilePath = LasTilesCmdlet.GetRasterTilePath(this.Dtm, Tile.GetName(lasTile.FilePath));
-            RasterBand<float> dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
-
-            // marks points as noise but (currently) does not offer the option of removing them from the file
-            // Since no points are removed the header's bounding box does not need to be updated. If needed, an integrated repair and
-            // remove flow can be created.
-            using LasReaderWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
-            int pointsReclassified = pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);
-            return pointsReclassified;
-        }
-
-        protected override void ProcessRecord()
-        {
-            if (this.MaxThreads > this.MaxPointTiles)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.MaxPointTiles), "-" + nameof(this.MaxPointTiles) + " must be greater than or equal to the maximum number of threads (" + this.MaxThreads + ") as each thread requires a tile to work with.");
-            }
-
-            string cmdletName = "Repair-NoisePoints";
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
-            double lasGridUnits = lasGrid.Crs.GetLinearUnits();
-            if (Single.IsNaN(this.HighNoise))
-            {
-                this.HighNoise = lasGridUnits == 1.0 ? 100.0F : 400.0F;
-            }
-            if (Single.IsNaN(this.LowNoise))
-            {
-                this.LowNoise = lasGridUnits == 1.0 ? -30.0F : -100.0F;
-            }
-
-            // spin up point cloud read and tile worker threads
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs), this.MaxThreads);
-
-            RepairNoiseReadWrite tileChecks = new();
-            Task[] checkTasks = new Task[Int32.Min(readThreads, lasGrid.NonNullCells)];
-            for (int readThread = 0; readThread < checkTasks.Length; ++readThread)
-            {
-                checkTasks[readThread] = Task.Run(() => this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, tileChecks), tileChecks.CancellationTokenSource.Token);
-            }
-
-            TimedProgressRecord progress = this.WaitForCheckTasks(cmdletName, checkTasks, lasGrid, tileChecks);
-
-            progress.Stopwatch.Stop();
-            this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.ToElapsedString() + ".");
-            base.ProcessRecord();
-        }
-
         private void CheckLasTiles(LasTileGrid lasGrid, Func<LasTile, RepairNoiseReadWrite, int> checkTile, RepairNoiseReadWrite tileChecks)
         {
             for (int tileIndex = tileChecks.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = tileChecks.GetNextTileReadIndexThreadSafe())
@@ -109,30 +59,63 @@ namespace Mars.Clouds.Cmdlets
             }
         }
 
-        private TimedProgressRecord WaitForCheckTasks(string cmdletName, Task[] checkTasks, LasTileGrid lasGrid, RepairNoiseReadWrite tileChecks)
+        private int MaybeReclassifyPoints(LasTile lasTile, RepairNoiseReadWrite lasTileRead)
         {
-            TimedProgressRecord tileCheckProgress = new(cmdletName, "Checking tiles: " + tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
-            this.WriteProgress(tileCheckProgress);
+            string dtmTilePath = LasTilesCmdlet.GetRasterTilePath(this.Dtm, Tile.GetName(lasTile.FilePath));
+            RasterBand<float> dtmTile = RasterBand<float>.Read(dtmTilePath, this.DtmBand);
 
-            while (Task.WaitAll(checkTasks, LasTilesCmdlet.ProgressUpdateInterval) == false)
+            // marks points as noise but (currently) does not offer the option of removing them from the file
+            // Since no points are removed the header's bounding box does not need to be updated. If needed, an integrated repair and
+            // remove flow can be created.
+            using LasReaderWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
+            int pointsReclassified = pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);
+            return pointsReclassified;
+        }
+
+        protected override void ProcessRecord()
+        {
+            base.ValidateParameters(minWorkerThreads: 0);
+            if (this.MaxThreads > this.MaxPointTiles)
             {
-                // see remarks in LasTilesToTilesCmdlet.WaitForTasks()
-                for (int taskIndex = 0; taskIndex < checkTasks.Length; ++taskIndex)
-                {
-                    Task task = checkTasks[taskIndex];
-                    if (task.IsFaulted)
-                    {
-                        tileChecks.CancellationTokenSource.Cancel();
-                        throw task.Exception;
-                    }
-                }
-
-                tileCheckProgress.StatusDescription = "Checking tiles: " + tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...";
-                tileCheckProgress.Update(tileChecks.TilesRead, lasGrid.NonNullCells);
-                this.WriteProgress(tileCheckProgress);
+                throw new ParameterOutOfRangeException(nameof(this.MaxPointTiles), "-" + nameof(this.MaxPointTiles) + " must be greater than or equal to the maximum number of threads (" + this.MaxThreads + ") as each thread requires a tile to work with.");
             }
 
-            return tileCheckProgress;
+            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
+
+            string cmdletName = "Repair-NoisePoints";
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, requiredEpsg: null);
+            double lasGridUnits = lasGrid.Crs.GetLinearUnits();
+            if (Single.IsNaN(this.HighNoise))
+            {
+                this.HighNoise = lasGridUnits == 1.0 ? 100.0F : 400.0F;
+            }
+            if (Single.IsNaN(this.LowNoise))
+            {
+                this.LowNoise = lasGridUnits == 1.0 ? -30.0F : -100.0F;
+            }
+
+            // spin up point cloud read and tile worker threads
+            int availableReadThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs, minWorkerThreadsPerReadThread: 0);
+            int checkThreads = Int32.Min(availableReadThreads, lasGrid.NonNullCells);
+
+            RepairNoiseReadWrite tileChecks = new();
+            ParallelTasks checkTasks = new(checkThreads, () =>
+            {
+                this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, tileChecks);
+            });
+
+            TimedProgressRecord progress = new(cmdletName, tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
+            this.WriteProgress(progress);
+            while (checkTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...";
+                progress.Update(tileChecks.TilesRead, lasGrid.NonNullCells);
+                this.WriteProgress(progress);
+            }
+
+            progress.Stopwatch.Stop();
+            this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.ToElapsedString() + ".");
+            base.ProcessRecord();
         }
 
         private class RepairNoiseReadWrite : TileRead
