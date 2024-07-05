@@ -172,7 +172,7 @@ namespace Mars.Clouds.UnitTests
             Debug.Assert(this.UnitTestPath != null);
 
             FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
-            using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
+            using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, LasReader.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader, fallbackCreationDate: null);
 
@@ -713,19 +713,13 @@ namespace Mars.Clouds.UnitTests
             int imageYsize = (int)(lasTile.GridExtent.Height / imageCellSize) + 1;
             GridGeoTransform imageTransform = new(lasTile.GridExtent, imageCellSize, imageCellSize);
 
-            ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, includeNearInfrared: true);
+            //ArrayPool<byte> readBufferPool = new(LasReader.PointReadBufferSizeInBytes);
+            ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, includeNearInfrared: false);
             using LasReader imageReader = lasTile.CreatePointReader();
             imageReader.ReadPointsToImage(lasTile, image);
-
             image.OnPointAdditionComplete();
-            ImageRaster<UInt16> image16 = image.PackToUInt16();
-            ImageRaster<UInt32> image32 = image.PackToUInt32();
 
-            Assert.IsTrue((image.Cells == 72) && (image.SizeX == imageXsize) && (image.SizeY == imageYsize));
-            Assert.IsTrue((image.NearInfrared != null) && (image16.NearInfrared != null) && (image32.NearInfrared != null));
-            Assert.IsTrue((image.Cells == image16.Cells) && (image.SizeX == image16.SizeX) && (image.SizeY == image16.SizeY));
-            Assert.IsTrue((image.Cells == image32.Cells) && (image.SizeX == image32.SizeX) && (image.SizeY == image32.SizeY));
-
+            Assert.IsTrue((image.Cells == 72) && (image.SizeX == imageXsize) && (image.SizeY == imageYsize) && (image.NearInfrared == null));
             for (int yIndex = 0; yIndex < image.SizeY; ++yIndex)
             {
                 for (int xIndex = 0; xIndex < image.SizeX; ++xIndex)
@@ -736,27 +730,11 @@ namespace Mars.Clouds.UnitTests
                     Assert.IsTrue(image.Red[xIndex, yIndex] == UInt64.MaxValue);
                     Assert.IsTrue(image.Green[xIndex, yIndex] == UInt64.MaxValue);
                     Assert.IsTrue(image.Blue[xIndex, yIndex] == UInt64.MaxValue);
-                    Assert.IsTrue(image.NearInfrared[xIndex, yIndex] == UInt64.MaxValue);
-                    Assert.IsTrue(image.Intensity[xIndex, yIndex] == UInt64.MaxValue);
+                    // image.NearInfrared[xIndex, yIndex] is null
+                    Assert.IsTrue(image.IntensityFirstReturn[xIndex, yIndex] == UInt64.MaxValue);
                     Assert.IsTrue(image.IntensitySecondReturn[xIndex, yIndex] == UInt64.MaxValue);
                     Assert.IsTrue(image.FirstReturns[xIndex, yIndex] == 0);
                     Assert.IsTrue(image.SecondReturns[xIndex, yIndex] == 0);
-
-                    Assert.IsTrue(image32.Red[xIndex, yIndex] == UInt32.MaxValue);
-                    Assert.IsTrue(image32.Green[xIndex, yIndex] == UInt32.MaxValue);
-                    Assert.IsTrue(image32.Blue[xIndex, yIndex] == UInt32.MaxValue);
-                    Assert.IsTrue(image32.NearInfrared[xIndex, yIndex] == UInt32.MaxValue);
-                    Assert.IsTrue(image32.Intensity[xIndex, yIndex] == UInt32.MaxValue);
-                    Assert.IsTrue(image32.FirstReturns[xIndex, yIndex] == 0);
-                    Assert.IsTrue(image32.SecondReturns[xIndex, yIndex] == 0);
-
-                    Assert.IsTrue(image16.Red[xIndex, yIndex] == UInt16.MaxValue);
-                    Assert.IsTrue(image16.Green[xIndex, yIndex] == UInt16.MaxValue);
-                    Assert.IsTrue(image16.Blue[xIndex, yIndex] == UInt16.MaxValue);
-                    Assert.IsTrue(image16.NearInfrared[xIndex, yIndex] == UInt16.MaxValue);
-                    Assert.IsTrue(image16.Intensity[xIndex, yIndex] == UInt16.MaxValue);
-                    Assert.IsTrue(image16.FirstReturns[xIndex, yIndex] == 0);
-                    Assert.IsTrue(image16.SecondReturns[xIndex, yIndex] == 0);
                 }
             }
         }
@@ -847,7 +825,7 @@ namespace Mars.Clouds.UnitTests
             Debug.Assert(this.UnitTestPath != null);
 
             FileInfo lasFileInfo = new(Path.Combine(this.UnitTestPath, TestConstant.LasFileName));
-            using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, Constant.Las.HeaderAndVlrReadBufferSizeInBytes);
+            using FileStream stream = new(lasFileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, LasReader.HeaderAndVlrReadBufferSizeInBytes);
             using LasReader headerVlrReader = new(stream);
             LasTile lasTile = new(lasFileInfo.FullName, headerVlrReader, fallbackCreationDate: null);
 

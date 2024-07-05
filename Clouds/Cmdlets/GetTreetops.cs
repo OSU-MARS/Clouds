@@ -144,7 +144,7 @@ namespace Mars.Clouds.Cmdlets
                         }
                         mostRecentDsmTileName = dsmFileName;
                     }
-                });
+                }, new());
 
                 progress.Stopwatch.Restart();
                 while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)

@@ -1,19 +1,20 @@
 ﻿using Mars.Clouds.Las;
-using System.Diagnostics;
 using System;
+using System.Diagnostics;
 using System.Management.Automation;
-using System.Threading.Tasks;
-using Mars.Clouds.GdalExtensions;
 using System.IO;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.Cmdlets.Drives;
+using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "Orthoimages")]
     public class GetOrthoimages : LasTilesToTilesCmdlet
     {
-        [Parameter(HelpMessage = "Number of unsigned bits per channel in output tiles. Can be 16, 32, or 64. Default is 16, which is likely to occasionally result in points' RGB, NIR, and possibly intensity values of 65535 being reduced to 65534 to disambiguate them from no data values.")]
+        private TileReadWrite? imageReadWrite;
+
+        [Parameter(HelpMessage = "Number of unsigned bits per cell in RGB, NIR, and intensity bands in output tiles. Can be 16, 32, or 64. Default is 16, which is likely to occasionally result in points' RGB, NIR, and possibly intensity values of 65535 being reduced to 65534 to disambiguate them from no data values.")]
         [ValidateRange(16, 64)] // could also use [ValidateSet] but string conversion is required
         public int BitDepth { get; set; }
 
@@ -29,7 +30,6 @@ namespace Mars.Clouds.Cmdlets
             this.BitDepth = 16;
             this.CellSize = -1.0;
             this.Image = String.Empty;
-            this.MaxThreads = 8; // for now, default to a single read thread and seven write threads
         }
 
         protected override void ProcessRecord() 
@@ -37,11 +37,7 @@ namespace Mars.Clouds.Cmdlets
             base.ValidateParameters(minWorkerThreads: 0);
             if ((this.BitDepth != 16) && (this.BitDepth != 32) && (this.BitDepth != 64))
             {
-                throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per channel.");
-            }
-            if (this.MaxThreads < 8)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least eight.");
+                throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per cell for RGB, NIR, and intensity bands.");
             }
 
             DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
@@ -51,41 +47,103 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, nameof(this.Image), imagePathIsDirectory);
 
             (int imageTileSizeX, int imageTileSizeY) = this.SetCellSize(lasGrid);
-            ImageTileReadWrite imageReadWrite = new(this.MaxPointTiles, imageTileSizeX, imageTileSizeY, imagePathIsDirectory);
+            this.imageReadWrite = new(imagePathIsDirectory);
 
             // start single reader and multiple writers
-            // Profiling is desirable for tuning here. For Int32 writes through GDAL 3.8.3 a single read thread from a 3.5 drive at
-            // ~260 MB/s creates cyclic activity across typically 3-6 write threads. Using seven writers is nominally overkill but provides
-            // compute margin so the 3.5 stays fully utilized. For faster source devices (NVMe, SSD, RAID) multiple reader threads might
-            // needed, though read thread unbinding appears likely to permit ~1:10 read:write thread ratios. For now, if higher thread
-            // counts are permitted only additional write threads are created.
-            // TODO: support writing uncompressed Int32 images as they're likely to be transcoded to UInt16
-            Task[] orthoimageTasks = new Task[this.MaxThreads];
-            int readThreads = 1; // for now; see above
-            for (int readThread = 0; readThread < readThreads; ++readThread)
-            {
-                orthoimageTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, this.ReadTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
-            }
-            for (int workerThread = readThreads; workerThread < orthoimageTasks.Length; ++workerThread)
-            {
-                orthoimageTasks[workerThread] = Task.Run(() => this.WriteTiles<ImageRaster<UInt64>, ImageTileReadWrite>(this.WriteTile, imageReadWrite), imageReadWrite.CancellationTokenSource.Token);
-            }
+            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToImageInitialSpeedEstimateInGBs, minWorkerThreadsPerReadThread: 0);
+            int maxUsefulThreads = Int32.Min(2 * readThreads, lasGrid.NonNullCells);
+            Debug.Assert(maxUsefulThreads > 0);
 
-            TimedProgressRecord progress = this.WaitForLasReadTileWriteTasks(cmdletName, orthoimageTasks, lasGrid, imageReadWrite);
+            long cellsWritten = 0;
+            //ObjectPool<PointBatchXyirnRgbn> pointBatchPool = new();
+            ArrayPool<byte>? readBufferPool = new(LasReader.PointReadBufferSizeInBytes);
+            using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
+            ParallelTasks orthoimageTasks = new(Int32.Min(maxUsefulThreads, this.MaxThreads), () =>
+            {
+                ImageRaster<UInt64>? imageTile = null;
+                readSemaphore.Wait(this.imageReadWrite.CancellationTokenSource.Token);
+                if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                {
+                    return; // nothing more to do
+                }
+
+                for (int tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe())
+                {
+                    LasTile? lasTile = lasGrid[tileIndex];
+                    if (lasTile == null)
+                    {
+                        continue; // nothing to do as no tile is present at this grid position
+                    }
+
+                    // read tile
+                    imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY);
+                    using LasReader pointReader = lasTile.CreatePointReader();
+                    pointReader.ReadPointsToImage(lasTile, imageTile);
+                    //using LasReader pointReader = lasTile.CreatePointReaderAsync();
+                    //PointList<PointBatchXyirnRgbn> tilePoints = pointReader.ReadPoints(lasTile, pointBatchPool, readBufferPool);
+                    if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        return; // if cmdlet's been stopped with ctrl+c the read semaphore may already be disposed
+                    }
+                    readSemaphore.Release();
+                    this.imageReadWrite.IncrementTilesReadThreadSafe();
+
+                    // calculate means and set no data values
+                    //imageTile.Add(lasTile, tilePoints);
+                    imageTile.OnPointAdditionComplete();
+                    if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        return; // no point in writing tile
+                    }
+
+                    // write tile to disk
+                    string tileName = Tile.GetName(lasTile.FilePath);
+                    string imageTilePath = this.imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
+                    imageTile.Write(imageTilePath, this.BitDepth, this.CompressRasters);
+
+                    lock (this.imageReadWrite)
+                    {
+                        cellsWritten += imageTile.Cells;
+                        ++this.imageReadWrite.TilesWritten;
+                    }
+
+                    //tilePoints.ReturnThreadSafe(pointBatchPool);
+
+                    // reacquire read semaphore for next tile
+                    // Unnecessary on last loop iteration but no good way to identify if this is the last iteration.
+                    readSemaphore.Wait(this.imageReadWrite.CancellationTokenSource.Token);
+                }
+
+                // ensure read semaphore is released
+                // Reads have been initiated on all tiles at this point but it's probable there's one or more threads blocked in Wait() which
+                // must acquire the semaphore to exit.
+                readSemaphore.Release();
+
+                // not necessary but may help the GC
+                //pointBatchPool.Clear();
+                readBufferPool.Clear();
+            }, this.imageReadWrite.CancellationTokenSource);
+
+            int activeReadThreads = readThreads - readSemaphore.CurrentCount;
+            TimedProgressRecord progress = new(cmdletName, imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads));
+            this.WriteProgress(progress);
+            while (orthoimageTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                activeReadThreads = readThreads - readSemaphore.CurrentCount;
+                progress.StatusDescription = imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads);
+                progress.Update(this.imageReadWrite.TilesWritten, lasGrid.NonNullCells);
+                this.WriteProgress(progress);
+            }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Found brightnesses of " + imageReadWrite.CellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + " point cloud tiles in " + progress.Stopwatch.ToElapsedString() + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + cellsWritten.ToString("n0") + " pixels in " + this.imageReadWrite.TilesRead + (this.imageReadWrite.TilesRead == 1 ? " point cloud tile in " : " point cloud tiles in ") + progress.Stopwatch.ToElapsedString() + ": " + (this.imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 
-        private ImageRaster<UInt64> ReadTile(LasTile lasTile, ImageTileReadWrite imageReadWrite)
+        protected override void StopProcessing()
         {
-            GridGeoTransform lasTileTransform = new(lasTile.GridExtent, this.CellSize, this.CellSize);
-            ImageRaster<UInt64> imageTile = new(lasTile.GetSpatialReference(), lasTileTransform, imageReadWrite.TileSizeX, imageReadWrite.TileSizeY, lasTile.Header.PointsHaveNearInfrared());
-            using LasReader pointReader = lasTile.CreatePointReader();
-            pointReader.ReadPointsToImage(lasTile, imageTile);
-
-            return imageTile;
+            this.imageReadWrite?.CancellationTokenSource.Cancel();
+            base.StopProcessing();
         }
 
         private (int tileSizeX, int tileSizeY) SetCellSize(LasTileGrid lasGrid)
@@ -110,47 +168,6 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return (outputTileSizeX, outputTileSizeY);
-        }
-
-        private int WriteTile(string tileName, ImageRaster<UInt64> imageTile, ImageTileReadWrite imageReadWrite)
-        {
-            Debug.Assert(this.Image != null);
-
-            // do normalization and no data setting off deserialization thread for throughput
-            imageTile.OnPointAdditionComplete();
-
-            // convert from 64 bit accumulation to shallower bit depth for more appropriate disk size
-            // UInt16 would be preferred but isn't supported by GDAL 3.8.3 C# bindings
-            string imageTilePath = imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
-            switch (this.BitDepth)
-            {
-                case 16:
-                    // will likely fail since source data is UInt16; divide by two to avoid Int16 overflows?
-                    ImageRaster<UInt16> imageTile16 = imageTile.PackToUInt16();
-                    imageTile16.Write(imageTilePath, this.CompressRasters);
-                    break;
-                case 32:
-                    ImageRaster<UInt32> imageTile32 = imageTile.PackToUInt32();
-                    imageTile32.Write(imageTilePath, this.CompressRasters); // 32 bit integer deflate compression appears to be somewhat expensive
-                    break;
-                default:
-                    throw new NotSupportedException("Unhandled depth of " + this.BitDepth + " bits per channel.");
-            }
-
-            return imageTile.Cells;
-        }
-
-        private class ImageTileReadWrite : TileReadWrite<ImageRaster<UInt64>>
-        {
-            public int TileSizeX { get; private init; }
-            public int TileSizeY { get; private init; }
-
-            public ImageTileReadWrite(int maxSimultaneouslyLoadedTiles, int tileSizeX, int tileSizeY, bool outputPathIsDirectory)
-                : base(maxSimultaneouslyLoadedTiles, outputPathIsDirectory)
-            {
-                this.TileSizeX = tileSizeX;
-                this.TileSizeY = tileSizeY;
-            }
         }
     }
 }

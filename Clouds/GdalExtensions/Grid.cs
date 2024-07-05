@@ -1,6 +1,7 @@
 ﻿using OSGeo.OSR;
 using System;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
@@ -117,12 +118,14 @@ namespace Mars.Clouds.GdalExtensions
             return true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ToCellIndex(int xIndex, int yIndex)
         {
             return xIndex + yIndex * this.SizeX;
         }
 
         // needs testing with nonzero row and column rotations
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToInteriorGridIndices(double x, double y)
         {
             (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);
@@ -186,6 +189,7 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndex, yIndex);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToGridIndices(double x, double y)
         {
             (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);

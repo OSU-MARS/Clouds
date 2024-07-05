@@ -37,10 +37,14 @@ namespace Mars.Clouds.Cmdlets
             return status;
         }
 
-        public void IncrementTilesWrittenThreadSafe()
+        public string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads)
         {
-            Interlocked.Increment(ref this.tilesWritten);
+            string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
+                            this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + activeReadThreads +
+                            (activeReadThreads == 1 ? " read thread active)..."  : " read threads active)...");
+            return status;
         }
+        
     }
 
     public class TileReadWrite<TTile> : TileReadWrite

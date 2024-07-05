@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
                             ++tileRead.TilesRead;
                         }
                     }
-                });
+                }, tileRead.CancellationTokenSource);
 
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)

@@ -1,6 +1,7 @@
 ﻿using Mars.Clouds.GdalExtensions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Mars.Clouds.Las
@@ -39,6 +40,7 @@ namespace Mars.Clouds.Las
                 return;
             }
 
+            Debug.Assert(SpatialReferenceExtensions.IsSameCrs(listGrid.ZSourceID.Crs, dtmTile.Crs));
             listGrid.ZSourceID.Transform.Copy(dtmTile.Transform);
             for (int cellIndex = 0; cellIndex < listGrid.ZSourceID.Cells; ++cellIndex)
             {

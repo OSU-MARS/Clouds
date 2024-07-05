@@ -1,14 +1,11 @@
-﻿using DocumentFormat.OpenXml.Presentation;
-using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 
 namespace Mars.Clouds.Las
 {
@@ -395,36 +392,6 @@ namespace Mars.Clouds.Las
             throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
         }
 
-        private static string GetDiagnosticTilePath(string primaryTilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
-        {
-            string? dsmDirectoryPath = Path.GetDirectoryName(primaryTilePath);
-            if (dsmDirectoryPath == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(primaryTilePath), "DSM primary tile path '" + primaryTilePath + "' does not contain a directory.");
-            }
-            string? dsmTileName = Path.GetFileName(primaryTilePath);
-            if (dsmTileName == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(primaryTilePath), "DSM primary tile path '" + primaryTilePath + "' does not contain a file name.");
-            }
-
-            string diagnosticDirectoryPath = Path.Combine(dsmDirectoryPath, diagnosticDirectoryName);
-            if (Directory.Exists(diagnosticDirectoryPath) == false)
-            {
-                if (createDiagnosticDirectory)
-                {
-                    Directory.CreateDirectory(diagnosticDirectoryPath);
-                }
-                else
-                {
-                    throw new ArgumentOutOfRangeException(nameof(diagnosticDirectoryName), "Directory '" + dsmDirectoryPath + "' does not have a '" + diagnosticDirectoryName + "' subdirectory for diagnostic tiles.");
-                }
-            }
-
-            string diagnosticTilePath = Path.Combine(diagnosticDirectoryPath, dsmTileName);
-            return diagnosticTilePath;
-        }
-
         /// <summary>
         /// Read specified digital surface model bands. Required bands (<see cref="DigitalSufaceModelBands.Required"/>) must always be requested.
         /// </summary>
@@ -523,7 +490,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSufaceModelBands.DiagnosticZ) != DigitalSufaceModelBands.None)
             {
-                string zTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                string zTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
                 using Dataset zDataset = Gdal.Open(zTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = zDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= zDataset.RasterCount; ++gdalBandIndex)
@@ -579,7 +546,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSufaceModelBands.PointCounts) != DigitalSufaceModelBands.None)
             {
-                string pointCountTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                string pointCountTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
                 using Dataset pointCountDataset = Gdal.Open(pointCountTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = pointCountDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= pointCountDataset.RasterCount; ++gdalBandIndex)
@@ -622,7 +589,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSufaceModelBands.SourceIDs) != DigitalSufaceModelBands.None)
             {
-                string sourceIDtilePath = DigitalSurfaceModel.GetDiagnosticTilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
+                string sourceIDtilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
                 using Dataset sourceIDdataset = Gdal.Open(sourceIDtilePath, Access.GA_ReadOnly);
                 SpatialReference crs = sourceIDdataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= sourceIDdataset.RasterCount; ++gdalBandIndex)
@@ -798,7 +765,7 @@ namespace Mars.Clouds.Las
             if ((this.Layer1 != null) && (this.Layer2 != null) && (this.Ground != null))
             {
                 Debug.Assert(this.Layer1.IsNoData(RasterBand.NoDataDefaultFloat) && this.Layer2.IsNoData(RasterBand.NoDataDefaultFloat) && this.Ground.IsNoData(RasterBand.NoDataDefaultFloat));
-                string zTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                string zTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
 
                 using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, 3, DataType.GDT_Float32, compress);
                 this.Layer1.Write(zDataset, 1);
@@ -816,7 +783,7 @@ namespace Mars.Clouds.Las
             if ((this.AerialPoints != null) && (this.GroundPoints != null))
             {
                 Debug.Assert((this.AerialPoints.HasNoDataValue == false) && (this.GroundPoints.HasNoDataValue == false));
-                string pointCountTilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                string pointCountTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
                 DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(this.AerialPoints, this.GroundPoints);
 
                 using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, 2, pointCountBandType, compress);
@@ -833,7 +800,7 @@ namespace Mars.Clouds.Las
             if ((this.SourceIDSurface != null) && (this.SourceIDLayer1 != null) && (this.SourceIDLayer2 != null))
             {
                 Debug.Assert(this.SourceIDSurface.IsNoData(0) && this.SourceIDLayer1.IsNoData(0) && this.SourceIDLayer2.IsNoData(0));
-                string sourceIDtilePath = DigitalSurfaceModel.GetDiagnosticTilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
+                string sourceIDtilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
                 DataType sourceIDbandType = DataTypeExtensions.GetMostCompactIntegerType(this.SourceIDSurface, this.SourceIDLayer1, this.SourceIDLayer2);
 
                 using Dataset sourceIDdataset = this.CreateGdalRasterAndSetFilePath(sourceIDtilePath, 3, sourceIDbandType, compress);

@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.Cmdlets;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OSGeo.OSR;

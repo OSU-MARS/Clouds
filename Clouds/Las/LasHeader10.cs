@@ -164,25 +164,40 @@ namespace Mars.Clouds.Las
             this.LegacyNumberOfPointsByReturn = new UInt32[5];
         }
 
-        public int GetGpstimePointOffset()
+        public bool PointsHaveGpsTime
         {
-            return this.PointDataRecordFormat switch
+            get
             {
-                0 or 2 or 4 => -1,
-                1 or 3 or 5 => 20,
-                6 or 7 or 8 or 9 or 10 => 22,
-                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
-            };
+                if (this.PointDataRecordFormat < 4)
+                {
+                    // point formats 0, 2, and 4 lack GPS time
+                    return (this.PointDataRecordFormat == 1) || (this.PointDataRecordFormat == 3);
+                }
+
+                return true; // all other formats have GPS time
+            }
         }
 
-        public int GetNearInfraredOffset()
+        public bool PointsHaveNearInfrared
         {
-            return this.PointDataRecordFormat switch
+            get
             {
-                0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 => -1,
-                8 or 10 => 36,
-                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
-            };
+                // only formats 8 and 10 have NIR
+                return (this.PointDataRecordFormat == 8) || (this.PointDataRecordFormat == 10);
+            }
+        }
+
+        public bool PointsHaveRgb
+        {
+            get
+            {
+                return this.PointDataRecordFormat switch
+                {
+                    0 or 1 or 4 or 6 or 9 => false,
+                    2 or 3 or 5 or 7 or 8 or 10 => true,
+                    _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
+                };
+            }
         }
 
         public virtual UInt64 GetNumberOfPoints()
@@ -213,32 +228,6 @@ namespace Mars.Clouds.Las
             }
 
             throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".");
-        }
-
-        public int GetRgbOffset()
-        {
-            return this.PointDataRecordFormat switch
-            {
-                0 or 1 or 4 or 6 or 9 => -1,
-                2 or 3 or 5 => 28,
-                7 or 8 or 10 => 30,
-                _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
-            };
-        }
-
-        public bool PointsHaveGpsTime()
-        {
-            return this.GetGpstimePointOffset() != -1;
-        }
-
-        public bool PointsHaveNearInfrared()
-        {
-            return this.GetNearInfraredOffset() != -1;
-        }
-
-        public bool PointsHaveRgb()
-        {
-            return this.GetRgbOffset() != -1;
         }
 
         public virtual void SetNumberOfPointsByReturn(UInt64[] numberOfPointsByReturn)

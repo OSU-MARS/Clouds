@@ -102,7 +102,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks checkTasks = new(checkThreads, () =>
             {
                 this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, tileChecks);
-            });
+            }, tileChecks.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + tileChecks.PointsReclassified + (tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
             this.WriteProgress(progress);

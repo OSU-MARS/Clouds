@@ -15,7 +15,8 @@ file formats are supported, though GDAL testing is limited to GeoPackage and Geo
 DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3, Intel Raptor Lake, or newer processors with 12–16 cores and 
 64–128 GB of DDR are assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most such processing 
 tasks fitting within 64 GB DDR, though 96 or 128 GB is preferable. Tile processing rates depend on drive and processor core capabilities but 
-.las read speeds of 2.0 GB/s are sustainable. AVX, AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently utilized.
+.las read speeds up to 3.7 GB/s have been shown to be sustainable and peak transfer rates of 7 GB/s have been observed from some cmdlets. AVX, 
+AVX2, and FMA instructions are used at times. AVX10/256 and AVX10/512 are not currently utilized.
 
 QGIS (as of the 3.34 LTR) tends to be slow to work with virtual rasters produced from LiDAR point cloud processing, apparently due to GDAL's 
 inclination to set `BlockYSize="1"` in .vrt files in contradiction to the guidance in GDAL's own documentation. Clouds can't really do anything 
@@ -135,6 +136,15 @@ performance characteristics (including volumes matching single actuators in mult
 
 A few other performance details are notable.
 
+- Synchronous IO in Windows often reaches maximum speeds of 1–2 GB/s per thread in practical workloads. While drive benchmarking tools such as 
+  [DiskSpd](https://github.com/microsoft/diskspd) (of which [CrystalDiskMark](https://crystalmark.info/en/software/crystaldiskmark/) uses an 
+  older version internally) and .NET IO benchmarks reach transfer rates of 7 and 14 GB/s for PCIe 4.0 x4 and 5.0 x4 NVMe drives, benchmarks
+  need only move data into or out of memory. In point cloud processing workloads, data is read off drives to be used and data being written 
+  has to be generated, both of which require computations and additional DDR transfers not present in benchmarking. Profiling of Clouds shows 
+  ±20% or more variations in throughput depending on selection among cmdlet implementation tradeoffs and the number of threads running. Absent
+  substantial RAM overclocking, desktop processors' dual channel bandwidth to DDR4 is increasingly likely to become a limiting factor near the 
+  3.5 GB/s throughput limit of a PCIe 3.0 x4 drive. With DDR5, throughput upper bounds of of 4–5 GB/s are likely. Monitoring tools, such as
+  [HWiNFO64](https://www.hwinfo.com/), can be helpful in tracking DDR and drive transfer rates.
 - Read speeds above roughly 1 GB/s tend to be stressful to .NET memory management. Best practices are used for object pooling and large object
   heap offloading but it can take longer for the garbage collector to work through tens of gigabytes of first generation, second generation, and
   large objects than it does to run a cmdlet. Cmdlets may therefore request a second generation collection and compaction of the managed heap

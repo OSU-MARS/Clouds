@@ -28,6 +28,13 @@ namespace Mars.Clouds.Las
             return reader;
         }
 
+        public LasReader CreatePointReaderAsync()
+        {
+            LasReader reader = LasReader.CreateForPointReadAsync(this.FilePath, this.FileSizeInBytes);
+            reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return reader;
+        }
+
         public LasReaderWriter CreatePointReaderWriter()
         {
             LasReaderWriter readerWriter = LasReaderWriter.CreateForPointRead(this.FilePath, this.FileSizeInBytes);

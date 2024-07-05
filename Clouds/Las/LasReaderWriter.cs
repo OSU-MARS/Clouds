@@ -6,13 +6,13 @@ using OSGeo.OSR;
 
 namespace Mars.Clouds.Las
 {
-    public class LasReaderWriter(Stream stream) : LasReader(stream)
+    public class LasReaderWriter(FileStream stream) : LasReader(stream)
     {
         public const float FindUnclassifiedNoisePointsSpeedInGBs = 2.0F; // TODO: get benchmark values
 
         public static new LasReaderWriter CreateForPointRead(string lasPath, long fileSizeInBytes)
         {
-            return new LasReaderWriter(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite));
+            return new LasReaderWriter(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite, useAsync: true));
         }
 
         public int TryFindUnclassifiedNoise(LasTile lasTile, RasterBand<float> dtmTile, float highNoiseThreshold, float lowNoiseThreshold)

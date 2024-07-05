@@ -81,20 +81,19 @@ namespace Mars.Clouds.Cmdlets
                         {
                             dsmTileToAdd.ResetAllBandsToDefaultValues();
                         }
-                        int dsmTileIndexX;
-                        int dsmTileIndexY;
-                        lock (dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
+                        // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
+                        // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
+                        if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.TileCount == 0))
                         {
-                            // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
-                            // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
-                            if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.TileCount == 0))
-                            {
-                                dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
-                            }
-                            (dsmTileIndexX, dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTileToAdd);
+                            dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
                         }
 
-                        dsmReadCreateWrite.PointBatchPool.ReturnThreadSafe(lasTile.Points);
+                        lock (dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
+                        {
+                            // (int dsmTileIndexX, int dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTileToAdd); // sometimes useful to get tile's xy position in grid when debugging
+                            dsmReadCreateWrite.Dsm.Add(dsmTileToAdd);
+                        }
+                        lasTile.Points.ReturnThreadSafe(dsmReadCreateWrite.PointBatchPool);
                     }
                     catch (Exception exception)
                     {
@@ -197,7 +196,7 @@ namespace Mars.Clouds.Cmdlets
             //  ~1.7 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.49 tiles/s (153 tiles in 5:13), tupled lists in PointListGridZs, initial capacity 16 points
             //  ~1.1 GB/s read from 2TB SN770 on CPU lanes @ 1 read thread -> ~105 GB working set, 11 worker threads, 0.41 tiles/s (153 tiles in 6:21), z + point source IDs lists in PointListGridZs, initial capacity 16 points
             //   250 MB/s read from 3.5 inch hard drive @ 1 read thread -> ~64 GB system memory used, one, maybe two worker threads
-            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToXyzcsSpeedInGBs, minWorkerThreadsPerReadThread: 1);
+            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToXyzcsInitialSpeedEstimateInGBs, minWorkerThreadsPerReadThread: 1);
 
             // upper bound on workers is set by -MaxThreads and available memory
             // TODO: estimate memory requirements from point tiles (also sample DTM resolution?)
@@ -206,7 +205,7 @@ namespace Mars.Clouds.Cmdlets
             // minimum bound on workers is at least two, but prefer a minimum of two for margin and enough to fully utilize the read threads
             // Assumption read and processing bandwidths scale similarly across different hardware configs and therefore that the ratio between
             // read and worker threads is fairly stable.
-            float readBandwidthInGBs = LasReader.ReadPointsToXyzcsSpeedInGBs * readThreads;
+            float readBandwidthInGBs = LasReader.ReadPointsToXyzcsInitialSpeedEstimateInGBs * readThreads;
             int preferredWorkerThreadsAsymptotic = Int32.Min(maxWorkerThreads, Int32.Max(2, (int)(readBandwidthInGBs / 0.2F + 0.5F)));
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
             int preferredWorkerThreadsLimitedTiles = Int32.Min(maxWorkerThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles
@@ -234,7 +233,7 @@ namespace Mars.Clouds.Cmdlets
             // There's easily tens of GB in gen 2 and in the large object heap. Left on its own, the .NET 8 garbage collector often takes
             // minutes to release these but an explicit call to Collect() results in release within a second or so. Requesting compaction
             // brings Windows' display of process memory used into line with the actual size of the managed heap after collection.
-            dsmReadCreateWrite.OnTileWriteComplete();
+            dsmReadCreateWrite.PointBatchPool.Clear();
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
@@ -298,11 +297,6 @@ namespace Mars.Clouds.Cmdlets
                                 this.Dsm.TileCount + (this.Dsm.TileCount == 1 ? " DSM tile created, " : " DSM tiles created, ") +
                                 this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written...";
                 return status;
-            }
-
-            public void OnTileWriteComplete()
-            {
-                this.PointBatchPool.Clear();
             }
         }
     }

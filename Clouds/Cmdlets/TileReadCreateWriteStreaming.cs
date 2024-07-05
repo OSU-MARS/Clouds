@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Extensions;
 
 namespace Mars.Clouds.Cmdlets
 {

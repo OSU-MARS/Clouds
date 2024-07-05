@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Cmdlets
 {

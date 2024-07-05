@@ -3,13 +3,13 @@ using System.IO;
 
 namespace Mars.Clouds.Las
 {
-    public class LasStream : IDisposable
+    public class LasStream<TStream> : IDisposable where TStream : Stream
     {
         private bool isDisposed;
 
-        public Stream BaseStream { get; private init; }
+        public TStream BaseStream { get; private init; }
 
-        protected LasStream(Stream stream)
+        protected LasStream(TStream stream)
         {
             this.BaseStream = stream;
         }

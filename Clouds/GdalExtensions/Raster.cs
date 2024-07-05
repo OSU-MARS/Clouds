@@ -83,6 +83,36 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract IEnumerable<RasterBand> GetBands();
 
+        protected static string GetDiagnosticFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
+        {
+            string? directoryPath = Path.GetDirectoryName(primaryFilePath);
+            if (directoryPath == null)
+            {
+                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), "DSM primary file path'" + primaryFilePath + "' does not contain a directory.");
+            }
+            string? fileName = Path.GetFileName(primaryFilePath);
+            if (fileName == null)
+            {
+                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), "DSM primary file path '" + primaryFilePath + "' does not contain a file name.");
+            }
+
+            string diagnosticDirectoryPath = Path.Combine(directoryPath, diagnosticDirectoryName);
+            if (Directory.Exists(diagnosticDirectoryPath) == false)
+            {
+                if (createDiagnosticDirectory)
+                {
+                    Directory.CreateDirectory(diagnosticDirectoryPath);
+                }
+                else
+                {
+                    throw new ArgumentOutOfRangeException(nameof(diagnosticDirectoryName), "Directory '" + directoryPath + "' does not have a '" + diagnosticDirectoryName + "' subdirectory for diagnostic tiles.");
+                }
+            }
+
+            string diagnosticFilePath = Path.Combine(diagnosticDirectoryPath, fileName);
+            return diagnosticFilePath;
+        }
+
         // eight-way immediate adjacency
         public static bool IsNeighbor8(int rowOffset, int columnOffset)
         {

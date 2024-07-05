@@ -179,7 +179,7 @@ namespace Mars.Clouds.Cmdlets
                         statisticsByUngriddedTileIndex[vrtIndex][ungriddedTileIndexInVrt] = tileStatistics;
                     }
                 }
-            });
+            }, new());
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
             TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters..."));

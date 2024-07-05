@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Extensions;
+﻿using DocumentFormat.OpenXml.InkML;
+using Mars.Clouds.Extensions;
 using OSGeo.GDAL;
 using System;
 using System.Diagnostics;
@@ -162,6 +163,63 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public static DataType GetMostCompactIntegerType(RasterBand<UInt32> band1, RasterBand<UInt32> band2)
+        {
+            bool hasMaxValue1 = band1.TryGetMaximumValue(out UInt32 maxValue1);
+            bool hasMaxValue2 = band2.TryGetMaximumValue(out UInt32 maxValue2);
+            if (hasMaxValue1 && hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2);
+            }
+            else if (hasMaxValue1)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1);
+            }
+            else if (hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2);
+            }
+
+            return DataType.GDT_Byte; // minimum size since no data in either band
+        }
+
+        public static DataType GetMostCompactIntegerType(RasterBand<UInt16> band1, RasterBand<UInt16> band2, RasterBand<UInt16> band3)
+        {
+            bool hasMaxValue1 = band1.TryGetMaximumValue(out UInt16 maxValue1);
+            bool hasMaxValue2 = band2.TryGetMaximumValue(out UInt16 maxValue2);
+            bool hasMaxValue3 = band3.TryGetMaximumValue(out UInt16 maxValue3);
+            if (hasMaxValue1 && hasMaxValue2 && hasMaxValue3)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2, maxValue3);
+            }
+            else if (hasMaxValue1 && hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2);
+            }
+            else if (hasMaxValue1 && hasMaxValue3)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue3);
+            }
+            else if (hasMaxValue2 && hasMaxValue3)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2, maxValue3);
+            }
+            else if (hasMaxValue1)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1);
+            }
+            else if (hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2);
+            }
+            else if (hasMaxValue3)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue3);
+            }
+
+            return DataType.GDT_Byte; // minimum size since no data in any band
+        }
+
         private static DataType GetMostCompactIntegerType(UInt16 maxValue)
         {
             if (maxValue < Byte.MaxValue)
@@ -220,46 +278,49 @@ namespace Mars.Clouds.GdalExtensions
             return DataType.GDT_UInt32;
         }
 
-        public static DataType GetMostCompactIntegerType(RasterBand<UInt32> band1, RasterBand<UInt32> band2)
+        private static DataType GetMostCompactIntegerType<TBand>(TBand maxValue) where TBand : IMinMaxValue<TBand>, INumber<TBand>, IUnsignedNumber<TBand>
         {
-            bool hasMaxValue1 = band1.TryGetMaximumValue(out UInt32 maxValue1);
-            bool hasMaxValue2 = band2.TryGetMaximumValue(out UInt32 maxValue2);
+            if (maxValue < TBand.CreateChecked(Byte.MaxValue))
+            {
+                return DataType.GDT_Byte;
+            }
+            if ((maxValue < TBand.CreateChecked(UInt16.MaxValue)) || (TBand.MaxValue == TBand.CreateChecked(UInt16.MaxValue)))
+            {
+                return DataType.GDT_UInt16;
+            }
+            if ((maxValue < TBand.CreateChecked(UInt32.MaxValue)) || (TBand.MaxValue == TBand.CreateChecked(UInt32.MaxValue)))
+            {
+                return DataType.GDT_UInt32;
+            }
+
+            return DataType.GDT_UInt64;
+        }
+
+        private static DataType GetMostCompactIntegerType<TBand>(TBand maxValue1, TBand maxValue2) where TBand : IMinMaxValue<TBand>, INumber<TBand>, IUnsignedNumber<TBand>
+        {
+            if ((maxValue1 < TBand.CreateChecked(Byte.MaxValue)) && (maxValue2 < TBand.CreateChecked(Byte.MaxValue)))
+            {
+                return DataType.GDT_Byte;
+            }
+            if (((maxValue1 < TBand.CreateChecked(UInt16.MaxValue)) && (maxValue2 < TBand.CreateChecked(UInt16.MaxValue))) || (TBand.MaxValue == TBand.CreateChecked(UInt16.MaxValue)))
+            {
+                return DataType.GDT_UInt16;
+            }
+            if (((maxValue1 < TBand.CreateChecked(UInt32.MaxValue)) && (maxValue2 < TBand.CreateChecked(UInt32.MaxValue))) || (TBand.MaxValue == TBand.CreateChecked(UInt32.MaxValue)))
+            {
+                return DataType.GDT_UInt32;
+            }
+
+            return DataType.GDT_UInt64;
+        }
+
+        public static DataType GetMostCompactIntegerType<TBand>(RasterBand<TBand> band1, RasterBand<TBand> band2) where TBand : IMinMaxValue<TBand>, INumber<TBand>, IUnsignedNumber<TBand>
+        {
+            bool hasMaxValue1 = band1.TryGetMaximumValue(out TBand maxValue1);
+            bool hasMaxValue2 = band2.TryGetMaximumValue(out TBand maxValue2);
             if (hasMaxValue1 && hasMaxValue2)
             {
                 return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2);
-            }
-            else if (hasMaxValue1)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1);   
-            }
-            else if (hasMaxValue2) 
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2);
-            }
-
-            return DataType.GDT_Byte; // minimum size since no data in either band
-        }
-
-        public static DataType GetMostCompactIntegerType(RasterBand<UInt16> band1, RasterBand<UInt16> band2, RasterBand<UInt16> band3)
-        {
-            bool hasMaxValue1 = band1.TryGetMaximumValue(out UInt16 maxValue1);
-            bool hasMaxValue2 = band2.TryGetMaximumValue(out UInt16 maxValue2);
-            bool hasMaxValue3 = band3.TryGetMaximumValue(out UInt16 maxValue3);
-            if (hasMaxValue1 && hasMaxValue2 && hasMaxValue3)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2, maxValue3);
-            }
-            else if (hasMaxValue1 && hasMaxValue2)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2);
-            }
-            else if (hasMaxValue1 && hasMaxValue3)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue3);
-            }
-            else if (hasMaxValue2 && hasMaxValue3)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2, maxValue3);
             }
             else if (hasMaxValue1)
             {
@@ -269,12 +330,8 @@ namespace Mars.Clouds.GdalExtensions
             {
                 return DataTypeExtensions.GetMostCompactIntegerType(maxValue2);
             }
-            else if (hasMaxValue3)
-            {
-                return DataTypeExtensions.GetMostCompactIntegerType(maxValue3);
-            }
 
-            return DataType.GDT_Byte; // minimum size since no data in any band
+            return DataType.GDT_Byte; // minimum size since no data in either band
         }
 
         /// <returns>true if <paramref name="to"/> is a wider version of the same integer data type as <paramref name="from"/>, false otherwise</returns>

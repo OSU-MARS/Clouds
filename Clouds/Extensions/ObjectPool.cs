@@ -1,7 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Mars.Clouds
+namespace Mars.Clouds.Extensions
 {
     public class ObjectPool<T> where T : class
     {
@@ -41,8 +42,18 @@ namespace Mars.Clouds
             }
         }
 
+        public bool TryGet([NotNullWhen(true)] out T? item)
+        {
+            return this.objects.TryDequeue(out item);
+        }
+
         public bool TryGetThreadSafe([NotNullWhen(true)] out T? item)
         {
+            if (this.Count == 0)
+            {
+                item = null;
+                return false;
+            }
             lock (this.objects)
             {
                 return this.objects.TryDequeue(out item);
@@ -51,10 +62,16 @@ namespace Mars.Clouds
 
         public int TryGetThreadSafe(List<T> items, int count)
         {
+            if (this.Count == 0)
+            {
+                return 0;
+            }
+
             int itemsAdded = 0;
             lock (this.objects)
             {
-                for (int index = 0; index < count; ++index)
+                int maxObjectCount = Int32.Min(count, this.Count);
+                for (int objectCount = 0; objectCount < maxObjectCount; ++objectCount)
                 {
                     if (this.objects.TryDequeue(out T? item))
                     {

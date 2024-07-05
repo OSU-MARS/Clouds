@@ -2,7 +2,6 @@
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace Mars.Clouds.Las
 {

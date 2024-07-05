@@ -58,7 +58,7 @@ namespace Mars.Clouds.Cmdlets
 
             List<LasTile> lasTiles = new(lasTilePaths.Count);
             int tileReadsInitiated = -1;
-            ParallelTasks readLasHeaders = new(readThreads, () =>
+            ParallelTasks readLasHeaders = new(Int32.Min(readThreads, lasTilePaths.Count), () =>
             {
                 for (int tileIndex = Interlocked.Increment(ref tileReadsInitiated); tileIndex < lasTilePaths.Count; tileIndex = Interlocked.Increment(ref tileReadsInitiated))
                 {
@@ -76,7 +76,7 @@ namespace Mars.Clouds.Cmdlets
                         lasTiles.Add(lasTile);
                     }
                 }
-            });
+            }, new());
 
             TimedProgressRecord tileIndexProgress = new(cmdletName, "Forming grid of point clouds..."); // can't pass null or empty statusDescription
             this.WriteProgress(tileIndexProgress);

@@ -1,6 +1,7 @@
 ﻿using OSGeo.GDAL;
 using System;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
@@ -202,6 +203,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (double xIndexFractional, double yIndexFractional) ToFractionalIndices(double x, double y)
         {
             if (this.ColumnRotation != 0.0)

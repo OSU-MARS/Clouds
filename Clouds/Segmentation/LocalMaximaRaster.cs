@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.Segmentation
 {
@@ -30,6 +29,8 @@ namespace Mars.Clouds.Segmentation
                 return new(extent);
             }
 
+            Debug.Assert(SpatialReferenceExtensions.IsSameCrs(raster.Crs, extent.Crs));
+            raster.Transform.Copy(extent.Transform);
             Array.Fill(raster.DsmMaxima.Data, raster.DsmMaxima.NoDataValue);
             Array.Fill(raster.CmmMaxima.Data, raster.CmmMaxima.NoDataValue);
             Array.Fill(raster.ChmMaxima.Data, raster.ChmMaxima.NoDataValue);

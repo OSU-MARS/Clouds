@@ -13,15 +13,20 @@ namespace Mars.Clouds.Extensions
         private readonly Task[] tasks;
         private readonly CancellationTokenSource cancellationTokenSource;
 
-        public ParallelTasks(int taskCount, Action taskBody)
+        public ParallelTasks(int taskCount, Action taskBody, CancellationTokenSource cancellationTokenSource)
         {
-            this.cancellationTokenSource = new();
+            this.cancellationTokenSource = cancellationTokenSource;
             this.taskExceptions = [];
             this.tasks = new Task[taskCount];
             for (int taskIndex = 0; taskIndex < this.tasks.Length; ++taskIndex)
             {
-                this.tasks[taskIndex] = Task.Run(taskBody, cancellationTokenSource.Token);
+                this.tasks[taskIndex] = Task.Run(taskBody, this.cancellationTokenSource.Token);
             }
+        }
+
+        public int Count
+        {
+            get { return this.tasks.Length; }
         }
 
         public void Dispose()
@@ -56,7 +61,7 @@ namespace Mars.Clouds.Extensions
 
         public bool WaitAll(TimeSpan timeout)
         {
-            if (Task.WaitAll(tasks, timeout)) // unlike some other overloads, does not rethrow if a task faults
+            if (Task.WaitAll(tasks, (int)timeout.TotalMilliseconds, this.cancellationTokenSource.Token)) // unlike some other overloads, does not rethrow if a task faults
             {
                 return true;
             }
@@ -77,7 +82,10 @@ namespace Mars.Clouds.Extensions
 
             if (tasksFaulted > 0)
             {
-                cancellationTokenSource.Cancel(); // cancel any tasks stil running
+                if (this.cancellationTokenSource.IsCancellationRequested == false)
+                {
+                    this.cancellationTokenSource.Cancel(); // cancel any tasks stil running
+                }
 
                 string message = tasksFaulted + " of " + this.tasks.Length + " parallel tasks faulted.";
                 throw new AggregateException(message, this.taskExceptions);

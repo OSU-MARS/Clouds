@@ -276,7 +276,7 @@ namespace Mars.Clouds.Cmdlets
                         chmMaximaTotal += chmMaximaFound;
                     }
                 }
-            });
+            }, new());
 
             TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...");
             this.WriteProgress(progress);

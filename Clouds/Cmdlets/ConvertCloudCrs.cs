@@ -121,7 +121,7 @@ namespace Mars.Clouds.Cmdlets
                         break;
                     }
                 }
-            });
+            }, new());
 
             TimedProgressRecord progress = new("Register-Cloud", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)

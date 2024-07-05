@@ -76,7 +76,7 @@ namespace Mars.Clouds.Cmdlets
                     Interlocked.Increment(ref cloudFiltrationsCompleted);
                     Interlocked.Add(ref pointsRemoved, nonNoisePoints.PointsRemoved);
                 }
-            });
+            }, new());
 
             TimedProgressRecord progress = new("Register-Cloud", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)

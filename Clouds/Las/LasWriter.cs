@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.Drawing;
-using System;
+﻿using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
@@ -7,15 +6,10 @@ using System.Text;
 
 namespace Mars.Clouds.Las
 {
-    public class LasWriter : LasStream
+    public class LasWriter(FileStream stream) : LasStream<FileStream>(stream)
     {
         public const float RegisterSpeedInGBs = 2.0F; // approximate rate per thread (could definitely be profiled more accurately), 5950X
         public const float RemoveNoisePointSpeedInGBs = 2.0F; // TODO: get benchmark values
-
-        public LasWriter(Stream stream)
-            : base(stream)
-        {
-        }
 
         /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
         /// <returns>Number of remaining points by return.</returns>
@@ -55,7 +49,7 @@ namespace Mars.Clouds.Las
                 for (int batchOffset = 0, pointFlag = 0x1; batchOffset < bytesToRead; batchOffset += pointRecordLength, pointFlag <<= 1)
                 {
                     ReadOnlySpan<byte> pointBytes = pointBuffer[batchOffset..];
-                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification _);
                     if (notNoiseOrWithheld == false)
                     {
                         int returnNumber = pointBytes[14] & returnNumberMask;

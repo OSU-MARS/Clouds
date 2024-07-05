@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -51,7 +52,7 @@ namespace Mars.Clouds.Las
         //    return pointCount;
         //}
 
-        public void Return(ObjectPool<TPointBatch> pointBatchPool)
+        public void ReturnThreadSafe(ObjectPool<TPointBatch> pointBatchPool)
         {
             for (int batchIndex = 0; batchIndex < this.Count; ++batchIndex)
             {

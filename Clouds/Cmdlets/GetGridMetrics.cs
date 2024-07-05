@@ -73,7 +73,7 @@ namespace Mars.Clouds.Cmdlets
             GridMetricsRaster metricsRaster = new(gridMetrics, this.Settings);
 
             MetricsTileRead metricsTileRead = new(dtm, gridEpsg, gridMetrics.NonNullCells, this.MaxPointTiles);
-            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToGridSpeedInGBs, minWorkerThreadsPerReadThread: 1);
+            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToGridMetricsInitialSpeedEstimateInGBs, minWorkerThreadsPerReadThread: 1);
             Task[] gridMetricsTasks = new Task[2]; // not currently thread safe so limit ot single thread, default to one calculate thread per read thread
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {
