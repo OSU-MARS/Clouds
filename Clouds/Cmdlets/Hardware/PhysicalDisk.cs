@@ -2,7 +2,7 @@
 using System.Management;
 using System.Runtime.Versioning;
 
-namespace Mars.Clouds.Cmdlets.Drives
+namespace Mars.Clouds.Cmdlets.Hardware
 {
     public class PhysicalDisk
     {
@@ -90,7 +90,7 @@ namespace Mars.Clouds.Cmdlets.Drives
             {
                 // default single actuator per mirror approximation, SATA II+ or SAS1+ assumed
                 // TODO: RAID0 support
-                return DriveCapabilities.HardDriveDefaultTransferRateInGBs;
+                return HardwareCapabilities.HardDriveDefaultTransferRateInGBs;
             }
             else if (this.BusType == BusType.NVMe)
             {
@@ -100,10 +100,10 @@ namespace Mars.Clouds.Cmdlets.Drives
                 }
                 float usableBandwidthPerPcieLaneInGBs = this.PcieVersion switch
                 {
-                    2 => DriveCapabilities.Pcie2LaneBandwidthInGBs,
-                    3 => DriveCapabilities.Pcie3LaneBandwidthInGBs,
-                    4 => DriveCapabilities.Pcie4LaneBandwidthInGBs,
-                    5 => DriveCapabilities.Pcie5LaneBandwidthInGBs,
+                    2 => HardwareCapabilities.Pcie2LaneBandwidthInGBs,
+                    3 => HardwareCapabilities.Pcie3LaneBandwidthInGBs,
+                    4 => HardwareCapabilities.Pcie4LaneBandwidthInGBs,
+                    5 => HardwareCapabilities.Pcie5LaneBandwidthInGBs,
                     _ => throw new NotSupportedException("Unhandled PCIe version " + this.PcieVersion + ".")
                 };
                 return usableBandwidthPerPcieLaneInGBs * this.PcieLanes;

@@ -1,4 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -13,15 +13,12 @@ namespace Mars.Clouds.Cmdlets
     {
         protected override void ProcessRecord()
         {
-            this.ValidateParameters(minWorkerThreads: 0);
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
             Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
 
             const string cmdletName = "Get-ScanMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, gridEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
 
             ScanMetricsRaster scanMetrics = new(cellDefinitions); // metrics grid inherits cellDefinitions's CRS, grid CRS can differ from LAS tiles' CRS
 

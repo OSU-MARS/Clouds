@@ -1,4 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -74,16 +74,8 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            base.ValidateParameters(minWorkerThreads: 0);
-            if (this.MaxThreads > this.MaxPointTiles)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.MaxPointTiles), "-" + nameof(this.MaxPointTiles) + " must be greater than or equal to the maximum number of threads (" + this.MaxThreads + ") as each thread requires a tile to work with.");
-            }
-
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-
             string cmdletName = "Repair-NoisePoints";
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, requiredEpsg: null);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
             double lasGridUnits = lasGrid.Crs.GetLinearUnits();
             if (Single.IsNaN(this.HighNoise))
             {
@@ -95,7 +87,8 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // spin up point cloud read and tile worker threads
-            int availableReadThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReaderWriter.FindUnclassifiedNoisePointsSpeedInGBs, minWorkerThreadsPerReadThread: 0);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReaderWriter.GetFindNoisePointsBandwidth();
+            int availableReadThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
             int checkThreads = Int32.Min(availableReadThreads, lasGrid.NonNullCells);
 
             RepairNoiseReadWrite tileChecks = new();

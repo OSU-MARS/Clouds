@@ -1,5 +1,5 @@
 ﻿using DocumentFormat.OpenXml.Bibliography;
-using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -125,8 +125,9 @@ namespace Mars.Clouds.Cmdlets
             double scanAnchorZ = commonOriginXyz[2];
 
             // set point clouds' origins, coordinate systems, and source IDs
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
+            HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
+            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
             int cloudRegistrationsInitiated = -1;
             int cloudRegistrationsCompleted = 0;

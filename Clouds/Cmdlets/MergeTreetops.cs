@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
@@ -23,18 +24,18 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Merge, "Treetops")]
     public class MergeTreetops : GdalCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Path to a directory containing the treetop .gpkg files to merge or a wildcarded path to a set of treetop tiles to process.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Paths to one or more directories containing the treetop files to merge. Wildcards may be used and, if not specfied, *.gpkg will be used.")]
         [ValidateNotNullOrEmpty]
-        public string? Treetops { get; set; }
+        public List<string> Treetops { get; set; }
 
-        [Parameter(Mandatory = true, Position = 1, HelpMessage = "Path to a directory containing classification raster tiles to merge. Names must match the treetop tile names and the data type must be bytes and they must be in the same CRS as the treetops.")]
+        [Parameter(Mandatory = true, Position = 1, HelpMessage = "Path to a directory containing classification raster tiles to merge. Names must match treetop tile names, band data type must be byte, tiles must be in the same CRS as the treetop tiles.")]
         [ValidateNotNullOrEmpty]
-        public string? Classification { get; set; }
+        public string Classification { get; set; }
 
         [Parameter(HelpMessage = "Name of raster band containing classification data. Default is null, which accepts any single band raster.")]
         public string? ClassificationBandName { get; set; }
 
-        [Parameter(Position = 2, HelpMessage = "Name of merged treetop file to create in the directory indicated by -Treetops.")]
+        [Parameter(Position = 2, HelpMessage = "Path to merged treetop file to create. If only a file name is specified (default is treetops.gpkg) or if this argument is the treetops file will be created in the first directory indicated by -Treetops.")]
         [ValidateNotNullOrEmpty]
         public string Merge { get; set; }
 
@@ -44,31 +45,28 @@ namespace Mars.Clouds.Cmdlets
 
         public MergeTreetops() 
         {
+            this.Classification = String.Empty;
             this.ClassificationBandName = null;
             this.ClassNames = [ "conifer", "nonForest", "hardwood", "unknown" ];
             this.Merge = "treetops" + Constant.File.GeoPackageExtension;
+            this.Treetops = [];
         }
 
-        private (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(IList<string> treetopTilePaths)
+        private (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(List<string> treetopTilePaths)
         {
             Debug.Assert(this.Classification != null);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            ParallelOptions parallelOptions = new()
-            {
-                MaxDegreeOfParallelism = this.MaxThreads
-            };
-
+            int tileLoadsInitiated = -1;
             int tilesLoaded = 0;
             VirtualRaster<Raster<byte>> classificationTiles = [];
-            Task loadClassificationVrt = Task.Run(() =>
+            ParallelTasks loadClassificationVrt = new(Int32.Min(this.MaxThreads, treetopTilePaths.Count), () =>
             {
                 // for now, load classification tiles in direct correspondence to treetop tiles
                 // Current behavior is ok if classification and treetop tiles are 1:1 over a contiguous extent or if treetop tiles
                 // extend beyond the classified area. If either tile grid has holes or only part of the treetop tiles is indicated 
                 // then useful classification tiles may not be loaded. Incomplete classification accounts will follow from the edge
                 // effects.
-                Parallel.For(0, treetopTilePaths.Count, parallelOptions, (int tileIndex) =>
+                for (int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < treetopTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
                 {
                     string treetopTilePath = treetopTilePaths[tileIndex];
                     string treetopTileName = Tile.GetName(treetopTilePath);
@@ -84,36 +82,29 @@ namespace Mars.Clouds.Cmdlets
                         classificationTiles.Add(classificationTile);
                         ++tilesLoaded;
                     }
-                });
-            });
+                }
+            }, new());
 
             TimedProgressRecord progress = new("Get-Treetops", "placeholder");
-            while (loadClassificationVrt.Wait(Constant.DefaultProgressInterval) == false)
+            while (loadClassificationVrt.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
                 progress.Update(tilesLoaded, treetopTilePaths.Count);
                 this.WriteProgress(progress);
             }
 
-            stopwatch.Stop();
-            return (classificationTiles, stopwatch.Elapsed);
+            return (classificationTiles, progress.Stopwatch.Elapsed);
         }
 
-        private (SortedList<string, Treetops>, int tileFieldWidth, TimeSpan elapsedTime) LoadTreetopTiles(IList<string> treetopTilePaths, VirtualRaster<Raster<byte>> classificationTiles)
+        private (SortedList<string, Treetops>, int tileFieldWidth, TimeSpan elapsedTime) LoadTreetopTiles(List<string> treetopTilePaths, VirtualRaster<Raster<byte>> classificationTiles)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            ParallelOptions parallelOptions = new()
-            {
-                MaxDegreeOfParallelism = this.MaxThreads
-            };
-
             SortedList<string, Treetops> treetopsByTile = new(treetopTilePaths.Count);
             int tileFieldWidth = 16;
+            int tileLoadsInitiated = -1;
             int tilesLoaded = 0;
-            Task loadAndClassifyTreetops = Task.Run(() =>
+            ParallelTasks loadAndClassifyTreetops = new(Int32.Min(this.MaxThreads, treetopTilePaths.Count), () =>
             {
-                // TODO: schedule tasks explicitly as Parallel tends to use only 2-4 cores
-                Parallel.For(0, treetopTilePaths.Count, parallelOptions, (int tileIndex) =>
+                for(int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < treetopTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
                 {
                     string treetopTilePath = treetopTilePaths[tileIndex];
                     using DataSource? treetopTile = Ogr.Open(treetopTilePath, update: 0);
@@ -148,51 +139,50 @@ namespace Mars.Clouds.Cmdlets
 
                         ++tilesLoaded;
                     }
-                });
-            });
+                }
+            }, new());
 
             TimedProgressRecord progress = new("Get-Treetops", "placeholder");
-            while (loadAndClassifyTreetops.Wait(Constant.DefaultProgressInterval) == false)
+            while (loadAndClassifyTreetops.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
                 progress.Update(tilesLoaded, treetopTilePaths.Count);
                 this.WriteProgress(progress);
             }
 
-            stopwatch.Stop();
-            return (treetopsByTile, tileFieldWidth, stopwatch.Elapsed);
+            return (treetopsByTile, tileFieldWidth, progress.Stopwatch.Elapsed);
         }
 
         protected override void ProcessRecord()
         {
-            Debug.Assert((this.Classification != null) && (this.Treetops != null));
-
-            (string? treetopDirectoryPath, string? treetopTileSearchPattern) = GdalCmdlet.ExtractTileDirectoryPathAndSearchPattern(this.Treetops, "*" + Constant.File.GeoPackageExtension);
-            if (treetopDirectoryPath == null)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must indicate an existing directory where treetop files are located.");
-            }
-            if (treetopTileSearchPattern == null)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.Treetops), "If -" + nameof(this.Treetops) + " does not indicate a directory it must include a file name pattern to match.");
-            }
             if (Directory.Exists(this.Classification) == false)
             {
                 throw new ParameterOutOfRangeException(nameof(this.Classification), "-" + nameof(this.Classification) + " must be an existing directory containing classification rasters.");
             }
 
-            List<string> treetopTilePaths = Directory.EnumerateFiles(treetopDirectoryPath, treetopTileSearchPattern, SearchOption.TopDirectoryOnly).ToList();
+            List<string> treetopTilePaths = GdalCmdlet.GetExistingFilePaths(this.Treetops, Constant.File.GeoPackageExtension);
             if (treetopTilePaths.Count < 2)
             {
                 // nothing to do
-                this.WriteVerbose("Exiting without performing any processing. Path '" + Path.Combine(treetopDirectoryPath, treetopTileSearchPattern) + "' either does indicate at least two treetop tiles to merge.");
+                this.WriteVerbose("Exiting without performing any processing. Path set (" + String.Join(", ", this.Treetops) + ") does indicate at least two treetop tiles to merge.");
                 return;
             }
 
-            string mergedTreetopFilePath = Path.Combine(treetopDirectoryPath, this.Merge);
+            string mergedTreetopFilePath = this.Merge;
+            string? treetopDirectoryPath = Path.GetDirectoryName(this.Merge);
+            if (treetopDirectoryPath == null)
+            {
+                treetopDirectoryPath = Path.GetDirectoryName(this.Treetops[0]);
+                treetopDirectoryPath ??= Environment.CurrentDirectory;
+
+                mergedTreetopFilePath = Path.Combine(treetopDirectoryPath, this.Merge);
+            }
+            
             int outputFileIndex = treetopTilePaths.IndexOf(mergedTreetopFilePath);
             if (outputFileIndex >= 0)
             { 
+                // if an existing output file is present, remove it from the list of input files
+                // It's possible other merge files exist in other input directories. These will not be excluded.
                 treetopTilePaths.RemoveAt(outputFileIndex);
             }
             treetopTilePaths.Sort(StringComparer.Ordinal);

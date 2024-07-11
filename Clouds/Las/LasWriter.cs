@@ -8,9 +8,6 @@ namespace Mars.Clouds.Las
 {
     public class LasWriter(FileStream stream) : LasStream<FileStream>(stream)
     {
-        public const float RegisterSpeedInGBs = 2.0F; // approximate rate per thread (could definitely be profiled more accurately), 5950X
-        public const float RemoveNoisePointSpeedInGBs = 2.0F; // TODO: get benchmark values
-
         /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
         /// <returns>Number of remaining points by return.</returns>
         public LasFilteringResult CopyNonNoisePoints(LasReader reader, LasFile lasFile)
@@ -34,21 +31,21 @@ namespace Mars.Clouds.Las
             float zScale = (float)lasHeader.ZScaleFactor;
 
             Span<UInt64> numberOfPointsRemovedByReturn = stackalloc UInt64[LasHeader14.SupportedNumberOfReturns];
-            Span<byte> pointBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * pointRecordLength]; // for now, assume small enough to stackalloc
+            byte[] pointReadBuffer = new byte[LasReader.ReadBufferSizeInPoints * pointRecordLength]; // for now, assume small enough to stackalloc
             float zMin = Single.MaxValue;
             float zMax = Single.MinValue;
-            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
                 UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
-                int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
                 int bytesToRead = pointsToRead * pointRecordLength;
-                reader.BaseStream.ReadExactly(pointBuffer[..bytesToRead]);
+                reader.BaseStream.ReadExactly(pointReadBuffer, 0, bytesToRead);
 
                 int noiseOrWithheldPoints = 0;
                 int pointMask = 0;
                 for (int batchOffset = 0, pointFlag = 0x1; batchOffset < bytesToRead; batchOffset += pointRecordLength, pointFlag <<= 1)
                 {
-                    ReadOnlySpan<byte> pointBytes = pointBuffer[batchOffset..];
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
                     bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification _);
                     if (notNoiseOrWithheld == false)
                     {
@@ -90,7 +87,7 @@ namespace Mars.Clouds.Las
                             if (destinationOffset != sourceOffset)
                             {
                                 // point is retained but needs to be shifted to an earlier position in the buffer
-                                pointBuffer.Slice(sourceOffset, pointRecordLength).CopyTo(pointBuffer[destinationOffset..]);
+                                pointReadBuffer.AsSpan(sourceOffset, pointRecordLength).CopyTo(pointReadBuffer.AsSpan(destinationOffset, pointRecordLength));
                             }
                             // no bytes to move if points have been skipped yet
                             // Could use a more complex approach which tries to identify larger blocks to move within the buffer but, as most
@@ -103,7 +100,7 @@ namespace Mars.Clouds.Las
 
                 if (bytesToWrite > 0)
                 {
-                    this.BaseStream.Write(pointBuffer[..bytesToWrite]);
+                    this.BaseStream.Write(pointReadBuffer, 0, bytesToWrite);
                 }
             }
 
@@ -139,6 +136,12 @@ namespace Mars.Clouds.Las
         {
             FileStream stream = new(lasPath, FileMode.Create, FileAccess.Write, FileShare.Read, 512 * 1024);
             return new LasWriter(stream);
+        }
+
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointCopyEditBandwidth()
+        {
+            // TODO: profile
+            return (2.0F, 4.5F * 2.0F);
         }
 
         public void WriteExtendedVariableLengthRecords(LasFile lasFile)
@@ -291,11 +294,11 @@ namespace Mars.Clouds.Las
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
 
-            byte[] pointBuffer = new byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength];
-            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
+            byte[] pointBuffer = new byte[LasReader.ReadBufferSizeInPoints * lasHeader.PointDataRecordLength];
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
                 UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
-                int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
                 int bytesToRead = pointsToRead * lasHeader.PointDataRecordLength;
                 reader.BaseStream.ReadExactly(pointBuffer.AsSpan(0, bytesToRead));
 

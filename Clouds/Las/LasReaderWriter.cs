@@ -8,11 +8,15 @@ namespace Mars.Clouds.Las
 {
     public class LasReaderWriter(FileStream stream) : LasReader(stream)
     {
-        public const float FindUnclassifiedNoisePointsSpeedInGBs = 2.0F; // TODO: get benchmark values
-
-        public static new LasReaderWriter CreateForPointRead(string lasPath, long fileSizeInBytes)
+        public static LasReaderWriter CreateForPointRead(string lasPath, long fileSizeInBytes)
         {
-            return new LasReaderWriter(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite, useAsync: true));
+            return new LasReaderWriter(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite, unbuffered: false, enableAsync: false));
+        }
+
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetFindNoisePointsBandwidth()
+        {
+            // TODO: profile
+            return (2.0F, 4.5F * 2.0F);
         }
 
         public int TryFindUnclassifiedNoise(LasTile lasTile, RasterBand<float> dtmTile, float highNoiseThreshold, float lowNoiseThreshold)
@@ -30,6 +34,7 @@ namespace Mars.Clouds.Las
             // read points
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
             int classificationOffset = pointFormat < 6 ? 15 : 16;
             double xOffset = lasHeader.XOffset;
             double xScale = lasHeader.XScaleFactor;
@@ -38,19 +43,19 @@ namespace Mars.Clouds.Las
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
-            Span<byte> pointReadBuffer = stackalloc byte[LasReader.ReadExactSizeInPoints * lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            byte[] pointReadBuffer = new byte[LasReader.ReadBufferSizeInPoints * lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
             int pointsReclassified = 0;
-            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadExactSizeInPoints)
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
                 UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
-                int pointsToRead = pointsRemainingToRead >= LasReader.ReadExactSizeInPoints ? LasReader.ReadExactSizeInPoints : (int)pointsRemainingToRead;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
                 int bytesToRead = pointsToRead * lasHeader.PointDataRecordLength;
-                this.BaseStream.ReadExactly(pointReadBuffer[..bytesToRead]);
+                this.BaseStream.ReadExactly(pointReadBuffer, 0, bytesToRead);
 
-                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += lasHeader.PointDataRecordLength)
+                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += pointRecordLength)
                 {
-                    ReadOnlySpan<byte> pointBytes = pointReadBuffer[batchOffset..];
-                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification _);
                     if (notNoiseOrWithheld == false)
                     {
                         continue;

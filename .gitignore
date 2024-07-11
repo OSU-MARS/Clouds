@@ -1,12 +1,9 @@
-# user specific configuration files
-# *.csproj.user
-# *.pubxml.user
-
-# build, packaging, and test results
+# Visual Studio build, packaging, and test results
 bin/
 obj/
 packages/
 TestResults/
 
-# Visual Studio cache/options directory
+# Visual Studio cache/options directory and RStudio user profile
 .vs/
+.Rproj.user

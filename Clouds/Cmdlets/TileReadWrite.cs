@@ -37,11 +37,11 @@ namespace Mars.Clouds.Cmdlets
             return status;
         }
 
-        public string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads)
+        public string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
         {
             string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
-                            this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + activeReadThreads +
-                            (activeReadThreads == 1 ? " read thread active)..."  : " read threads active)...");
+                            this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + totalThreads + 
+                            (totalThreads == 1 ? "thread, " : " threads, ") + activeReadThreads + " reading)...";
             return status;
         }
         

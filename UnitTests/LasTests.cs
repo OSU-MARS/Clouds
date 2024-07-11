@@ -1,4 +1,4 @@
-using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -9,7 +9,6 @@ using OSGeo.OSR;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 
 namespace Mars.Clouds.UnitTests
 {
@@ -20,69 +19,6 @@ namespace Mars.Clouds.UnitTests
         public static void AssemblyInitialize(TestContext _)
         {
             GdalBase.ConfigureAll();
-        }
-
-        [TestMethod]
-        public void FixedDriveCapabilities()
-        {
-            // sanity test of whatever fixed local drives are available
-            // Assumes, for now, no SAS drives.
-            DriveInfo[] drives = DriveInfo.GetDrives();
-            for (int driveIndex = 0; driveIndex < drives.Length; ++driveIndex) 
-            {
-                DriveInfo drive = drives[driveIndex];
-                if (drive.DriveType == DriveType.Fixed)
-                {
-                    DriveCapabilities capabilities = DriveCapabilities.Create([ drive.RootDirectory.Name ]);
-                    Assert.IsTrue(capabilities.UtilizedPhysicalDisksByNumber.Count + capabilities.UtilizedVirtualDisksByNumber.Count == 1);
-                    for (int diskIndex = 0; diskIndex < capabilities.UtilizedPhysicalDisksByNumber.Count; ++diskIndex)
-                    {
-                        PhysicalDisk physicalDisk = capabilities.UtilizedPhysicalDisksByNumber.Values[diskIndex];
-                        LasTests.ValidatePhysicalDisk(physicalDisk);
-                    }
-                    for (int spaceIndex = 0; spaceIndex < capabilities.UtilizedVirtualDisksByNumber.Count; ++spaceIndex)
-                    {
-                        VirtualDisk virtualDisk = capabilities.UtilizedVirtualDisksByNumber.Values[spaceIndex];
-                        LasTests.ValidateVirtualDisk(virtualDisk);
-                    }
-                }
-            }
-        }
-
-        [TestMethod]
-        public void HostSpecificDriveCapabilities()
-        {
-            DriveInfo[] drives = DriveInfo.GetDrives();
-            if ((drives.Length <= 5) || (drives[1].TotalSize != 1798944456704) || (drives[2].TotalSize != 2000381014016))
-            {
-                return;
-            }
-            //drives[1].TotalSize;
-
-            DriveCapabilities cCapabilities = DriveCapabilities.Create([ "C:\\" ]);
-            DriveCapabilities dCapabilities = DriveCapabilities.Create([ "D:\\" ]);
-            DriveCapabilities eCapabilities = DriveCapabilities.Create([ "E:\\" ]);
-            DriveCapabilities fgCapabilities = DriveCapabilities.Create([ "F:\\", "G:\\" ]);
-
-            Assert.IsTrue((cCapabilities.UtilizedPhysicalDisksByNumber.Count == 1) && (cCapabilities.UtilizedVirtualDisksByNumber.Count == 0));
-            Assert.IsTrue((dCapabilities.UtilizedPhysicalDisksByNumber.Count == 1) && (dCapabilities.UtilizedVirtualDisksByNumber.Count == 0));
-            Assert.IsTrue((eCapabilities.UtilizedPhysicalDisksByNumber.Count == 1) && (eCapabilities.UtilizedVirtualDisksByNumber.Count == 0));
-            Assert.IsTrue((fgCapabilities.UtilizedPhysicalDisksByNumber.Count == 1) && (fgCapabilities.UtilizedVirtualDisksByNumber.Count == 0));
-
-            PhysicalDisk c = cCapabilities.UtilizedPhysicalDisksByNumber.Values[0];
-            PhysicalDisk d = dCapabilities.UtilizedPhysicalDisksByNumber.Values[0];
-            PhysicalDisk e = eCapabilities.UtilizedPhysicalDisksByNumber.Values[0];
-            PhysicalDisk fg = fgCapabilities.UtilizedPhysicalDisksByNumber.Values[0];
-            Assert.IsTrue((c.BusType == BusType.NVMe) && (c.MediaType == MediaType.SolidStateDrive) && (c.PcieVersion == 3) && (c.PcieLanes == 4) && (c.GetEstimatedMaximumTransferRateInGBs() == 3.5F));
-            Assert.IsTrue((d.BusType == BusType.NVMe) && (d.MediaType == MediaType.SolidStateDrive) && (d.PcieVersion == 4) && (d.PcieLanes == 4) && (d.GetEstimatedMaximumTransferRateInGBs() == 7.0F));
-            Assert.IsTrue((e.BusType == BusType.SATA) && (e.MediaType == MediaType.HardDrive) && (e.PcieVersion == -1) && (e.PcieLanes == -1) && (e.GetEstimatedMaximumTransferRateInGBs() == DriveCapabilities.HardDriveDefaultTransferRateInGBs));
-            Assert.IsTrue((fg.BusType == BusType.SATA) && (fg.MediaType == MediaType.HardDrive) && (fg.PcieVersion == -1) && (fg.PcieLanes == -1) && (fg.GetEstimatedMaximumTransferRateInGBs() == DriveCapabilities.HardDriveDefaultTransferRateInGBs));
-
-            int cThreads = cCapabilities.GetPracticalReadThreadCount(1.0F);
-            int dThreads = dCapabilities.GetPracticalReadThreadCount(1.0F);
-            int eThreads = eCapabilities.GetPracticalReadThreadCount(1.0F);
-            int fgThreads = fgCapabilities.GetPracticalReadThreadCount(1.0F);
-            Assert.IsTrue((cThreads == 3) && (dThreads == 7) && (eThreads == 1) && (fgThreads == 1));
         }
 
         private VirtualRaster<Raster<float>> ReadDtm()
@@ -713,10 +649,10 @@ namespace Mars.Clouds.UnitTests
             int imageYsize = (int)(lasTile.GridExtent.Height / imageCellSize) + 1;
             GridGeoTransform imageTransform = new(lasTile.GridExtent, imageCellSize, imageCellSize);
 
-            //ArrayPool<byte> readBufferPool = new(LasReader.PointReadBufferSizeInBytes);
+            byte[]? pointReadBuffer = null;
             ImageRaster<UInt64> image = new(lasTile.GetSpatialReference(), imageTransform, imageXsize, imageYsize, includeNearInfrared: false);
-            using LasReader imageReader = lasTile.CreatePointReader();
-            imageReader.ReadPointsToImage(lasTile, image);
+            using LasReader imageReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
+            imageReader.ReadPointsToImage(lasTile, image, ref pointReadBuffer);
             image.OnPointAdditionComplete();
 
             Assert.IsTrue((image.Cells == 72) && (image.SizeX == imageXsize) && (image.SizeY == imageYsize) && (image.NearInfrared == null));
@@ -845,43 +781,6 @@ namespace Mars.Clouds.UnitTests
             lasTile.GridExtent.YMin = lasTile.GridExtent.YMax + gridCellDefinitions.Transform.CellHeight; // cell height is negative
 
             return gridCellDefinitions;
-        }
-
-        private static void ValidatePhysicalDisk(PhysicalDisk physicalDisk)
-        {
-            Assert.IsTrue((physicalDisk.BusType == BusType.NVMe) || (physicalDisk.BusType == BusType.SATA));
-            Assert.IsTrue(physicalDisk.MediaType != MediaType.Unspecified);
-            Assert.IsTrue((physicalDisk.Bus >= 0) && (physicalDisk.Device >= 0) && (physicalDisk.Function >= 0) && (physicalDisk.Adapter >= 0) &&
-                          (physicalDisk.Bus < 32) && (physicalDisk.Device < 32) && (physicalDisk.Function < 32) && (physicalDisk.Adapter < 32)); // sanity upper bounds
-
-            if (physicalDisk.BusType == BusType.NVMe)
-            {
-                Assert.IsTrue((physicalDisk.PcieVersion > 1) && (physicalDisk.PcieVersion < 7));
-                Assert.IsTrue((physicalDisk.PcieLanes >= 1) && (physicalDisk.PcieLanes <= 4));
-            }
-            else
-            {
-                Assert.IsTrue((physicalDisk.PcieVersion == -1) && (physicalDisk.PcieLanes == -1));
-            }
-
-            if (physicalDisk.BusType == BusType.SATA)
-            {
-                Assert.IsTrue(physicalDisk.Port >= 0);
-            }
-            else
-            {
-                Assert.IsTrue(physicalDisk.Port == -1);
-            }
-        }
-
-        private static void ValidateVirtualDisk(VirtualDisk virtualDisk)
-        {
-            Assert.IsTrue((virtualDisk.NumberOfDataCopies >= 1) && (virtualDisk.NumberOfDataCopies <= 8)); // sanity upper bound
-            Assert.IsTrue((virtualDisk.PhysicalDisks.Count >= 1) && (virtualDisk.PhysicalDisks.Count <= 32)); // sanity upper bound
-            for (int diskIndex = 0; diskIndex < virtualDisk.PhysicalDisks.Count; ++diskIndex)
-            {
-                LasTests.ValidatePhysicalDisk(virtualDisk.PhysicalDisks[diskIndex]);
-            }
         }
     }
 }

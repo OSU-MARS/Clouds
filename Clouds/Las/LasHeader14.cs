@@ -96,17 +96,24 @@ namespace Mars.Clouds.Las
         {
             base.Validate();
 
-            UInt64 expectedEndOfPointData = this.OffsetToPointData + this.PointDataRecordLength * this.GetNumberOfPoints();
-            // can't check StartOfFirstExtendedVariableLengthRecord is set when extended variable length records are present
-            if ((this.StartOfFirstExtendedVariableLengthRecord != 0) && (this.StartOfFirstExtendedVariableLengthRecord != expectedEndOfPointData))
+            // if EVLRs are present, verify they're well positioned
+            // If there are no EVLRs, ignore the EVLR start position as the LAS specification places no requirements on it.
+            if (this.NumberOfExtendedVariableLengthRecords > 0)
             {
-                throw new InvalidDataException("StartOfFirstExtendedVariableLengthRecord");
+                UInt64 expectedEndOfPointData = this.OffsetToPointData + this.PointDataRecordLength * this.GetNumberOfPoints();
+                if (this.StartOfFirstExtendedVariableLengthRecord != expectedEndOfPointData)
+                {
+                    // should 
+                    throw new InvalidDataException("Extended variable length records begin at an offset of " + this.StartOfFirstExtendedVariableLengthRecord.ToString("n0") + " bytes but point data ends at " + expectedEndOfPointData.ToString("n0") + " bytes.");
+                }
             }
 
             // for now, do not check number of points and number of points by return for consistency as not all .las writers set
             // them correctly
             // this.NumberOfPointRecords
             // this.NumberOfPointsByReturn
+            // this.LegacyNumberOfPointRecords
+            // this.LegacyNumberOfPointsByReturn
         }
     }
 }

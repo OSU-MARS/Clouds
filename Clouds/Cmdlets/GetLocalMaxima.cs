@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;

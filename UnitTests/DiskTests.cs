@@ -1,15 +1,81 @@
-﻿using Mars.Clouds.DiskSpd;
+﻿using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.DiskSpd;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace Mars.Clouds.UnitTests
 {
     [TestClass]
-    public class DiskSpdTests : CloudTest
+    public class DiskTests : CloudTest
     {
         [TestMethod]
-        public void ReadToLongform() 
+        public void FixedDriveCapabilities()
+        {
+            // sanity test of whatever fixed local drives are available
+            // Assumes, for now, no SAS drives.
+            DriveInfo[] drives = DriveInfo.GetDrives();
+            List<string> drivePaths = [];
+            for (int driveIndex = 0; driveIndex < drives.Length; ++driveIndex)
+            {
+                DriveInfo drive = drives[driveIndex];
+                if (drive.DriveType == DriveType.Fixed)
+                {
+                    drivePaths.Add(drive.RootDirectory.Name); // includes trailing backslash
+                }
+            }
+
+            HardwareCapabilities capabilities = HardwareCapabilities.Current;
+            Assert.IsTrue((4 <= capabilities.PhysicalCores) && (capabilities.PhysicalCores <= 32));
+            Assert.IsTrue((17.06F < capabilities.DdrBandwidthInGBs) && (capabilities.DdrBandwidthInGBs < 512.0F)); // sanity check assuming at least one DDR4 channel at 2133 MT/s or equivalent
+            int totalFixedDisks = capabilities.PhysicalDisksByRoot.Count + capabilities.VirtualDisksByRoot.Count;
+            Assert.IsTrue((0 < totalFixedDisks) && (totalFixedDisks <= drivePaths.Count)); // can have multiple volumes per disk but not more volumes than drive paths
+            for (int diskIndex = 0; diskIndex < capabilities.PhysicalDisksByRoot.Count; ++diskIndex)
+            {
+                PhysicalDisk physicalDisk = capabilities.PhysicalDisksByRoot.Values[diskIndex];
+                DiskTests.ValidatePhysicalDisk(physicalDisk);
+            }
+            for (int spaceIndex = 0; spaceIndex < capabilities.VirtualDisksByRoot.Count; ++spaceIndex)
+            {
+                VirtualDisk virtualDisk = capabilities.VirtualDisksByRoot.Values[spaceIndex];
+                DiskTests.ValidateVirtualDisk(virtualDisk);
+            }
+
+            int readThreads = capabilities.GetPracticalReadThreadCount(drivePaths, 2.0F, 4.5F * 2.0F);
+            Assert.IsTrue(readThreads > 0);
+        }
+
+        [TestMethod]
+        public void HostSpecificHardwareCapabilities()
+        {
+            DriveInfo[] drives = DriveInfo.GetDrives();
+            if ((drives.Length <= 5) || (drives[1].TotalSize != 1798944456704) || (drives[2].TotalSize != 4000768323584))
+            {
+                return;
+            }
+
+            HardwareCapabilities capabilities = HardwareCapabilities.Current;
+            PhysicalDisk c = capabilities.PhysicalDisksByRoot["C:\\"];
+            PhysicalDisk d = capabilities.PhysicalDisksByRoot["D:\\"];
+            PhysicalDisk e = capabilities.PhysicalDisksByRoot["E:\\"];
+            PhysicalDisk f = capabilities.PhysicalDisksByRoot["F:\\"];
+            PhysicalDisk g = capabilities.PhysicalDisksByRoot["G:\\"];
+            Assert.IsTrue((c.BusType == BusType.NVMe) && (c.MediaType == MediaType.SolidStateDrive) && (c.PcieVersion == 3) && (c.PcieLanes == 4) && (c.GetEstimatedMaximumTransferRateInGBs() == 3.5F));
+            Assert.IsTrue((d.BusType == BusType.NVMe) && (d.MediaType == MediaType.SolidStateDrive) && (d.PcieVersion == 4) && (d.PcieLanes == 4) && (d.GetEstimatedMaximumTransferRateInGBs() == 7.0F));
+            Assert.IsTrue((e.BusType == BusType.SATA) && (e.MediaType == MediaType.HardDrive) && (e.PcieVersion == -1) && (e.PcieLanes == -1) && (e.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
+            Assert.IsTrue((f.BusType == BusType.SATA) && (f.MediaType == MediaType.HardDrive) && (f.PcieVersion == -1) && (f.PcieLanes == -1) && (f.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
+            Assert.IsTrue(Object.ReferenceEquals(g, f));
+
+            int cThreads = capabilities.GetPracticalReadThreadCount(["C:\\"], 1.0F, 4.5F);
+            int dThreads = capabilities.GetPracticalReadThreadCount(["D:\\"], 1.0F, 4.5F);
+            int eThreads = capabilities.GetPracticalReadThreadCount(["E:\\"], 1.0F, 4.5F);
+            int fgThreads = capabilities.GetPracticalReadThreadCount(["F:\\", "G:\\"], 1.0F, 4.5F);
+            Assert.IsTrue((cThreads == 4) && (dThreads == 11) && (eThreads == 1) && (fgThreads == 1));
+        }
+
+        [TestMethod]
+        public void ReadDiskSpdXmlToLongformResults() 
         {
             Results results = new(Path.Combine(this.UnitTestPath, "DiskSpd SEQ1M Q8T2 mix 7030 results.xml"));
             DiskSpdLongformResults longformResults = new([ results ]);
@@ -127,6 +193,43 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(longformResults.ReadLatencyStdev[3] == 100.735F);
             Assert.IsTrue(longformResults.AverageWriteLatencyMilliseconds[3] == 144.038F);
             Assert.IsTrue(longformResults.WriteLatencyStdev[3] == 76.912F);
+        }
+
+        private static void ValidatePhysicalDisk(PhysicalDisk physicalDisk)
+        {
+            Assert.IsTrue((physicalDisk.BusType == BusType.NVMe) || (physicalDisk.BusType == BusType.SATA));
+            Assert.IsTrue(physicalDisk.MediaType != MediaType.Unspecified);
+            Assert.IsTrue((physicalDisk.Bus >= 0) && (physicalDisk.Device >= 0) && (physicalDisk.Function >= 0) && (physicalDisk.Adapter >= 0) &&
+                          (physicalDisk.Bus < 32) && (physicalDisk.Device < 32) && (physicalDisk.Function < 32) && (physicalDisk.Adapter < 32)); // sanity upper bounds
+
+            if (physicalDisk.BusType == BusType.NVMe)
+            {
+                Assert.IsTrue((physicalDisk.PcieVersion > 1) && (physicalDisk.PcieVersion < 7));
+                Assert.IsTrue((physicalDisk.PcieLanes >= 1) && (physicalDisk.PcieLanes <= 4));
+            }
+            else
+            {
+                Assert.IsTrue((physicalDisk.PcieVersion == -1) && (physicalDisk.PcieLanes == -1));
+            }
+
+            if (physicalDisk.BusType == BusType.SATA)
+            {
+                Assert.IsTrue(physicalDisk.Port >= 0);
+            }
+            else
+            {
+                Assert.IsTrue(physicalDisk.Port == -1);
+            }
+        }
+
+        private static void ValidateVirtualDisk(VirtualDisk virtualDisk)
+        {
+            Assert.IsTrue((virtualDisk.NumberOfDataCopies >= 1) && (virtualDisk.NumberOfDataCopies <= 8)); // sanity upper bound
+            Assert.IsTrue((virtualDisk.PhysicalDisks.Count >= 1) && (virtualDisk.PhysicalDisks.Count <= 32)); // sanity upper bound
+            for (int diskIndex = 0; diskIndex < virtualDisk.PhysicalDisks.Count; ++diskIndex)
+            {
+                DiskTests.ValidatePhysicalDisk(virtualDisk.PhysicalDisks[diskIndex]);
+            }
         }
     }
 }

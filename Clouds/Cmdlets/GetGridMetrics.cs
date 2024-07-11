@@ -1,4 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -36,31 +36,41 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNull]
         public GridMetricsSettings Settings { get; set; }
 
+        // quick solution for constraining memory consumption
+        // A more adaptive implementation would track memory consumption (e.g. GlobalMemoryStatusEx()), estimate it from the size of the
+        // tiles, or use a reasonably stable bound such as the total number of points loaded.
+        [Parameter(HelpMessage = "Maximum number of point cloud tiles to have fully loaded at the same time (default is 25 or the number of physical cores, whichever is higher). This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than DSMs can be created.")]
+        [ValidateRange(1, 256)] // arbitrary upper bound
+        public int MaxPointTiles { get; set; }
+
         public GetGridMetrics()
         {
             this.CellBand = null;
             this.Dtm = String.Empty;
             this.DtmBand = null;
             // leave this.MaxThreads at default for DTM read
+            this.MaxPointTiles = -1;
             this.Settings = new();
         }
 
         protected override void ProcessRecord()
         {
-            this.ValidateParameters(minWorkerThreads: 1);
+            HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
+            if (this.MaxPointTiles == -1)
+            {
+                this.MaxPointTiles = Int32.Max(25, hardwareCapabilities.PhysicalCores);
+            }
             if (this.MaxThreads < 2)
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
             }
-
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
             Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
             const string cmdletName = "Get-GridMetrics";
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, gridEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
 
             VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm, readData: true);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
@@ -73,7 +83,8 @@ namespace Mars.Clouds.Cmdlets
             GridMetricsRaster metricsRaster = new(gridMetrics, this.Settings);
 
             MetricsTileRead metricsTileRead = new(dtm, gridEpsg, gridMetrics.NonNullCells, this.MaxPointTiles);
-            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, LasReader.ReadPointsToGridMetricsInitialSpeedEstimateInGBs, minWorkerThreadsPerReadThread: 1);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToGridMetricsBandwidth();
+            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 1);
             Task[] gridMetricsTasks = new Task[2]; // not currently thread safe so limit ot single thread, default to one calculate thread per read thread
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {

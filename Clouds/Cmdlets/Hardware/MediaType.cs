@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Mars.Clouds.Cmdlets.Drives
+namespace Mars.Clouds.Cmdlets.Hardware
 {
     public enum MediaType : UInt16
     {

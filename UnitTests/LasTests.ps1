@@ -19,10 +19,11 @@ Get-Dsm -Las ("E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "E:\El
 
 ## orthoimage generation, single tile
 $tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"
-Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2 16\$tile.tif" -Snap -Verbose
+Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3\$tile.tif" -Snap -Verbose
 
-# orthoimage generation, all tiles
-Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\*.las" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v2" -Verbose
+# orthoimage generation, all tiles with automatic read thread estimation (E:) and dual actuator drive (F:, G:)
+Get-Orthoimages -Las "E:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR" -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3" -Verbose
+Get-Orthoimages -ReadThreads 2 -Las ("F:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1", "G:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Image "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3" -Verbose
 
 ## local maxima in DSM, 3x3 group of tiles
 $tiles = "s042?0w068?0"

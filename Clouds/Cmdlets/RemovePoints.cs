@@ -1,4 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.Las;
 using System;
@@ -37,9 +37,9 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // remove points from clouds
-            DriveCapabilities driveReadCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveReadCapabilities.GetPracticalReadThreadCount(LasWriter.RemoveNoisePointSpeedInGBs), this.MaxThreads);
-            // TODO: driveWriteCapabilities
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
+            HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
+            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
             int cloudFiltrationsInitiated = -1;
             int cloudFiltrationsCompleted = 0;

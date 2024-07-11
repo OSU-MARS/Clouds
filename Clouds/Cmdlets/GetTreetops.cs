@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
+using System.Reflection.Metadata.Ecma335;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -50,6 +51,7 @@ namespace Mars.Clouds.Cmdlets
             this.DsmBand = "dsm";
             // this.Dtm is mandatory
             this.DtmBand = null;
+            // leave this.MaxThreads at default
             this.Method = TreetopDetectionMethod.DsmRadius;
             this.MinimumHeight = Single.NaN;
             // this.Treetops is mandatory
@@ -64,95 +66,84 @@ namespace Mars.Clouds.Cmdlets
             treetopSearch.DiagnosticsPath = this.Diagnostics;
 
             List<string> dsmTilePaths = GdalCmdlet.GetExistingFilePaths([ this.Dsm ], Constant.File.GeoTiffExtension);
-            int treetopCandidates = 0;
-            if (dsmTilePaths.Count == 1)
+            if ((dsmTilePaths.Count >= 1) && (Directory.Exists(this.Treetops) == false))
             {
-                // single tile case
-                string dsmTilePath = dsmTilePaths[0];
-                treetopSearch.AddTile(dsmTilePath, this.Dtm);
-                treetopSearch.BuildGrids();
-                treetopCandidates += treetopSearch.FindTreetops(0, 0, this.Treetops);
+                throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
             }
-            else
+
+            // load all DSM and DTM tiles
+            // TODO: update to current dtim
+            string? mostRecentDsmTileName = null;
+            int tileLoadsInitiated = -1;
+            int tileLoadsCompleted = 0;
+            ParallelTasks loadTilesTasks = new(Int32.Min(this.MaxThreads, dsmTilePaths.Count), () =>
             {
-                // multi-tile case
-                if (Directory.Exists(this.Treetops) == false)
+                for (int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < dsmTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
+                    // find treetops in tile
+                    string dsmTilePath = dsmTilePaths[tileIndex];
+                    string dsmTileFileName = Path.GetFileName(dsmTilePath);
+                    string dtmTilePath = Path.Combine(this.Dtm, dsmTileFileName);
+                    string tileName = Tile.GetName(dsmTilePath);
+                    treetopSearch.AddTile(dsmTilePath, dtmTilePath);
+
+                    mostRecentDsmTileName = tileName;
+                    Interlocked.Increment(ref tileLoadsCompleted);
                 }
+            }, new());
 
-                // load all tiles
-                // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
-                // locality advantage.
-                ParallelOptions parallelOptions = new()
-                {
-                    MaxDegreeOfParallelism = Int32.Min(this.MaxThreads, dsmTilePaths.Count)
-                };
+            TimedProgressRecord progress = new("Get-Treetops", "placeholder"); // can't pass null or empty statusDescription
+            while (loadTilesTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
+                progress.Update(tileLoadsCompleted, dsmTilePaths.Count);
+                this.WriteProgress(progress);
+            }
 
-                string? mostRecentDsmTileName = null;
-                int tilesLoaded = 0;
-                Task loadTilesTask = Task.Run(() =>
+            treetopSearch.BuildGrids();
+
+            // find treetop candidates in all tiles
+            mostRecentDsmTileName = null;
+            int treetopFindsInitiated = -1;
+            int treetopFindsCompleted = 0;
+
+            int maxDsmTileIndex = treetopSearch.Dsm.VirtualRasterSizeInTilesX * treetopSearch.Dsm.VirtualRasterSizeInTilesY;
+            int treetopCandidates = 0;
+            ParallelTasks findTreetopsTasks = new(loadTilesTasks.Count, () =>
+            {
+                for (int tileIndex = Interlocked.Increment(ref treetopFindsInitiated); tileIndex < maxDsmTileIndex; tileIndex = Interlocked.Increment(ref treetopFindsInitiated))
                 {
-                    Parallel.For(0, dsmTilePaths.Count, parallelOptions, (int tileIndex) =>
+                    DigitalSurfaceModel? dsmTile = treetopSearch.Dsm[tileIndex];
+                    if (dsmTile == null)
                     {
-                        // find treetops in tile
-                        string dsmTilePath = dsmTilePaths[tileIndex];
-                        string dsmTileFileName = Path.GetFileName(dsmTilePath);
-                        string dtmTilePath = Path.Combine(this.Dtm, dsmTileFileName);
-                        string tileName = Tile.GetName(dsmTilePath);
-                        treetopSearch.AddTile(dsmTilePath, dtmTilePath);
-
-                        mostRecentDsmTileName = tileName;
-                        Interlocked.Increment(ref tilesLoaded);
-                    });
-                });
-
-                TimedProgressRecord progress = new("Get-Treetops", "placeholder"); // can't pass null or empty statusDescription
-                while (loadTilesTask.Wait(Constant.DefaultProgressInterval) == false)
-                {
-                    progress.StatusDescription = mostRecentDsmTileName != null ? "Loading DSM and DTM tile " + mostRecentDsmTileName + "..." : "Loading DSM and DTM tiles...";
-                    progress.Update(tilesLoaded, dsmTilePaths.Count);
-                    this.WriteProgress(progress);
-                }
-
-                treetopSearch.BuildGrids();
-
-                // find treetop candidates in all tiles
-                mostRecentDsmTileName = null;
-                int tilesCompleted = 0;
-
-                VirtualRasterEnumerator<DigitalSurfaceModel> tileEnumerator = treetopSearch.Dsm.GetEnumerator();
-                ParallelTasks findTreetopsTasks = new(parallelOptions.MaxDegreeOfParallelism, () =>
-                {
-                    while (tileEnumerator.MoveNextThreadSafe())
-                    {
-                        DigitalSurfaceModel dsmTile = tileEnumerator.Current;
-                        string dsmTilePath = dsmTile.FilePath;
-                        Debug.Assert(String.IsNullOrWhiteSpace(dsmTilePath) == false);
-
-                        string dsmFileName = Path.GetFileName(dsmTilePath);
-                        string dsmFileNameWithoutExtension = Path.GetFileNameWithoutExtension(dsmFileName);
-                        string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + Constant.File.GeoPackageExtension);
-
-                        (int tileIndexX, int tileIndexY) = tileEnumerator.GetGridIndices();
-                        int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, treetopTilePath);
-
-                        lock (parallelOptions)
-                        {
-                            treetopCandidates += treetopCandidatesInTile;
-                            ++tilesCompleted;
-                        }
-                        mostRecentDsmTileName = dsmFileName;
+                        continue;
                     }
-                }, new());
 
-                progress.Stopwatch.Restart();
-                while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
-                {
-                    progress.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
-                    progress.Update(tilesCompleted, dsmTilePaths.Count);
-                    this.WriteProgress(progress);
+                    string dsmTilePath = dsmTile.FilePath;
+                    Debug.Assert(String.IsNullOrWhiteSpace(dsmTilePath) == false);
+
+                    string dsmFileName = Path.GetFileName(dsmTilePath);
+                    string dsmFileNameWithoutExtension = Path.GetFileNameWithoutExtension(dsmFileName);
+                    string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + Constant.File.GeoPackageExtension);
+
+                    (int tileIndexX, int tileIndexY) = treetopSearch.Dsm.ToGridIndices(tileIndex);
+                    int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, treetopTilePath);
+
+                    lock (treetopSearch)
+                    {
+                        treetopCandidates += treetopCandidatesInTile;
+                        ++treetopFindsCompleted;
+                    }
+                    mostRecentDsmTileName = dsmFileName;
                 }
+            }, new());
+
+            progress.Stopwatch.Restart();
+            while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
+                progress.Update(treetopFindsCompleted, dsmTilePaths.Count);
+                this.WriteProgress(progress);
             }
 
             stopwatch.Stop();

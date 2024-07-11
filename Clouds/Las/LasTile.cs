@@ -21,16 +21,9 @@ namespace Mars.Clouds.Las
             this.GridExtent = new(this.Header.MinX, this.Header.MaxX, this.Header.MinY, this.Header.MaxY);
         }
 
-        public LasReader CreatePointReader()
+        public LasReader CreatePointReader(bool unbuffered = false, bool enableAsync = false)
         {
-            LasReader reader = LasReader.CreateForPointRead(this.FilePath, this.FileSizeInBytes);
-            reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
-            return reader;
-        }
-
-        public LasReader CreatePointReaderAsync()
-        {
-            LasReader reader = LasReader.CreateForPointReadAsync(this.FilePath, this.FileSizeInBytes);
+            LasReader reader = LasReader.CreateForPointRead(this.FilePath, this.FileSizeInBytes, unbuffered, enableAsync);
             reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
             return reader;
         }

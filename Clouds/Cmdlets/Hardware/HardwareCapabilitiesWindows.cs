@@ -5,16 +5,59 @@ using System.IO;
 using System.Management;
 using System.Runtime.Versioning;
 
-namespace Mars.Clouds.Cmdlets.Drives
+namespace Mars.Clouds.Cmdlets.Hardware
 {
     /// <summary>
     /// Windows Storage API queries for disk capabilities via WMI (Windows Management Instrumentation)
     /// </summary>
-    internal class DriveCapabilitiesWindows : DriveCapabilities
+    internal class HardwareCapabilitiesWindows : HardwareCapabilities
     {
         [SupportedOSPlatform("windows")]
-        public DriveCapabilitiesWindows(List<string> paths)
+        public HardwareCapabilitiesWindows()
         {
+            #region processor
+            // get physical core count as Environment.ProcessorCount provides the logical core count (number of threads)
+            this.PhysicalCores = NativeMethodsWindows.GetPhysicalCoreCount();
+            // https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor or p/invoke
+            // Also provides physical core count plus enabled physical core count. Contains maximum and current clock speed fields as well
+            // but, at least with a 5950X, these fields aren't of much use as they're set to the specified base clock frequency rather than
+            // the actual boost and current frequency.
+            //ManagementClass processors = new("Win32_Processor");
+            //foreach (ManagementBaseObject processor in processors.GetInstances())
+            //{
+            //    this.PhysicalCores += (int)(UInt32)processor.GetPropertyValue("NumberOfCores");
+            //}
+            #endregion
+
+            #region DDR
+            // get information for DDR
+            // https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-physicalmemory
+            List<string> channels = [];
+            ManagementClass dimms = new("Win32_PhysicalMemory");
+            foreach (ManagementBaseObject dimm in dimms.GetInstances())
+            {
+                string bankLabel = (string)dimm.GetPropertyValue("BankLabel");
+                bool channelAlreadyCounted = false;
+                for (int channelIndex = 0; channelIndex < channels.Count; ++channelIndex)
+                {
+                    if (String.Equals(channels[channelIndex], bankLabel))
+                    {
+                        channelAlreadyCounted = true;
+                        break;
+                    }
+                }
+                if (channelAlreadyCounted == false)
+                {
+                    UInt32 speedInMTs = (UInt32)dimm.GetPropertyValue("Speed");
+                    UInt16 totalWidthInBits = (UInt16)dimm.GetPropertyValue("TotalWidth");
+                    this.DdrBandwidthInGBs += 0.001F * totalWidthInBits / 8 * speedInMTs;
+
+                    channels.Add(bankLabel);
+                }
+            }
+            #endregion
+
+            #region physical and virtual disks
             // get information for drives of interest
             // https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-diskdrive
             // InterfaceType: SCSI, IDE, USB, Firewire
@@ -56,7 +99,6 @@ namespace Mars.Clouds.Cmdlets.Drives
             // https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-logicaldisktopartition
             // {[Antecedent, \\MARIK\root\cimv2:Win32_DiskPartition.DeviceID="Disk #2, Partition #1"]}
             // {[Dependent, \\MARIK\root\cimv2:Win32_LogicalDisk.DeviceID="C:"]}
-            List<string> pathRoots = DriveCapabilitiesWindows.GetPathRoots(paths);
             SortedList<string, List<int>> diskNumbersByPathRoot = []; // 1:1 for JBOD (Windows basic partitions, one or more per physical disk), 1:n for RAID
             ManagementClass partitionsToDriveLetters = new("Win32_LogicalDiskToPartition");
             foreach (ManagementBaseObject partitionToDriveLetter in partitionsToDriveLetters.GetInstances())
@@ -67,30 +109,17 @@ namespace Mars.Clouds.Cmdlets.Drives
                 int diskNumber = Int32.Parse(partition[(partition.IndexOf("Disk #") + 6)..partition.LastIndexOf(',')]);
 
                 string logicalDisk = (string)partitionToDriveLetter.GetPropertyValue("Dependent");
-                string driveLetter = logicalDisk[(logicalDisk.IndexOf('"') + 1)..logicalDisk.LastIndexOf('"')]; // with colon
-                string pathRoot = driveLetter + Path.DirectorySeparatorChar;
+                string pathRoot = logicalDisk[(logicalDisk.IndexOf('"') + 1)..logicalDisk.LastIndexOf('"')] + '\\'; // add trailing backslash to match .NET's root directory naming convention
                 //UInt64 startingAddress = (UInt64)partitionToDriveLetter.GetPropertyValue("StartingAddress");
                 //UInt64 endingAddress = (UInt64)partitionToDriveLetter.GetPropertyValue("EndingAddress");
 
-                if (pathRoots.Contains(pathRoot))
+                if (diskNumbersByPathRoot.TryGetValue(pathRoot, out List<int>? diskNumbers))
                 {
-                    if (diskNumbersByPathRoot.TryGetValue(pathRoot, out List<int>? diskNumbers))
-                    {
-                        diskNumbers.Add(diskNumber);
-                    }
-                    else
-                    {
-                        diskNumbersByPathRoot.Add(pathRoot, [diskNumber]);
-                    }
+                    diskNumbers.Add(diskNumber);
                 }
-            }
-
-            for (int rootIndex = 0; rootIndex < pathRoots.Count; ++rootIndex)
-            {
-                string pathRoot = pathRoots[rootIndex];
-                if (diskNumbersByPathRoot.ContainsKey(pathRoot) == false)
+                else
                 {
-                    throw new ArgumentOutOfRangeException(nameof(paths), "No disk found for drive '" + pathRoot + "'. If drive root paths were passed are they missing trailing backslashes (e.g. " + nameof(paths) + " should contain C:\\ instead of C:)?");
+                    diskNumbersByPathRoot.Add(pathRoot, [ diskNumber ]);
                 }
             }
 
@@ -99,27 +128,29 @@ namespace Mars.Clouds.Cmdlets.Drives
             // DeviceId + BusType (NVMe, SATA, USB, SAS, RAID) + MediaType (hard drive, solid state drive)
             ManagementObjectSearcher physicalDisks = new(@"\\localhost\ROOT\Microsoft\Windows\Storage", "SELECT * FROM MSFT_PhysicalDisk");
             SortedList<string, PhysicalDisk> physicalDiskByStorageSpaceGuid = [];
-            foreach (ManagementBaseObject physicalDisk in physicalDisks.Get())
+            foreach (ManagementBaseObject physicalDiskManagementObject in physicalDisks.Get())
             {
-                int physicalDiskNumber = Int32.Parse((string)physicalDisk.GetPropertyValue("DeviceID")); // no \\.\PHYSICALDRIVE prefix
+                PhysicalDisk physicalDisk = new(physicalDiskManagementObject);
+
+                int physicalDiskNumber = Int32.Parse((string)physicalDiskManagementObject.GetPropertyValue("DeviceID")); // no \\.\PHYSICALDRIVE prefix
                 bool isReferencedByBasicOrDynamicDisk = false;
                 for (int rootIndex = 0; rootIndex < diskNumbersByPathRoot.Count; ++rootIndex)
                 {
                     if (diskNumbersByPathRoot.Values[rootIndex].Contains(physicalDiskNumber))
                     {
-                        this.UtilizedPhysicalDisksByNumber.Add(physicalDiskNumber, new(physicalDisk));
+                        this.PhysicalDisksByRoot.Add(diskNumbersByPathRoot.Keys[rootIndex], physicalDisk);
                         isReferencedByBasicOrDynamicDisk = true;
-                        break;
+                        // do not break as multiple partitions, and thus drive letters (path roots), may be present on a single drive
                     }
                 }
 
                 if (isReferencedByBasicOrDynamicDisk == false)
                 {
-                    string objectID = (string)physicalDisk.GetPropertyValue("ObjectId");
+                    string objectID = (string)physicalDiskManagementObject.GetPropertyValue("ObjectId");
                     if (objectID.Contains("SPACES_PhysicalDisk", StringComparison.Ordinal))
                     {
-                        string storageSpaceDiskGuid = DriveCapabilitiesWindows.GetLastGuidFromObjectID(objectID);
-                        physicalDiskByStorageSpaceGuid.Add(storageSpaceDiskGuid, new(physicalDisk));
+                        string storageSpaceDiskGuid = HardwareCapabilitiesWindows.GetLastGuidFromObjectID(objectID);
+                        physicalDiskByStorageSpaceGuid.Add(storageSpaceDiskGuid, physicalDisk);
                     }
                 }
             }
@@ -149,7 +180,7 @@ namespace Mars.Clouds.Cmdlets.Drives
                 }
             }
 
-            bool nvmeDriveInUtilizedVirtualDisk = false;
+            bool nvmeDriveInVirtualDisk = false;
             if (diskNumberByStorageSpaceID.Count > 0)
             {
                 // https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/msft-virtualdisk
@@ -158,13 +189,13 @@ namespace Mars.Clouds.Cmdlets.Drives
                 foreach (ManagementBaseObject microsoftVirtualDisk in microsoftVirtualDisks.Get())
                 {
                     string objectID = (string)microsoftVirtualDisk.GetPropertyValue("ObjectID");
-                    string storageSpaceGuid = DriveCapabilitiesWindows.GetLastGuidFromObjectID(objectID);
+                    string storageSpaceGuid = HardwareCapabilitiesWindows.GetLastGuidFromObjectID(objectID);
                     int virtualDiskNumber = diskNumberByStorageSpaceID[storageSpaceGuid];
                     for (int rootIndex = 0; rootIndex < diskNumbersByPathRoot.Count; ++rootIndex)
                     {
                         if (diskNumbersByPathRoot.Values[rootIndex].Contains(virtualDiskNumber))
                         {
-                            this.UtilizedVirtualDisksByNumber.Add(virtualDiskNumber, new(microsoftVirtualDisk));
+                            this.VirtualDisksByRoot.Add(diskNumbersByPathRoot.Keys[rootIndex], new(microsoftVirtualDisk));
                             break;
                         }
                     }
@@ -175,40 +206,54 @@ namespace Mars.Clouds.Cmdlets.Drives
                 foreach (ManagementBaseObject virtualToPhysicalDisk in virtualDisksToPhysicalDisks.Get())
                 {
                     string virtualDiskObjectID = (string)virtualToPhysicalDisk.GetPropertyValue("VirtualDisk");
-                    string virtualDiskGuid = DriveCapabilitiesWindows.GetLastGuidFromObjectID(virtualDiskObjectID);
+                    string virtualDiskGuid = HardwareCapabilitiesWindows.GetLastGuidFromObjectID(virtualDiskObjectID);
                     if (diskNumberByStorageSpaceID.TryGetValue(virtualDiskGuid, out int diskNumber))
                     {
                         string physicalDiskObjectID = (string)virtualToPhysicalDisk.GetPropertyValue("PhysicalDisk");
-                        string physicalDiskGuid = DriveCapabilitiesWindows.GetLastGuidFromObjectID(physicalDiskObjectID);
+                        string physicalDiskGuid = HardwareCapabilitiesWindows.GetLastGuidFromObjectID(physicalDiskObjectID);
 
-                        VirtualDisk virtualDisk = this.UtilizedVirtualDisksByNumber[diskNumber];
                         PhysicalDisk physicalDisk = physicalDiskByStorageSpaceGuid[physicalDiskGuid];
-                        virtualDisk.PhysicalDisks.Add(physicalDisk);
+
+                        bool virtualDiskFound = false;
+                        for (int rootIndex = 0; rootIndex < diskNumbersByPathRoot.Count; ++rootIndex)
+                        {
+                            if (diskNumbersByPathRoot.Values[rootIndex].Contains(diskNumber))
+                            {
+                                VirtualDisk virtualDisk = this.VirtualDisksByRoot[diskNumbersByPathRoot.Keys[rootIndex]];
+                                virtualDisk.PhysicalDisks.Add(physicalDisk);
+                                virtualDiskFound = true;
+                                break;
+                            }
+                        }
+                        if (virtualDiskFound == false)
+                        {
+                            throw new InvalidOperationException("Failed to find virtual disk containing physical disk number " + diskNumber + "(physical disk object ID " + physicalDiskGuid + ").");
+                        }
 
                         if (physicalDisk.BusType == BusType.NVMe)
                         {
-                            nvmeDriveInUtilizedVirtualDisk = true;
+                            nvmeDriveInVirtualDisk = true;
                         }
                     }
                 }
             }
 
-            if ((this.UtilizedPhysicalDisksByNumber.Count == 0) && (this.UtilizedVirtualDisksByNumber.Count == 0))
+            if ((this.PhysicalDisksByRoot.Count == 0) && (this.VirtualDisksByRoot.Count == 0))
             {
-                throw new ArgumentOutOfRangeException(nameof(paths), "No disks found among drives '" + String.Join(", ", pathRoots) + "'.");
+                throw new InvalidOperationException("No physical or virtual disks found."); // should be unreachable but just in case
             }
 
-            bool nvmePhysicalDiskUtilized = false;
-            for (int physicalDiskIndex = 0; physicalDiskIndex < this.UtilizedPhysicalDisksByNumber.Count; ++physicalDiskIndex)
+            bool nvmePhysicalDiskPresent = false;
+            for (int physicalDiskIndex = 0; physicalDiskIndex < this.PhysicalDisksByRoot.Count; ++physicalDiskIndex)
             {
-                PhysicalDisk physicalDisk = this.UtilizedPhysicalDisksByNumber.Values[physicalDiskIndex];
+                PhysicalDisk physicalDisk = this.PhysicalDisksByRoot.Values[physicalDiskIndex];
                 if (physicalDisk.BusType == BusType.NVMe)
                 {
-                    nvmePhysicalDiskUtilized = true;
+                    nvmePhysicalDiskPresent = true;
                     break;
                 }
             }
-            if (nvmePhysicalDiskUtilized | nvmeDriveInUtilizedVirtualDisk)
+            if (nvmePhysicalDiskPresent | nvmeDriveInVirtualDisk)
             {
                 // query for NVMe controllers
                 // https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-bus
@@ -267,9 +312,9 @@ namespace Mars.Clouds.Cmdlets.Drives
                         int bus = Int32.Parse(locationTokens[0][8..]);
                         int device = Int32.Parse(locationTokens[1][8..]);
                         int function = Int32.Parse(locationTokens[2][9..]);
-                        for (int physicalDiskIndex = 0; physicalDiskIndex < this.UtilizedPhysicalDisksByNumber.Count; ++physicalDiskIndex)
+                        for (int physicalDiskIndex = 0; physicalDiskIndex < this.PhysicalDisksByRoot.Count; ++physicalDiskIndex)
                         {
-                            PhysicalDisk physicalDisk = this.UtilizedPhysicalDisksByNumber.Values[physicalDiskIndex];
+                            PhysicalDisk physicalDisk = this.PhysicalDisksByRoot.Values[physicalDiskIndex];
                             if ((physicalDisk.BusType == BusType.NVMe) && (physicalDisk.Bus == bus) && (physicalDisk.Device == device) && (physicalDisk.Function == function))
                             {
                                 physicalDisk.PcieVersion = (int)(UInt32)controllerPropertyCollections[1].GetPropertyValue("Data");
@@ -380,6 +425,7 @@ namespace Mars.Clouds.Cmdlets.Drives
                 //    }
                 //}
             }
+            #endregion
         }
 
         private static string GetLastGuidFromObjectID(string objectID)
@@ -387,27 +433,6 @@ namespace Mars.Clouds.Cmdlets.Drives
             int startIndex = objectID.LastIndexOf('{') + 1;
             int endIndex = startIndex + 36; // should be 36 characters in GUID
             return objectID[startIndex..endIndex];
-        }
-
-        private static List<string> GetPathRoots(List<string> paths)
-        {
-            List<string> pathRoots = [];
-            for (int index = 0; index < paths.Count; ++index)
-            {
-                string path = paths[index];
-                string? pathRoot = Path.GetPathRoot(path);
-                if (pathRoot == null)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(paths), "Path '" + path + "' is rootless");
-                }
-
-                if (pathRoots.Contains(pathRoot) == false)
-                {
-                    pathRoots.Add(pathRoot);
-                }
-            }
-
-            return pathRoots;
         }
     }
 }

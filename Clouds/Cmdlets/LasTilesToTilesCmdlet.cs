@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
-using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using System;
@@ -14,14 +13,17 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether or not to compress output rasters (DSM or orthoimages). Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
+        [Parameter(HelpMessage = "Perform all orthoimage generation steps except writing images to disk. Though this switch disables output it allows evaluation of drive thermals without incurring flash write wear and provides insight in certain types performance profiling.")]
+        public SwitchParameter NoWrite { get; set; }
+
         protected LasTilesToTilesCmdlet()
         {
             this.CompressRasters = false;
         }
 
-        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, DriveCapabilities driveCapabilities, string outputParameterName, bool outputPathIsDirectory)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, string outputParameterName, bool outputPathIsDirectory)
         {
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, driveCapabilities, requiredEpsg: null);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
             if ((lasGrid.NonNullCells > 1) && (outputPathIsDirectory == false))
             {
                 throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when " + nameof(this.Las) + " indicates multiple files.");

@@ -1,8 +1,10 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using MaxRev.Gdal.Core;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
 
@@ -10,7 +12,8 @@ namespace Mars.Clouds.Cmdlets
 {
     public class GdalCmdlet : FileCmdlet
     {
-        [Parameter(HelpMessage = "Maximum number of threads to use when processing tiles in parallel. Default is half of the procesor's thread count.")]
+        [Parameter(HelpMessage = "Maximum number of threads to use when processing tiles in parallel. Default is cmdlet specific but is usually the number of physical cores.")]
+        [ValidateRange(1, 256)] // arbitrary upper bound
         public int MaxThreads { get; set; }
 
         static GdalCmdlet()
@@ -20,7 +23,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected GdalCmdlet()
         {
-            this.MaxThreads = Environment.ProcessorCount / 2; // for now, assume all cores are hyperthreaded
+            this.MaxThreads = HardwareCapabilities.Current.PhysicalCores;
         }
 
         protected static (string? directoryPath, string? searchPattern) ExtractTileDirectoryPathAndSearchPattern(string cmdletTilePath, string defaultSearchPattern)
@@ -52,6 +55,8 @@ namespace Mars.Clouds.Cmdlets
 
         protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData) where TTile : Raster, IRasterSerializable<TTile>
         {
+            Debug.Assert(this.MaxThreads < 0);
+
             VirtualRaster<TTile> vrt = [];
 
             List<string> tilePaths = GdalCmdlet.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);

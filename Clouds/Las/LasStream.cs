@@ -5,6 +5,8 @@ namespace Mars.Clouds.Las
 {
     public class LasStream<TStream> : IDisposable where TStream : Stream
     {
+        protected const int ReadBufferSizeInPoints = 256; // see profiling notes in LasReader.Read*()
+
         private bool isDisposed;
 
         public TStream BaseStream { get; private init; }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Management;
 using System.Runtime.Versioning;
 
-namespace Mars.Clouds.Cmdlets.Drives
+namespace Mars.Clouds.Cmdlets.Hardware
 {
     public class VirtualDisk
     {

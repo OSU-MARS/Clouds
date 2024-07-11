@@ -1,4 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Drives;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -46,8 +46,8 @@ namespace Mars.Clouds.Cmdlets
             SpatialReference newCrs = SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
 
             // set point clouds' origins, coordinate systems, and source IDs
-            DriveCapabilities driveCapabilities = DriveCapabilities.Create(this.Las);
-            int readThreads = Int32.Min(driveCapabilities.GetPracticalReadThreadCount(LasWriter.RegisterSpeedInGBs), this.MaxThreads);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
+            int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
             int cloudReprojectionsInitiated = -1;
             int cloudReprojectionsCompleted = 0;

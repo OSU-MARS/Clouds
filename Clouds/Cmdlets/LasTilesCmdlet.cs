@@ -1,11 +1,11 @@
 ﻿using Mars.Clouds.Las;
 using System.Collections.Generic;
-using System.IO;
 using System;
 using System.Management.Automation;
-using Mars.Clouds.Cmdlets.Drives;
+using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using System.Threading;
+using System.Diagnostics;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -18,12 +18,6 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public List<string> Las { get; set; }
 
-        // quick solution for constraining memory consumption
-        // A more adaptive implementation would track memory consumption (e.g. GlobalMemoryStatusEx()), estimate it from the size of the
-        // tiles, or use a rasonably stable bound such as the total number of points loaded.
-        [Parameter(HelpMessage = "Maximum number of point cloud tiles to have fully loaded at the same time (default is 25 or the estimaated number of physical cores, whichever is higher). This is a safeguard to constrain maximum memory consumption in situations where tiles are loaded faster than point metrics can be calculated.")]
-        public int MaxPointTiles { get; set; }
-
         [Parameter(HelpMessage = "Number of threads, out of -MaxThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
         [ValidateRange(1, 32)] // arbitrary upper bound
         public int ReadThreads { get; set; }
@@ -35,28 +29,39 @@ namespace Mars.Clouds.Cmdlets
         {
             this.DiscardOverrunningVlrs = false;
             this.Las = [];
-            this.MaxPointTiles = Int32.Max(25, Environment.ProcessorCount / 2);
             this.Snap = false;
             this.ReadThreads = -1;
         }
 
-        protected int GetLasTileReadThreadCount(DriveCapabilities driveCapabilities, float readSpeedPerThreadInGBs, int minWorkerThreadsPerReadThread)
+        protected int GetLasTileReadThreadCount(float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs, int minWorkerThreadsPerReadThread)
         {
-            if (this.ReadThreads == -1)
+            if (this.ReadThreads != -1)
             {
-                int driveBasedReadThreadEstimate = driveCapabilities.GetPracticalReadThreadCount(readSpeedPerThreadInGBs);
-                this.ReadThreads = Int32.Min(driveBasedReadThreadEstimate, this.MaxThreads / (1 + minWorkerThreadsPerReadThread));
+                if (this.ReadThreads > this.MaxThreads)
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.ReadThreads), "-" + nameof(this.ReadThreads) + " is " + this.ReadThreads + " which exceeds the maximum of " + nameof(this.MaxThreads) + " threads. Set -" + nameof(this.ReadThreads) + " and -" + nameof(this.MaxThreads) + " such that the number of read threads is less than or equal to the maximum number of threads.");
+                }
+                return this.ReadThreads; // nothing to do as user's specified the number of read threads
             }
 
-            return this.ReadThreads;
+            if (this.MaxThreads < 1)
+            {
+                throw new InvalidOperationException("-" + nameof(this.MaxThreads) + " is " + this.MaxThreads + ". At least one thread must be allowed. Is the caller failing to assign a default value to -" + this.MaxThreads + " when it is not user specified?");
+            }
+            int driveBasedReadThreadEstimate = HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
+            return Int32.Min(driveBasedReadThreadEstimate, this.MaxThreads / (1 + minWorkerThreadsPerReadThread));
         }
 
-        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, DriveCapabilities driveCapabilities, int? requiredEpsg)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
             List<string> lasTilePaths = GdalCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
-            int readThreads = this.GetLasTileReadThreadCount(driveCapabilities, DriveCapabilities.HardDriveDefaultTransferRateInGBs, minWorkerThreadsPerReadThread: 0);
-
             List<LasTile> lasTiles = new(lasTilePaths.Count);
+
+            // due to the small read size asynchronous would probably be more efficient than multithreaded synchronous here
+            // The small amount of data transferred means synchronous doesn't take too long, even with hard drives, though. So investigating
+            // an asynchronous implementation hasn't been a priority.
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetHeaderBandwidth();
+            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
             int tileReadsInitiated = -1;
             ParallelTasks readLasHeaders = new(Int32.Min(readThreads, lasTilePaths.Count), () =>
             {
@@ -87,17 +92,9 @@ namespace Mars.Clouds.Cmdlets
                 this.WriteProgress(tileIndexProgress);
             }
 
+            tileIndexProgress.Stopwatch.Stop();
             LasTileGrid lasGrid = LasTileGrid.Create(lasTiles, this.Snap, requiredEpsg);
             return lasGrid;
-        }
-
-        protected void ValidateParameters(int minWorkerThreads)
-        {
-            int maxReadThreads = this.MaxThreads - minWorkerThreads;
-            if (this.ReadThreads > maxReadThreads)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.ReadThreads), "-" + nameof(this.ReadThreads) + " (" + this.ReadThreads + " threads) must be less than -" + nameof(this.MaxThreads) + " (" + this.MaxThreads + " threads) in order for at least one worker thread to process the tiles being read.");
-            }
         }
     }
 }
