@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.InkML;
-using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Extensions;
 using OSGeo.GDAL;
 using System;
 using System.Diagnostics;
@@ -161,6 +160,17 @@ namespace Mars.Clouds.GdalExtensions
                 default:
                     throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
             }
+        }
+
+        public static DataType GetMostCompactIntegerType(RasterBand<UInt16> band)
+        {
+            bool hasMaxValue = band.TryGetMaximumValue(out UInt16 maxValue);
+            if (hasMaxValue)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue);
+            }
+
+            return DataType.GDT_Byte; // minimum size since no data
         }
 
         public static DataType GetMostCompactIntegerType(RasterBand<UInt32> band1, RasterBand<UInt32> band2)
@@ -332,6 +342,24 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return DataType.GDT_Byte; // minimum size since no data in either band
+        }
+
+        public static int GetSizeInBytes(this DataType dataType)
+        {
+            return dataType switch
+            {
+                DataType.GDT_Byte => 1,
+                DataType.GDT_Float32 => 4,
+                DataType.GDT_Float64 => 8,
+                DataType.GDT_Int8 => 1,
+                DataType.GDT_Int16 => 2,
+                DataType.GDT_Int32 => 4,
+                DataType.GDT_Int64 => 8,
+                DataType.GDT_UInt16 => 2,
+                DataType.GDT_UInt32 => 4,
+                DataType.GDT_UInt64 => 8,
+                _ => throw new NotSupportedException("Unhandled GDAL data type " + dataType + ".")
+            }; ;
         }
 
         /// <returns>true if <paramref name="to"/> is a wider version of the same integer data type as <paramref name="from"/>, false otherwise</returns>

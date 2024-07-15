@@ -99,8 +99,21 @@ namespace Mars.Clouds.GdalExtensions
             GCHandle dataPin = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
+                // read entire band from GDAL's cache at once
                 CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
                 GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
+
+                // read entire band in block y size increments
+                // Profiling results are ambiguous but many smaller read calls may be somewhat faster than a single large one. It's unclear what
+                // GDAL expects of callers when the block x size is not the raster width, though, and further testing's needed to see if choosing
+                // y sizes intermediate between 1 (the usual block y size for GDAL's GTiff driver) and the entire raster are more performant.
+                //gdalBand.GetBlockSize(out int blockXsize, out int blockYsize);
+                //nint dataPointer = dataPin.AddrOfPinnedObject();
+                //for (int y = 0; y < gdalBand.YSize; y += blockYsize)
+                //{
+                //    CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: y, xSize: gdalBand.XSize, ySize: 1, buffer: dataPointer, buf_xSize: gdalBand.XSize, buf_ySize: blockYsize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                //    GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
+                //}
             }
             finally
             {
@@ -108,7 +121,10 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public abstract void ReleaseData();
+        public abstract Array ReleaseData();
+
+        // can't set this.NoDataIsNaN as data type is not known, require derived classes to override
+        //public abstract void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData);
 
         public static double ResolveSignedIntegerNoDataValue(List<double> candidateNoDataValues, double minValue, double maxValue)
         {
@@ -177,6 +193,8 @@ namespace Mars.Clouds.GdalExtensions
             // A low side convention would set all values to zero, in which case resolution is not needed.
             return maxCandidateValue;
         }
+
+        public abstract bool TryTakeOwnershipOfDataBuffer(Array? buffer);
     }
 
     public class RasterBand<TBand> : RasterBand where TBand : IMinMaxValue<TBand>, INumber<TBand>
@@ -581,10 +599,26 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public override void ReleaseData()
+        public override Array ReleaseData()
         {
+            Array buffer = this.Data;
             this.Data = [];
+
+            return buffer;
         }
+
+        //public override void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData)
+        //{
+        //    this.Crs = crs;
+        //    this.Name = gdalBand.GetDescription();
+        //    this.Transform = transform;
+        //    this.SetNoDataValue(gdalBand); // this.HasNoDataValue, NoDataValue, NoDataIsNaN
+            
+        //    if (readData)
+        //    {
+        //        this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+        //    }
+        //}
 
         [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
         private void SetNoDataValue(Band gdalBand)
@@ -639,6 +673,17 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return this.IsNoData(maximumValue) == false;
+        }
+
+        public override bool TryTakeOwnershipOfDataBuffer(Array? untypedBuffer)
+        {
+            if ((this.HasData == false) && (untypedBuffer is TBand[] buffer) && (buffer.Length == this.Cells))
+            {
+                this.Data = buffer;
+                return true;
+            }
+
+            return false;
         }
 
         public void Write(Dataset rasterDataset, int gdalBandIndex)

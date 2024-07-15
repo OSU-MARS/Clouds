@@ -163,7 +163,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public void SetTransform(Dataset dataset)
         {
-            double[] padfTransform = new double[6];
+            double[] padfTransform = new double[6]; // can't stackalloc as GDAL 3.8.3 bindings lack Span<T>
             dataset.GetGeoTransform(padfTransform);
             this.SetTransform(padfTransform);
         }

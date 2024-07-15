@@ -29,8 +29,8 @@ needed. On Windows systems which are not OEM locked, [FanControl](https://github
 airflow to drive temperatures.
 
 QGIS (as of the 3.34 LTR) tends to be slow to work with virtual rasters produced from LiDAR point cloud processing, apparently due to GDAL's 
-inclination to set `BlockYSize="1"` in .vrt files in contradiction to the guidance in GDAL's own documentation. Clouds can't really do anything 
-about this, though it adheres to GDAL guidance and offers a cmdlet to remove block sizes.
+inclination to set `BlockYSize="1"` in .vrt files in contradiction to the guidance in [GDAL's own documentation](https://gdal.org/drivers/raster/vrt.html). 
+Clouds can't really do anything about this, though it adheres to GDAL guidance and offers a cmdlet to remove block sizes.
 
 Code is currently pre-alpha and provided as is. Typically, the head commit should compile and pass unit tests but this isn't guaranteed (the
 commit before head should be fine). APIs are volatile and breaking changes are routine.
@@ -168,7 +168,17 @@ A few other performance details are notable.
   threads than the processor has cores), the additional threads' cost is negligible. .NET buffered IO can be faster than unbuffered IO and is 
   officially supported but comes with the penalty that amoritizing .NET call overhead requires additional DDR bandwidth to copy data between 
   application and .NET buffers. Apparently as a result, unbuffered IO becomes faster than buffered at higher transfer rates. With desktop hardware 
-  current as of mid-2024, it happens unbuffered transitions to faster near the 3.5 GB/s limit of PCIe 3.0 x4 drives.
+  current as of mid-2024, unbuffered's been observed to transition to faster at roughly 40% of theoretical DDR bandwidth, which corresponds to IO
+  rates in the range of 3.5–6.2 GB/s depending on the workload.
+- The optimal number of threads also varies with workload, with cmdlet, IO type, input file content and size, the number of files to process, and 
+  hardware capabilities all significantly influencing throughput. Requesting Clouds use more than the optimal number of threads usually reduces
+  throughput as different threads contend for system resources. While seek induced reductions in a hard drive actuator's transfer rate are perhaps
+  the most obvious (and audible), contention occurs at most other levels as well. Perhaps the most significant of these is L3 cache spilling, where
+  frequent cache evictions from a group of cores with shared L3 cache that's carrying too many threads result in substantial increases in DDR 
+  bandwidth consumption. Overall throughput often declines in such circumstances as cores are stalled waiting for data to be fetched back into the 
+  cache hierarchy. In such situations it's faster and more energy efficient to leave some cores idle. Note also it may not be possible to find a
+  thread count fully utilizing an NVMe drive. The greater the throughput per thread, the more likely it is the optimum is a difficult to implement
+  fractional number of threads.
 - IO througput above roughly 1 GB/s tend to be stressful to .NET memory management. Best practices are used for object pooling and large object
   heap offloading but it can take longer for the garbage collector to work through tens of gigabytes of first generation, second generation, and
   large objects than it does to run a cmdlet. Cmdlets may therefore request a second generation collection and compaction of the managed heap
@@ -190,9 +200,14 @@ nuget package and the system's PowerShell Core installation, creating a requirem
 the nuget's. If Visual Studio Code is used for PowerShell Core execution then corresponding updates to Visual Studio Code and its PowerShell 
 extension are required.
 
-Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, mainly where GDAL forces single threaded 
-write transactions on large GeoPackages. GDAL's C# interface also lacks support for unbuffered IO, asynchronous IO, and `Span<T>` (and remains
-missing nullability annotations).
+Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, notably where GDAL's design forces single 
+threaded write transactions on large GeoPackages and its raster tile cache (for groups of pixels within individual, not to be confused with 
+virtual raster tiles) imposes memory and DDR bandwidth overhead. Clouds mitigates the former by regularly GeoPackage committing transactions for 
+GDAL's SQL background thread to process in parallel with the single thread GDAL allows Clouds to use to assemble transactions (it's possible
+multithreaded transaction generation is supported but, as of GDAL 3.8.3, it's not documented to be and thus has to be assumed unsafe). For the
+latter, specifying [`GTIFF_DIRECT_IO=YES`](https://gdal.org/drivers/raster/gtiff.html) as a [GDAL option](https://gdal.org/user/configoptions.html) 
+will bypass GDAL's cache for GeoTIFF operations at the expense of performance. (GDAL's C# interface also lacks support for `Span<T>` and remains 
+missing nullability annotations.)
 
 Clouds is developed and tested using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/).
 Clouds is only tested on Windows 10 22H2 but should run on any .NET supported platform once an implementation of `HardwareCapabilities` 

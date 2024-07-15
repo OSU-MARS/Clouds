@@ -6,7 +6,7 @@ namespace Mars.Clouds.Extensions
     {
         public static string ToElapsedString(this Stopwatch stopwatch)
         {
-            return stopwatch.Elapsed.ToString(stopwatch.Elapsed.TotalHours >= 1.0 ? "hh\\:mm\\:ss" : "mm\\:ss"); 
+            return stopwatch.Elapsed.ToElapsedString();
         }
     }
 }

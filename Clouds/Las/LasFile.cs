@@ -73,6 +73,11 @@ namespace Mars.Clouds.Las
         //    }
         //}
 
+        //public virtual string GetExtentString()
+        //{
+        //    return this.Header.MinX + ", " + this.Header.MaxX + ", " + this.Header.MinY + ", " + this.Header.MaxY;
+        //}
+
         public int GetProjectedCoordinateSystemEpsg()
         {
             for (int vlrIndex = 0; vlrIndex < this.VariableLengthRecords.Count; ++vlrIndex)

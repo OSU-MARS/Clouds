@@ -5,7 +5,6 @@ using System.Management.Automation;
 using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using System.Threading;
-using System.Diagnostics;
 
 namespace Mars.Clouds.Cmdlets
 {

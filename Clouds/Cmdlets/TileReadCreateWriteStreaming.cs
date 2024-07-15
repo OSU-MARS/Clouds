@@ -5,32 +5,34 @@ using Mars.Clouds.Extensions;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class TileReadCreateWriteStreaming<TSourceGrid, TSourceTile, TIntermediateData, TDestinationTile> : TileReadWrite<TIntermediateData> 
+    public class TileReadCreateWriteStreaming<TSourceGrid, TSourceTile, TDestinationTile> : TileReadWrite
         where TSourceGrid : GridNullable<TSourceTile>
         where TSourceTile : class?
         where TDestinationTile : Raster
     {
+        private int creationCompletedIndexY;
         private readonly VirtualRaster<TDestinationTile> destinationVrt;
-        private int pendingCreationIndexY;
-        private int pendingIndexX;
-        private int pendingIndexY;
+        private int pendingWriteIndexX;
+        private int pendingWriteIndexY;
         private readonly GridNullable<TSourceTile> sourceGrid;
         private readonly VirtualRasterTileStreamPosition<TDestinationTile> tileStreamPosition;
 
+        public long CellsWritten { get; set; } // 32 bit integer overflows on moderate to large datasets
         public ObjectPool<TDestinationTile> TilePool { get; private init; }
 
-        public TileReadCreateWriteStreaming(GridNullable<TSourceTile> sourceGrid, VirtualRaster<TDestinationTile> destinationVrt, int maxSimultaneouslyLoadedTiles, bool outputPathIsDirectory)
-            : base(maxSimultaneouslyLoadedTiles, outputPathIsDirectory)
+        public TileReadCreateWriteStreaming(GridNullable<TSourceTile> sourceGrid, VirtualRaster<TDestinationTile> destinationVrt, bool outputPathIsDirectory)
+            : base(outputPathIsDirectory)
         {
             Debug.Assert((sourceGrid.SizeX == destinationVrt.VirtualRasterSizeInTilesX) && (sourceGrid.SizeY == destinationVrt.VirtualRasterSizeInTilesY));
 
+            this.creationCompletedIndexY = -1;
             this.destinationVrt = destinationVrt;
+            this.pendingWriteIndexX = 0;
+            this.pendingWriteIndexY = 0;
             this.sourceGrid = sourceGrid;
-            this.pendingCreationIndexY = 0;
-            this.pendingIndexX = 0;
-            this.pendingIndexY = 0;
             this.tileStreamPosition = new(destinationVrt, sourceGrid.GetUnpopulatedCellMap());
 
+            this.CellsWritten = 0;
             this.TilePool = new();
         }
 
@@ -46,7 +48,7 @@ namespace Mars.Clouds.Cmdlets
         {
             // scan to see if creation of one or more rows of DSM tiles has been completed since the last call
             // Similar to code in VirtualRasterTileStreamPosition.OnTileWritten().
-            for (int yIndex = this.pendingCreationIndexY; yIndex < this.destinationVrt.VirtualRasterSizeInTilesY; ++yIndex)
+            for (int yIndex = this.creationCompletedIndexY + 1; yIndex < this.destinationVrt.VirtualRasterSizeInTilesY; ++yIndex)
             {
                 bool dsmRowIncompletelyCreated = false; // unlikely, but maybe no tiles to create in row
                 for (int xIndex = 0; xIndex < this.destinationVrt.VirtualRasterSizeInTilesX; ++xIndex)
@@ -67,7 +69,8 @@ namespace Mars.Clouds.Cmdlets
                 }
                 else
                 {
-                    this.pendingCreationIndexY = yIndex;
+                    Debug.Assert(this.pendingWriteIndexY <= yIndex);
+                    this.creationCompletedIndexY = yIndex;
                 }
             }
 
@@ -75,34 +78,37 @@ namespace Mars.Clouds.Cmdlets
             // In the single row case, tile writes can begin as soon as their +x neighbor's been created. This is not currently
             // handled. Neither are more complex cases where voids in the grid permit writes to start before the next row of DSM
             // tiles has completed loading.
-            int dsmCreationCompletedIndexY = this.pendingCreationIndexY; // if DSM is fully created then all its tiles can be written
-            if (this.pendingCreationIndexY < this.destinationVrt.VirtualRasterSizeInTilesY)
+            int maxWriteableIndexY = this.creationCompletedIndexY; // if all tiles are created then all tiles can be written
+            if (this.creationCompletedIndexY < this.destinationVrt.VirtualRasterSizeInTilesY - 1)
             {
-                --dsmCreationCompletedIndexY; // row n of DSM isn't fully created yet so canopy maxima models for row n - 1 cannot yet be generated without edge effects
+                --maxWriteableIndexY; // row n of DSM isn't fully created yet so canopy maxima models for row n - 1 cannot yet be generated without edge effects
             }
-            for (; this.pendingIndexY < dsmCreationCompletedIndexY; ++this.pendingIndexY)
+            for (; this.pendingWriteIndexY <= maxWriteableIndexY; ++this.pendingWriteIndexY)
             {
-                for (; this.pendingIndexX < this.destinationVrt.VirtualRasterSizeInTilesX; ++this.pendingIndexX)
+                for (; this.pendingWriteIndexX < this.destinationVrt.VirtualRasterSizeInTilesX; ++this.pendingWriteIndexX)
                 {
-                    TDestinationTile? createdTileCandidate = this.destinationVrt[this.pendingIndexX, this.pendingIndexY];
-                    if (createdTileCandidate != null)
+                    TDestinationTile? createdTileCandidate = this.destinationVrt[this.pendingWriteIndexX, this.pendingWriteIndexY];
+                    if (createdTileCandidate == null)
                     {
-                        tileWriteIndexX = this.pendingIndexX;
-                        tileWriteIndexY = this.pendingIndexY;
-                        dsmTileToWrite = createdTileCandidate;
-
-                        // advance to next grid position
-                        ++this.pendingIndexX;
-                        if (this.pendingIndexX >= this.destinationVrt.VirtualRasterSizeInTilesX)
-                        {
-                            ++this.pendingIndexY;
-                            this.pendingIndexX = 0;
-                        }
-                        return true;
+                        // since row is completed a null cell in the virtual raster indicates there's no tile to write at this position
+                        continue;
                     }
+
+                    tileWriteIndexX = this.pendingWriteIndexX;
+                    tileWriteIndexY = this.pendingWriteIndexY;
+                    dsmTileToWrite = createdTileCandidate;
+
+                    // advance to next grid position
+                    ++this.pendingWriteIndexX;
+                    if (this.pendingWriteIndexX >= this.destinationVrt.VirtualRasterSizeInTilesX)
+                    {
+                        ++this.pendingWriteIndexY;
+                        this.pendingWriteIndexX = 0;
+                    }
+                    return true;
                 }
 
-                this.pendingIndexX = 0; // reset to beginning of row, next iteration of loop will increment in y
+                this.pendingWriteIndexX = 0; // reset to beginning of row, next iteration of loop will increment in y
             }
 
             tileWriteIndexX = -1;

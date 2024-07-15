@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Vrt;
 using OSGeo.GDAL;
@@ -28,9 +29,6 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string Vrt { get; set; }
 
-        [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 16 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
-        public EnumerationOptions EnumerationOptions { get; set; }
-
         [Parameter(HelpMessage = "Minimum fraction of tiles to load for computing approximate virtual raster band statistics, default is 0.333 (every third tile). Bands in the first tile are always sampled for fractions greater than zero.")]
         [ValidateRange(0.0F, 1.0F)]
         public float MinSamplingFraction { get; set; }
@@ -39,11 +37,18 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(0, Int32.MaxValue)]
         public int MinTilesSampled { get; set; }
 
+        [Parameter(HelpMessage = "If set, a .xlsx is created alongside the .vrt with band statistics for each tile (overall statistics for each band are included in the .vrt).")]
+        public SwitchParameter Stats { get; set; }
+
+        [Parameter(HelpMessage = "Number of threads, out of -MaxThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
+        [ValidateRange(1, 32)] // arbitrary upper bound
+        public int ReadThreads { get; set; }
+
         [Parameter(HelpMessage = "Frequency at which the status of virtual raster loading and .vrt generation is updated. Default is one second.")]
         public TimeSpan ProgressInterval { get; set; }
 
-        [Parameter(HelpMessage = "If set, a .xlsx is created alongside the .vrt with band statistics for each tile (overall statistics for each band are included in the .vrt).")]
-        public SwitchParameter Stats { get; set; }
+        [Parameter(HelpMessage = "Options for subdirectories and files under the specified path. Default is a 16 kB buffer and to ignore inaccessible and directories as otherwise the UnauthorizedAccessException raised blocks enumeration of all other files.")]
+        public EnumerationOptions EnumerationOptions { get; set; }
 
         public GetVrt()
         {
@@ -53,20 +58,11 @@ namespace Mars.Clouds.Cmdlets
                 BufferSize = 16 * 1024,
                 IgnoreInaccessible = true
             };
-            this.ProgressInterval = TimeSpan.FromSeconds(1.0);
-            // increase this.MaxThreads from GdalCmdlet's default of Environment.ProcessorCount / 2
-            // One thread per physical core benches faster if tiles are cached in memory, worker threads equal to the number of hyperthreads
-            // (Environment.ProcessorCount) is about a third faster when tiles are out of memory. Two worker threads per hyperthread is slower.
-            // As a compromise, default to 75% of the hyperthreads available (1.5 threads per physical core if all cores are hyperthreaded
-            // p-cores).
-            //
-            // performance baselines, 2TB SN770 on 5950X CPU lanes
-            // threads  tile read speed, GB/s
-            // 16       1.2-1.6
-            // 32       2.4-3.0
-            this.MaxThreads = 3 * Environment.ProcessorCount / 4;
+            // leave this.MaxThreads at default
             this.MinSamplingFraction = 1.0F / 3.0F;
             this.MinTilesSampled = 10;
+            this.ProgressInterval = TimeSpan.FromSeconds(1.0);
+            this.ReadThreads = -1;
             this.TilePaths = [];
             this.Stats = false;
             this.Vrt = String.Empty;
@@ -78,7 +74,7 @@ namespace Mars.Clouds.Cmdlets
 
             // find all tiles
             VirtualRasterBandsAndStatistics vrtBandsAndStats = new(this.TilePaths.Count);
-            RasterBandStatistics[][][] statisticsByUngriddedTileIndex = new RasterBandStatistics[this.TilePaths.Count][][];
+            List<RasterBandStatistics>[][] tileBandStatisticsByVrtUngriddedTileIndex = new List<RasterBandStatistics>[this.TilePaths.Count][];
             List<string>[] tilePathsByVrtIndex = new List<string>[this.TilePaths.Count];
             int tileCountAcrossAllVrts = 0;
             for (int vrtIndex = 0; vrtIndex < this.TilePaths.Count; ++vrtIndex)
@@ -108,18 +104,23 @@ namespace Mars.Clouds.Cmdlets
                 }
 
                 tileCountAcrossAllVrts += tilePaths.Count;
-                statisticsByUngriddedTileIndex[vrtIndex] = new RasterBandStatistics[tilePaths.Count][];
+                tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex] = new List<RasterBandStatistics>[tilePaths.Count];
                 tilePathsByVrtIndex[vrtIndex] = tilePaths;
                 vrtBandsAndStats.Vrts[vrtIndex] = [];
             }
 
             // read tiles: get metadata for virtual raster position, read data and calculate band statistics if sampled
-            int readThreads = Int32.Min(tileCountAcrossAllVrts, this.MaxThreads);
+            int readThreads = this.ReadThreads;
+            if (readThreads == -1)
+            {
+                readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.TilePaths, 1.0F, 6.8F), this.MaxThreads);
+            }
             int tileMetadataReadsCompleted = 0;
             int tileReadsInitiated = -1;
             int vrtsRead = 0;
-            ParallelTasks readVrts = new(readThreads, () =>
+            ParallelTasks readVrts = new(Int32.Min(readThreads, tileCountAcrossAllVrts), () =>
             {
+                SortedList<DataType, Array?> bandBuffersByDataType = []; // pool buffers for bands to avoid overloading the GC
                 TileEnumerator tileEnumerator = new(tilePathsByVrtIndex, this.MinTilesSampled, this.MinSamplingFraction);
                 for (int tileReadIndex = Interlocked.Increment(ref tileReadsInitiated); tileReadIndex < tileCountAcrossAllVrts; tileReadIndex = Interlocked.Increment(ref tileReadsInitiated))
                 {
@@ -129,26 +130,19 @@ namespace Mars.Clouds.Cmdlets
                         continue; // shouldn't be reachable
                     }
 
+                    // must be newed distinctly since added to vrt
+                    // Defer data read so band data buffers can be object pooled to avoid overloading the GC.
                     using Dataset tileDataset = Gdal.Open(tileEnumerator.Current, Access.GA_ReadOnly);
                     Raster tile = Raster.Read(tileDataset, readData: false);
 
                     int vrtIndex = tileEnumerator.VrtIndex;
                     VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
-
-                    List<string> bandsToSampleInVrt;
+                    
                     int ungriddedTileIndexInVrt;
                     lock (vrt)
                     {
                         ungriddedTileIndexInVrt = vrt.TileCount;
                         vrt.Add(tile);
-
-                        // intersection between -Bands and virtual raster has to be found somewhere
-                        // Intersection can't occur until a tile's been added to the virtual raster so that it knows what its bands
-                        // are. Intersection also needs to be thread safe, which could be done by each worker writing an intersection
-                        // for every virtual raster it hits the array of band names. Since a lock has to be taken to add a tile to a
-                        // virtual raster and GetBandsInVrt() modifies only the passed virtual raster index it's slightly cleaner to
-                        // intersect once within the lock.
-                        bandsToSampleInVrt = this.GetBandsInVrt(vrtBandsAndStats, vrtIndex);
 
                         ++tileMetadataReadsCompleted;
                         vrtsRead = Int32.Max(vrtsRead, tileEnumerator.VrtIndex);
@@ -156,37 +150,39 @@ namespace Mars.Clouds.Cmdlets
 
                     if (tileEnumerator.SampleTile)
                     {
-                        RasterBandStatistics[] tileStatistics = new RasterBandStatistics[bandsToSampleInVrt.Count];
-                        for (int bandIndex = 0; bandIndex < bandsToSampleInVrt.Count; ++bandIndex)
+                        List<RasterBandStatistics> tileStatistics = [];
+                        foreach (RasterBand band in tile.GetBands())
                         {
-                            string bandName = bandsToSampleInVrt[bandIndex];
-                            RasterBand band = tile.GetBand(bandName);
+                            string bandName = band.Name;
+                            DataType bandDataType = band.GetGdalDataType();
                             bool bandDataPreviouslyRead = band.HasData;
                             if (bandDataPreviouslyRead == false)
                             {
+                                bandBuffersByDataType.TryGetValue(bandDataType, out Array? bandDataBuffer);
+                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(bandDataBuffer);
                                 band.ReadDataInSameCrsAndTransform(tileDataset); // band is reading its own data so CRS and transform are guaranteed
                             }
-                            tileStatistics[bandIndex] = band.GetStatistics();
+                            tileStatistics.Add(band.GetStatistics());
                             if (bandDataPreviouslyRead == false)
                             {
-                                band.ReleaseData();
+                                Array bandDataBuffer = band.ReleaseData();
+                                bandBuffersByDataType[bandDataType] = bandDataBuffer;
                             }
-
                         }
 
                         // VirtualRaster.CreateTileGrid() returns tile xy indices in the order in which tiles were added to the raster
                         // Tile statistics needed to be placed in the same order for transfer to the statistics grid.
-                        statisticsByUngriddedTileIndex[vrtIndex][ungriddedTileIndexInVrt] = tileStatistics;
+                        tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex][ungriddedTileIndexInVrt] = tileStatistics;
                     }
                 }
             }, new());
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
-            TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters..."));
+            TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)..."));
             this.WriteProgress(progress);
             while (readVrts.WaitAll(this.ProgressInterval) == false)
             {
-                progress.StatusDescription = tileMetadataReadsCompleted + " tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters...");
+                progress.StatusDescription = tileMetadataReadsCompleted + " tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)...");
                 progress.Update(tileMetadataReadsCompleted, tileCountAcrossAllVrts); // likely optimistic by band sampling time
                 this.WriteProgress(progress);
             }
@@ -211,18 +207,16 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                Debug.Assert(vrtBandsAndStats.BandsByVrtIndex[vrtIndex] != null);
-
-                GridNullable<RasterBandStatistics[]>? vrtStats = null;
+                GridNullable<List<RasterBandStatistics>?>? vrtStats = null;
                 if (this.MinSamplingFraction > 0.0F)
                 {
                     vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.VirtualRasterSizeInTilesX, vrt.VirtualRasterSizeInTilesY);
-                    RasterBandStatistics[]?[] bandStatisticsForVrt = statisticsByUngriddedTileIndex[vrtIndex];
-                    Debug.Assert(bandStatisticsForVrt.Length == vrt.TileCount);
+                    List<RasterBandStatistics>?[] tileBandStatisticsByUngriddedTileIndexInVrt = tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex];
+                    Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.TileCount);
 
-                    for (int ungriddedTileIndex = 0; ungriddedTileIndex < bandStatisticsForVrt.Length; ++ungriddedTileIndex)
+                    for (int ungriddedTileIndex = 0; ungriddedTileIndex < tileBandStatisticsByUngriddedTileIndexInVrt.Length; ++ungriddedTileIndex)
                     {
-                        RasterBandStatistics[]? bandStatisticsForTile = bandStatisticsForVrt[ungriddedTileIndex];
+                        List<RasterBandStatistics>? bandStatisticsForTile = tileBandStatisticsByUngriddedTileIndexInVrt[ungriddedTileIndex];
                         if (bandStatisticsForTile != null) // not all tiles are sampled for statistics
                         {
                             Debug.Assert(vrtStats[tileIndexX[ungriddedTileIndex], tileIndexY[ungriddedTileIndex]] == null);
@@ -231,48 +225,11 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex] = vrtStats;
+                vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex] = vrtStats;
             }
 
+            vrtBandsAndStats.VrtAssemblyTime = progress.Stopwatch.Elapsed;
             return vrtBandsAndStats;
-        }
-
-        // could be merged into AssembleVrts() but it's unclear doing so would be helpful
-        private int CheckBands(VirtualRasterBandsAndStatistics vrtBandsAndStats)
-        {
-            VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
-            List<string>[] bandsByVrtIndex = vrtBandsAndStats.BandsByVrtIndex;
-
-            if (this.Bands.Count > 0)
-            {
-                int bandsFound = 0;
-                HashSet<string> uniqueBandsFound = [];
-                for (int vrtIndex = 0; vrtIndex < vrts.Length; ++vrtIndex)
-                {
-                    List<string> vrtBands = bandsByVrtIndex[vrtIndex];
-                    bandsFound += vrtBands.Count;
-
-                    for (int bandIndex = 0; bandIndex < vrtBands.Count; ++bandIndex)
-                    {
-                        uniqueBandsFound.Add(vrtBands[bandIndex]);
-                    }
-                }
-
-                if (uniqueBandsFound.Count != this.Bands.Count)
-                {
-                    throw new ParameterOutOfRangeException(nameof(this.Bands), "-" + nameof(this.Bands) + " specifies " + this.Bands.Count + " bands but " + bandsFound + " matching bands were found with " + uniqueBandsFound.Count + " unique names. Are the entries in -" + nameof(this.Bands) + " unique?");
-                }
-            }
-
-            for (int vrtIndex = 0; vrtIndex < vrts.Length; ++vrtIndex)
-            {
-                if (bandsByVrtIndex[vrtIndex].Count > 0)
-                {
-                    return vrtIndex;
-                }
-            }
-
-            throw new ParameterOutOfRangeException(nameof(this.Bands), "Either the virtual raster tiles specified by -" + nameof(this.TilePaths) + " contain no bands or -" + nameof(this.Bands) + " specifies none of the bands present in the tiles.");
         }
 
         private TileStatisticsTable CreateTileStatisticsTable(VirtualRasterBandsAndStatistics vrtBandsAndStats)
@@ -280,20 +237,19 @@ namespace Mars.Clouds.Cmdlets
             TileStatisticsTable statsTable = new();
             for (int vrtIndex = 0; vrtIndex < vrtBandsAndStats.Vrts.Length; ++vrtIndex)
             {
-                GridNullable<RasterBandStatistics[]>? statsGrid = vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex];
-                if (statsGrid == null)
+                GridNullable<List<RasterBandStatistics>?>? statsGridForVrt = vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex];
+                if (statsGridForVrt == null)
                 {
                     continue;
                 }
 
                 VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
-                List<string> bandNames = vrtBandsAndStats.BandsByVrtIndex[vrtIndex];
-                for (int tileIndexY = 0; tileIndexY < statsGrid.SizeY; ++tileIndexY)
+                for (int tileIndexY = 0; tileIndexY < statsGridForVrt.SizeY; ++tileIndexY)
                 {
-                    for (int tileIndexX = 0; tileIndexX < statsGrid.SizeX; ++tileIndexX)
+                    for (int tileIndexX = 0; tileIndexX < statsGridForVrt.SizeX; ++tileIndexX)
                     {
-                        RasterBandStatistics[]? tileStatistics = statsGrid[tileIndexX, tileIndexY];
-                        if (tileStatistics == null)
+                        List<RasterBandStatistics>? tileBandStatistics = statsGridForVrt[tileIndexX, tileIndexY];
+                        if (tileBandStatistics == null)
                         {
                             continue;
                         }
@@ -304,51 +260,24 @@ namespace Mars.Clouds.Cmdlets
                             throw new InvalidOperationException("Statistics are present for virtual raster '" + this.TilePaths[vrtIndex] + "' tile at (" + tileIndexX + ", " + tileIndexY + ") but no tile is present at the same location in the virtual raster.");
                         }
 
-                        Debug.Assert(tileStatistics.Length == bandNames.Count);
-
+                        IEnumerator<RasterBand> tileBands = tile.GetBands().GetEnumerator();
                         string tileName = Tile.GetName(tile.FilePath);
-                        for (int bandIndex = 0; bandIndex < tileStatistics.Length; ++bandIndex)
+                        for (int bandIndex = 0; bandIndex < tileBandStatistics.Count; ++bandIndex)
                         {
-                            string bandName = bandNames[bandIndex];
-                            statsTable.Add(tileName, bandName, tileStatistics[bandIndex]);
+                            if (tileBands.MoveNext() == false)
+                            {
+                                throw new InvalidOperationException("Could not move to band number " + (bandIndex + 1) + " in tile '" + tile.FilePath + "'."); // report GDAL band number
+                            }
+
+                            string bandName = tileBands.Current.Name;
+                            RasterBandStatistics bandStatistics = tileBandStatistics[bandIndex];
+                            statsTable.Add(tileName, bandName, bandStatistics);
                         }
                     }
                 }
             }
 
             return statsTable;
-        }
-
-        private List<string> GetBandsInVrt(VirtualRasterBandsAndStatistics vrtBandsAndStats, int vrtIndex)
-        {
-            List<string>?[] bandsByVrtIndex = vrtBandsAndStats.BandsByVrtIndex;
-
-            List<string>? bandsToSampleInVrt = bandsByVrtIndex[vrtIndex];
-            if (bandsToSampleInVrt == null)
-            {
-                VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
-                if (this.Bands.Count > 0)
-                {
-                    bandsToSampleInVrt = [];
-                    for (int bandIndex = 0; bandIndex < this.Bands.Count; ++bandIndex)
-                    {
-                        string bandName = this.Bands[bandIndex];
-                        if (vrt.BandNames.Contains(bandName, StringComparer.Ordinal))
-                        {
-                            bandsToSampleInVrt.Add(bandName);
-                        }
-                    }
-                }
-                else
-                {
-                    bandsToSampleInVrt = vrt.BandNames;
-                }
-
-                bandsByVrtIndex[vrtIndex] = bandsToSampleInVrt;
-            }
-
-            Debug.Assert(bandsToSampleInVrt != null);
-            return bandsToSampleInVrt;
         }
 
         protected override void ProcessRecord()
@@ -365,7 +294,6 @@ namespace Mars.Clouds.Cmdlets
 
             // read tile metadata, checking inputs for spatial and band data type consistency
             VirtualRasterBandsAndStatistics vrtBandsAndStats = this.AssembleVrts();
-            int firstVrtIndex = this.CheckBands(vrtBandsAndStats);
 
             // create and write .vrt
             // Incremental progress is not shown for dataset generation as time spent is negligible at 2000+ tiles. Runtime is dominated
@@ -374,40 +302,75 @@ namespace Mars.Clouds.Cmdlets
             this.WriteProgress(progress);
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
-            VrtDataset vrtDataset = vrts[firstVrtIndex].CreateDataset(vrtDatasetDirectory, vrtBandsAndStats.BandsByVrtIndex[firstVrtIndex], vrtBandsAndStats.StatisticsByVrtIndex[firstVrtIndex]);
-            for (int vrtIndex = firstVrtIndex + 1; vrtIndex < vrts.Length; ++vrtIndex)
+            VrtDataset? vrtDataset = null;
+            for (int vrtIndex = 0; vrtIndex < vrts.Length; ++vrtIndex)
             {
-                vrtDataset.AppendBands(vrtDatasetDirectory, vrts[vrtIndex], vrtBandsAndStats.BandsByVrtIndex[vrtIndex], vrtBandsAndStats.StatisticsByVrtIndex[vrtIndex]);
+                // filter virtual raster bands if 
+                VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
+                List<string> virtualRasterBandNames = vrt.BandNames;
+                if (this.Bands.Count > 0)
+                {
+                    virtualRasterBandNames = [];
+                    for (int vrtBandIndex = 0; vrtBandIndex < vrt.BandNames.Count; ++vrtBandIndex)
+                    {
+                        string vrtBandName = vrt.BandNames[vrtBandIndex];
+                        if (this.Bands.Contains(vrtBandName))
+                        {
+                            virtualRasterBandNames.Add(vrtBandName);
+                        }
+                    }
+                }
+
+                vrtDataset ??= vrts[0].CreateDataset();
+                vrtDataset.AppendBands(vrtDatasetDirectory, vrts[vrtIndex], virtualRasterBandNames, vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex]);
             }
 
-            vrtDataset.WriteXml(this.Vrt);
-
-            if (this.Stats)
+            if (vrtDataset != null)
             {
-                // create and write .xlsx
-                progress.StatusDescription = "Creating and writing .xlsx...";
-                this.WriteProgress(progress);
+                vrtDataset.WriteXml(this.Vrt);
 
-                string statsFilePath = PathExtensions.ReplaceExtension(this.Vrt, Constant.File.XlsxExtension);
-                TileStatisticsTable statsTable = this.CreateTileStatisticsTable(vrtBandsAndStats);
-                using FileStream stream = new(statsFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, Constant.File.DefaultBufferSize); // SpreadsheetDocument.Create() requires read as well as write
-                statsTable.Write(stream);
+                if (this.Stats)
+                {
+                    // create and write .xlsx
+                    progress.StatusDescription = "Creating and writing .xlsx...";
+                    this.WriteProgress(progress);
+
+                    string statsFilePath = PathExtensions.ReplaceExtension(this.Vrt, Constant.File.XlsxExtension);
+                    TileStatisticsTable statsTable = this.CreateTileStatisticsTable(vrtBandsAndStats);
+                    using FileStream stream = new(statsFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, Constant.File.DefaultBufferSize); // SpreadsheetDocument.Create() requires read as well as write
+                    statsTable.Write(stream);
+                }
+            }
+            else
+            {
+                this.WriteWarning("No virtual raster was created. If -" + nameof(this.Bands) + " was specified does it include at least one band that's present in an input tile?");
             }
 
+            this.WriteVerbose("Assembled " + vrtBandsAndStats.GetTileCount() + " tiles into " + vrtBandsAndStats.Vrts.Length + " virtual rasters in " + vrtBandsAndStats.VrtAssemblyTime.ToElapsedString() + ".");
             base.ProcessRecord();
         }
 
         private class VirtualRasterBandsAndStatistics
         {
-            public List<string>[] BandsByVrtIndex { get; private init; }
-            public GridNullable<RasterBandStatistics[]>?[] StatisticsByVrtIndex { get; private init; }
+            public GridNullable<List<RasterBandStatistics>?>?[] TileBandStatisticsByVrtIndex { get; private init; }
+            public TimeSpan VrtAssemblyTime { get; set; }
             public VirtualRaster<Raster>[] Vrts { get; private init; }
 
             public VirtualRasterBandsAndStatistics(int capacity)
             {
-                this.BandsByVrtIndex = new List<string>[capacity];
-                this.StatisticsByVrtIndex = new GridNullable<RasterBandStatistics[]>[capacity];
+                this.TileBandStatisticsByVrtIndex = new GridNullable<List<RasterBandStatistics>?>?[capacity];
                 this.Vrts = new VirtualRaster<Raster>[capacity];
+            }
+
+            public int GetTileCount()
+            {
+                int tiles = 0;
+                for (int vrtIndex = 0; vrtIndex < this.Vrts.Length; ++vrtIndex)
+                {
+                    tiles += this.Vrts[vrtIndex].TileCount;
+                }
+
+                return tiles;
             }
         }
     }

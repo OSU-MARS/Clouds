@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Management.Automation;
 using System.IO;
 using Mars.Clouds.Extensions;
-using Mars.Clouds.Cmdlets.Hardware;
 using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
@@ -25,11 +24,10 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public string Image { get; set; }
 
-        [Parameter(HelpMessage = "Enable use of unbuffered IO on Windows. This is likely to be helpful in utilizing PCIe 4.0 x4 and faster NVMe drives. Default is buffered IO.")]
-        public SwitchParameter Unbuffered { get; set; }
-
         public GetOrthoimages() 
         {
+            this.imageReadWrite = null;
+
             this.BitDepth = 16;
             this.CellSize = -1.0;
             this.Image = String.Empty;
@@ -63,7 +61,6 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert(maxUsefulThreads > 0);
 
             long cellsWritten = 0;
-            //ObjectPool<PointBatchXyirnRgbn> pointBatchPool = new();
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
             ParallelTasks orthoimageTasks = new(Int32.Min(maxUsefulThreads, this.MaxThreads), () =>
             {
@@ -72,7 +69,9 @@ namespace Mars.Clouds.Cmdlets
                 readSemaphore.Wait(this.imageReadWrite.CancellationTokenSource.Token);
                 if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
                 {
-                    return; // task is cancelled so point in looking for a tile to read
+                    // task is cancelled so no point in looking for a tile to read
+                    // Also not valid to continue if the read semaphore wasn't entered due to cancellation.
+                    return;
                 }
 
                 for (int tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe())
@@ -87,7 +86,6 @@ namespace Mars.Clouds.Cmdlets
                     imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY);
                     using LasReader pointReader = lasTile.CreatePointReader(unbuffered: this.Unbuffered, enableAsync: false);
                     pointReader.ReadPointsToImage(lasTile, imageTile, ref pointReadBuffer);
-                    //PointList<PointBatchXyirnRgbn> tilePoints = pointReader.ReadPoints(lasTile, pointBatchPool);
                     readSemaphore.Release();
                     this.imageReadWrite.IncrementTilesReadThreadSafe();
 
@@ -97,8 +95,6 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // calculate means and set no data values
-                    //imageTile.Add(lasTile, tilePoints);
-                    //tilePoints.ReturnThreadSafe(pointBatchPool);
                     imageTile.OnPointAdditionComplete();
                     if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
                     {
@@ -128,18 +124,15 @@ namespace Mars.Clouds.Cmdlets
                 // Reads have been initiated on all tiles at this point but it's probable there's one or more threads blocked in Wait() which
                 // must acquire the semaphore to exit.
                 readSemaphore.Release();
-
-                // not necessary but may help the GC
-                //pointBatchPool.Clear();
             }, this.imageReadWrite.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, this.imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
             this.WriteProgress(progress);
             while (orthoimageTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count);
+                progress.StatusDescription = this.imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count);
                 progress.Update(this.imageReadWrite.TilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }

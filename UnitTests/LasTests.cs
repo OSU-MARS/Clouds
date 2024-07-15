@@ -42,15 +42,12 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue((dtmRaster.Crs.IsSame(lasTile.GetSpatialReference(), []) == 1) && SpatialReferenceExtensions.IsSameCrs(dtmRaster.Crs, lasTile.GetSpatialReference()));
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
-            using LasReader pointReader = lasTile.CreatePointReader();
-            ObjectPool<PointBatchXyzcs> dsmPointBatchPool = new();
-            PointList<PointBatchXyzcs> dsmPoints = pointReader.ReadPoints(lasTile, dsmPointBatchPool);
-            dsmPointBatchPool.Clear();
-            Assert.IsTrue((dsmPoints.Count == 1) && (dsmPoints[0].Count == 207617) && (dsmPoints[0].Capacity == PointBatch.DefaultCapacity));
+            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", dtmTile);
 
-            PointListGridZs? aerialPointZs = null;
-            PointListGridZs.CreateRecreateOrReset(dtmTile, dsmPoints[0].Count, ref aerialPointZs);
-            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", dsmPoints, dtmTile, aerialPointZs, minimumLayerSeparation: 0.5F /* m */);
+            using LasReader pointReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
+            byte[]? pointReadBuffer = null;
+            pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer);
+            dsmTile.OnPointAdditionComplete(dtmTile);
             
             VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = [];
             dsmVirtualRaster.Add(dsmTile);
@@ -58,9 +55,7 @@ namespace Mars.Clouds.UnitTests
             VirtualRasterNeighborhood8<float> dsmNeighborhood = dsmVirtualRaster.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, bandName: "dsm");
             Binomial.Smooth3x3(dsmNeighborhood, dsmTile.CanopyMaxima3);
 
-            Assert.IsTrue((dsmTile.Layer1 != null) && (dsmTile.Layer2 != null) && (dsmTile.Ground != null));
-            Assert.IsTrue((dsmTile.AerialPoints != null) && (dsmTile.GroundPoints != null));
-            Assert.IsTrue((dsmTile.SourceIDSurface != null) && (dsmTile.SourceIDLayer1 != null) && (dsmTile.SourceIDLayer2 != null));
+            Assert.IsTrue((dsmTile.AerialPoints != null) && (dsmTile.AerialMean != null) && (dsmTile.GroundMean != null) && (dsmTile.GroundPoints != null) && (dsmTile.SourceIDSurface != null));
             Assert.IsTrue((dsmTile.SizeX == dtmRaster.TileSizeInCellsX) && (dsmTile.SizeY == dtmRaster.TileSizeInCellsY));
 
             for (int cellIndex = 0; cellIndex < dsmTile.Cells; ++cellIndex)
@@ -72,33 +67,28 @@ namespace Mars.Clouds.UnitTests
 
                 float dsmZ = dsmTile.Surface[cellIndex];
                 float cmm3 = dsmTile.CanopyMaxima3[cellIndex];
-                float layer1z = dsmTile.Layer1[cellIndex];
-                float layer2z = dsmTile.Layer2[cellIndex];
                 float chmZ = dsmTile.CanopyHeight[cellIndex];
+                float meanZ = dsmTile.AerialMean[cellIndex];
 
                 float dtmZ = dtmTile[cellIndex];
                 if (aerialPoints > 0)
                 {
                     Assert.IsTrue((dsmZ > 920.0F) && (dsmZ < 930.0F));
                     Assert.IsTrue((cmm3 > 920.0F) && (cmm3 < 930.0F));
-                    Assert.IsTrue(Single.IsNaN(layer1z) || (layer1z < dsmZ));
-                    Assert.IsTrue(Single.IsNaN(layer2z) || (layer2z < layer1z));
                     Assert.IsTrue(chmZ == dsmZ - dtmZ);
+                    Assert.IsTrue((dsmZ > meanZ) && (meanZ > dtmZ - 0.2F)); // 20 cm allowance for alignment margin, point error, and DTM error
                 }
                 else
                 {
                     Assert.IsTrue(Single.IsNaN(dsmZ));
                     Assert.IsTrue(Single.IsNaN(cmm3));
-                    Assert.IsTrue(Single.IsNaN(layer1z));
-                    Assert.IsTrue(Single.IsNaN(layer2z));
                     Assert.IsTrue(Single.IsNaN(chmZ));
+                    Assert.IsTrue(Single.IsNaN(meanZ));
                 }
 
                 Assert.IsTrue(Single.IsNaN(dtmZ) || (dtmTile.Data[cellIndex] == dtmZ)); // DTM contains -9999 no datas which are converted to DSM no datas
-                Assert.IsTrue(Single.IsNaN(dsmTile.Ground[cellIndex])); // no points classified as ground
+                Assert.IsTrue(Single.IsNaN(dsmTile.GroundMean[cellIndex])); // no points classified as ground
                 Assert.IsTrue(dsmTile.SourceIDSurface[cellIndex] == 0); // point source ID not set in point cloud
-                Assert.IsTrue(dsmTile.SourceIDLayer1[cellIndex] == 0);
-                Assert.IsTrue(dsmTile.SourceIDLayer2[cellIndex] == 0);
             }
         }
 
@@ -776,7 +766,7 @@ namespace Mars.Clouds.UnitTests
             // Since a tile smaller than an ABA cell is an error, the test path is to boost the tile's extent to be the size of an ABA
             // cell and set the point cloud tile grid pitch matches the expanded tile size.
             using Dataset gridCellDefinitionDataset = Gdal.Open(Path.Combine(this.UnitTestPath, "PSME ABA grid cells.tif"), Access.GA_ReadOnly);
-            Raster<UInt16>  gridCellDefinitions = new(gridCellDefinitionDataset, loadData: true); // data needed to check for no data values
+            Raster<UInt16>  gridCellDefinitions = new(gridCellDefinitionDataset, readData: true); // data needed to check for no data values
             lasTile.GridExtent.XMax = lasTile.GridExtent.XMin + gridCellDefinitions.Transform.CellWidth;
             lasTile.GridExtent.YMin = lasTile.GridExtent.YMax + gridCellDefinitions.Transform.CellHeight; // cell height is negative
 

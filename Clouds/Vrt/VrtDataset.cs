@@ -59,9 +59,9 @@ namespace Mars.Clouds.Vrt
             this.ReadXml(reader);
         }
 
-        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> bands, GridNullable<RasterBandStatistics[]>? statisticsByTile) where TTile : Raster
+        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>?>? tileBandStatistics) where TTile : Raster
         {
-            if ((vrt.TileCount == 0) || (bands.Count == 0))
+            if ((vrt.TileCount == 0) || (vrtBandNames.Count == 0))
             {
                 // nothing to do
                 // Debatable whether requesting bands be appended from a VirtualRaster<T> without any tiles is an error.
@@ -69,35 +69,37 @@ namespace Mars.Clouds.Vrt
             }
 
             // add bands
-            for (int bandIndex = 0; bandIndex < bands.Count; ++bandIndex) 
+            for (int vrtBandIndex = 0; vrtBandIndex < vrtBandNames.Count; ++vrtBandIndex) 
             {
-                string bandName = bands[bandIndex];
-                int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[bandIndex];
-                if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != vrt.TileCount))
+                string vrtBandName = vrtBandNames[vrtBandIndex];
+                int tilesWithBand = vrt.TileCountByBand[vrtBandIndex];
+                int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[vrtBandIndex];
+                Debug.Assert((tilesWithBand <= vrt.TileCount) && (tilesWithNoDataValue <= tilesWithBand));
+                if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != tilesWithBand))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + bandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.TileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
+                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.TileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
                 }
 
                 // create band
-                DataType bandDataType = vrt.BandDataTypes[bandIndex];
+                DataType bandDataType = vrt.BandDataTypes[vrtBandIndex];
                 VrtRasterBand band = new()
                 {
                     Band = this.Bands.Count + 1,
                     DataType = bandDataType,
-                    Description = bandName,
-                    ColorInterpretation = VrtRasterBand.GetColorInterpretation(bandName)
+                    Description = vrtBandName,
+                    ColorInterpretation = VrtRasterBand.GetColorInterpretation(vrtBandName)
                 };
                 if (tilesWithNoDataValue > 0)
                 {
                     // set no data value for virtual raster's band
                     // This can differ from the tiles' no data values and, in cases where band type varies, often does differ from tile values.
-                    Debug.Assert(vrt.NoDataValuesByBand[bandIndex].Count > 0);
-                    band.NoDataValue = VrtDataset.ResolveBandNoDataValue(bandName, bandDataType, vrt.NoDataValuesByBand[bandIndex]);
+                    Debug.Assert(vrt.NoDataValuesByBand[vrtBandIndex].Count > 0);
+                    band.NoDataValue = VrtDataset.ResolveBandNoDataValue(vrtBandName, bandDataType, vrt.NoDataValuesByBand[vrtBandIndex]);
                 }
 
                 // add sources and combine statistics from sampled tiles
-                RasterBandStatistics bandStatistics = new();
-                int tilesWithStatistics = 0;
+                RasterBandStatistics vrtBandStatistics = new();
+                int tilesWithStatisticsForVrtBand = 0;
                 for (int tileIndexY = 0; tileIndexY < vrt.VirtualRasterSizeInTilesY; ++tileIndexY)
                 {
                     for (int tileIndexX = 0; tileIndexX < vrt.VirtualRasterSizeInTilesX; ++tileIndexX)
@@ -105,16 +107,19 @@ namespace Mars.Clouds.Vrt
                         TTile? tile = vrt[tileIndexX, tileIndexY];
                         if (tile == null)
                         {
-                            Debug.Assert((statisticsByTile == null) || (statisticsByTile[tileIndexX, tileIndexY] == null));
+                            Debug.Assert((tileBandStatistics == null) || (tileBandStatistics[tileIndexX, tileIndexY] == null));
                             continue;
                         }
 
-                        // sources
-                        RasterBand tileBand = tile.GetBand(bandName);
-                        int tileBandIndex = tile.GetBandIndex(bandName);
+                        // sources for virtual raster band
+                        if (tile.TryGetBand(vrtBandName, out RasterBand? tileBand) == false)
+                        {
+                            continue; // tile doesn't contain this band and thus isn't a source for it
+                        }
+                        int tileBandIndex = tile.GetBandIndex(vrtBandName);
                         if (tileBandIndex == -1)
                         {
-                            throw new ArgumentOutOfRangeException(nameof(bands), "Band '" + bands[bandIndex] + "' is not present in virtual raster.");
+                            throw new ArgumentOutOfRangeException(nameof(vrtBandNames), "Band '" + vrtBandNames[vrtBandIndex] + "' is not present in virtual raster.");
                         }
 
                         string relativePathToTile = Path.GetRelativePath(vrtDatasetDirectory, tile.FilePath);
@@ -138,35 +143,31 @@ namespace Mars.Clouds.Vrt
                         band.Sources.Add(tileSource);
 
                         // statistics
-                        if (statisticsByTile != null)
+                        if (tileBandStatistics != null)
                         {
-                            RasterBandStatistics[]? statisticsForTile = statisticsByTile[tileIndexX, tileIndexY];
+                            List<RasterBandStatistics>? statisticsForTile = tileBandStatistics[tileIndexX, tileIndexY];
                             if (statisticsForTile != null)
                             {
-                                if (statisticsForTile.Length != bands.Count)
-                                {
-                                    throw new ArgumentOutOfRangeException(nameof(statisticsByTile), "Statistics for " + statisticsForTile.Length + " bands were provided for tile at (" + tileIndexX + ", " + tileIndexY + ") instead of the expected " + bands.Count + " bands.");
-                                }
-
-                                bandStatistics.Add(statisticsForTile[bandIndex]);
-                                ++tilesWithStatistics;
+                                RasterBandStatistics tileStatisticsForBand = statisticsForTile[tileBandIndex];
+                                vrtBandStatistics.Add(tileStatisticsForBand);
+                                ++tilesWithStatisticsForVrtBand;
                             }
                         }
                     }
                 }
 
-                if (statisticsByTile != null)
+                if (tileBandStatistics != null)
                 {
-                    Debug.Assert(tilesWithStatistics <= vrt.TileCount);
-                    bandStatistics.IsApproximate = tilesWithStatistics < vrt.TileCount;
-                    bandStatistics.OnAdditionComplete();
-                    Debug.Assert(bandStatistics.CellsSampled > 0);
+                    Debug.Assert(tilesWithStatisticsForVrtBand <= vrt.TileCount);
+                    vrtBandStatistics.IsApproximate = tilesWithStatisticsForVrtBand < vrt.TileCount;
+                    vrtBandStatistics.OnAdditionComplete();
+                    Debug.Assert(vrtBandStatistics.CellsSampled > 0);
 
                     // add band statistics to metadata
-                    band.Metadata.Add(bandStatistics);
+                    band.Metadata.Add(vrtBandStatistics);
 
                     // define crude histogram from band statistics
-                    band.Histograms.Add(new(bandStatistics));
+                    band.Histograms.Add(new(vrtBandStatistics));
                 }
 
                 this.Bands.Add(band);

@@ -175,7 +175,7 @@ namespace Mars.Clouds.GdalExtensions
     {
         public RasterBand<TBand>[] Bands { get; private init; }
 
-        public Raster(Dataset rasterDataset, bool loadData)
+        public Raster(Dataset rasterDataset, bool readData)
             : base(rasterDataset)
         {
             if (rasterDataset.RasterCount < 1)
@@ -184,7 +184,34 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             // allocate data and create bands
-            // Also check bands for consistency.
+            // Commented block is for performance testing. GDAL's Dataset.ReadRaster() offers the opportunity to read all bands into a
+            // caller provided buffer at once rather than one at a time and may thus have different performance characteristics than
+            // reading bands individually. As of GDAL 3.8.3, however, there appears to be little to no difference between the two
+            // approaches.
+            //if (readData)
+            //{
+            //    int[] bandMap = new int[rasterDataset.RasterCount];
+            //    for (int index = 0; index < bandMap.Length; ++index)
+            //    {
+            //        bandMap[index] = index + 1;
+            //    }
+
+            //    DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
+            //    byte[] buffer = new byte[rasterDataset.RasterCount * rasterDataset.RasterXSize * rasterDataset.RasterYSize * DataTypeExtensions.GetSizeInBytes(gdalDataType)];
+
+            //    GCHandle dataPin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            //    try
+            //    {
+            //        CPLErr gdalErrorCode = rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: rasterDataset.RasterXSize, ySize: rasterDataset.RasterYSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: rasterDataset.RasterXSize, buf_ySize: rasterDataset.RasterYSize, buf_type: gdalDataType, bandCount: rasterDataset.RasterCount, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+            //        GdalException.ThrowIfError(gdalErrorCode, nameof(rasterDataset.ReadRaster));
+            //    }
+            //    finally
+            //    {
+            //        dataPin.Free();
+            //    }
+            //}
+
+            // also check bands for consistency
             this.Bands = new RasterBand<TBand>[rasterDataset.RasterCount];
             for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
@@ -198,8 +225,7 @@ namespace Mars.Clouds.GdalExtensions
                 {
                     throw new NotSupportedException("Previous bands are " + this.SizeX + " by " + this.SizeY + " cells but band " + gdalBandIndex + " is " + gdalBand.XSize + " by " + gdalBand.YSize + " cells.");
                 }
-
-                this.Bands[bandIndex] = new(rasterDataset, gdalBand, loadData);
+                this.Bands[bandIndex] = new(rasterDataset, gdalBand, readData);
             }
         }
 
@@ -218,22 +244,31 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static Raster<TBand> CreateRecreateOrReset(Raster<TBand>? raster, Grid extent, string[] bandNames, TBand noDataValue)
-        {
-            if ((raster == null) || (raster.SizeX != extent.SizeX) || (raster.SizeY != extent.SizeY) || (raster.Bands.Length != bandNames.Length))
-            {
-                return new(extent, bandNames, noDataValue); // if needed, this.Bands can be expanded or reduced
-            }
+        //public static Raster<TBand> CreateRecreateOrReset(Raster<TBand>? raster, string rasterPath, Dataset rasterDataset, bool readData)
+        //{
+        //    if ((raster == null) || (raster.SizeX != rasterDataset.RasterXSize) || (raster.SizeY != rasterDataset.RasterYSize) || (raster.Bands.Length != rasterDataset.RasterCount))
+        //    {
+        //        return new Raster<TBand>(rasterDataset, readData) // if needed, bands can be expanded or reduced
+        //        {
+        //            FilePath = rasterPath,
+        //        };
+        //    }
 
-            for (int bandIndex = 0; bandIndex < raster.Bands.Length; ++bandIndex) 
-            { 
-                RasterBand<TBand> band = raster.Bands[bandIndex];
-                Array.Fill(band.Data, noDataValue);
-                band.Name = bandNames[bandIndex];
-            }
+        //    raster.Crs = rasterDataset.GetSpatialRef();
+        //    raster.FilePath = rasterPath;
+        //    raster.Transform = new(rasterDataset);
+        //    // raster.SizeX already handled
+        //    // raster.SizeY already handled
 
-            return raster;
-        }
+        //    for (int bandIndex = 0; bandIndex < raster.Bands.Length; ++bandIndex)
+        //    {
+        //        int gdalBandIndex = bandIndex + 1;
+        //        RasterBand band = raster.Bands[bandIndex];
+        //        band.Reset(raster.Crs, raster.Transform, rasterDataset.GetRasterBand(gdalBandIndex), readData);
+        //    }
+
+        //    return raster;
+        //}
 
         public override int GetBandIndex(string name)
         {
@@ -293,7 +328,8 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+            band = null;
+            return false;
         }
 
         //public bool TryGetNoDataValue(out TBand noDataValue)

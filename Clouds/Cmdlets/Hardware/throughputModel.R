@@ -9,8 +9,9 @@ throughput = tibble(io = c(rep("buffered", 4), rep("unbuffered", 4)),
                     ddrBandwidth = c(4.2 + 2.9, 6.0 +	4.8, 11.9 +	8.9, 18.9	+ 13.2, 2.3 + 2.0, 4.3 + 3.8, 7.9 + 6.9, 13.1 + 11.5), # GB/s
                     driveDemand = c(rep(driveTransferRate[1], 4), rep(driveTransferRate[5], 4)) * threads, # GB/s
                     ddrDemand = c(rep(ddrBandwidth[1], 4), rep(ddrBandwidth[5], 4)) * threads, # GB/s
-                    practicalDdrLimit = 0.6 * 51.2) %>% # GB/s
-  mutate(throughputModel = driveDemand * (1 - 0.7 * ddrDemand / (ddrDemand + practicalDdrLimit)))
+                    practicalDdrLimit = 1 * 51.2) %>% # GB/s
+  mutate(ddrDerating = 1 - (ddrDemand - c(rep(ddrBandwidth[1], 4), rep(ddrBandwidth[5], 4))) / (ddrDemand + practicalDdrLimit),
+         throughputModel = driveDemand * ddrDerating)
 
 ggplot() +
   geom_line(aes(x = threads, y = practicalDdrLimit, color = "DDR limit", linetype = "DDR limit"), throughput) +

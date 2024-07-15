@@ -1,22 +1,37 @@
-﻿$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
-#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
+﻿# This script illustrates cmdlet use. Paths need to be changed to files available for the area of interest.
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
 $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native') # for GDAL
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
-# .vrt with all primary and diagnostic bands, complete sampling of band statistics, and logging of all tile statistics
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
-Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt"))
+
+# DSM and orthoimage .vrts with all primary and diagnostic bands, complete sampling of band statistics, and logging of all tile statistics
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 test"
+Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt")) -Verbose
+
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3"
+Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "scanAngle"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "orthoimage all.vrt")) -Verbose
 
 # extraction of .vrt bands
 # If a .vrt is generated for all bands then bands can be sliced out of it for more performant viewing in QGIS.
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 test"
 $vrt = [System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt")
 Export-VrtBands -Input $vrt -Bands "dsm" -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm.vrt"))
 Export-VrtBands -Input $vrt -Bands "cmm3" -Output ([System.IO.Path]::Combine($vrtDirectory, "cmm3.vrt"))
+Export-VrtBands -Input $vrt -Bands "chm" -Output ([System.IO.Path]::Combine($vrtDirectory, "chm.vrt"))
 Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm.vrt"))
-Export-VrtBands -Input $vrt -Bands "dsm" -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm.vrt"))
 Export-VrtBands -Input $vrt -Bands ("dsm", "chm", "sourceIDsurface") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm chm sourceIDsurface.vrt"))
 Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "sourceIDsurface") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm sourceIDsurface.vrt"))
+Export-VrtBands -Input $vrt -Bands ("nAerial", "nGround") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm density.vrt"))
+
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3"
+$vrt = [System.IO.Path]::Combine($vrtDirectory, "orthoimage all.vrt")
+Export-VrtBands -Input $vrt -Bands ("red", "green", "blue") -Output ([System.IO.Path]::Combine($vrtDirectory, "orthoimage.vrt"))
+Export-VrtBands -Input $vrt -Bands ("red", "green", "nearInfrared") -Output ([System.IO.Path]::Combine($vrtDirectory, "orthoimage nir.vrt"))
+Export-VrtBands -Input $vrt -Bands ("firstReturns", "secondReturns") -Output ([System.IO.Path]::Combine($vrtDirectory, "orthoimage density.vrt"))
+Export-VrtBands -Input $vrt -Bands ("intensityFirstReturn", "intensitySecondReturn") -Output ([System.IO.Path]::Combine($vrtDirectory, "orthoimage intensity.vrt"))
+Export-VrtBands -Input $vrt -Bands "scanAngleMeanAbsolute" -Output ([System.IO.Path]::Combine($vrtDirectory, "orthoimage scan angle.vrt"))
 
 # remove BlockXSize and BlockYSize attributes
 Remove-VrtBlockSize -Vrt "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\dsm cmm3 chm sourceIDsurface.vrt"

@@ -8,7 +8,7 @@ namespace Mars.Clouds.GdalExtensions
     public class Grid
     {
         public SpatialReference Crs { get; protected set; }
-        public GridGeoTransform Transform { get; private init; }
+        public GridGeoTransform Transform { get; protected set; }
         public int SizeX { get; protected set; } // cells
         public int SizeY { get; protected set; } // cells
 
@@ -106,11 +106,51 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
         }
 
+        public bool IsSameExtent(Extent other)
+        {
+            if ((this.Transform.OriginX == other.XMin) && (this.SizeX * this.Transform.CellWidth == other.Width))
+            {
+                double cellHeight = this.Transform.CellHeight;
+                if (this.Transform.CellHeight < 0.0)
+                {
+                    if (this.Transform.OriginY != other.YMax)
+                    {
+                        return false;
+                    }
+
+                    cellHeight = -cellHeight;
+                }
+                else
+                {
+                    if (this.Transform.OriginY != other.YMin)
+                    {
+                        return false;
+                    }
+                }
+
+                return this.SizeY * cellHeight == other.Height;
+            }
+
+            return false;
+        }
+
         /// <remarks>Does not check CRS.</remarks>
         public bool IsSameExtentAndSpatialResolution(Grid other)
         {
             if ((this.SizeX != other.SizeX) || (this.SizeY != other.SizeY) || 
                 (GridGeoTransform.Equals(this.Transform, other.Transform) == false))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <remarks>Does not check CRS.</remarks>
+        public bool IsSameExtentAndSpatialResolution(VirtualRaster other)
+        {
+            if ((this.SizeX != other.VirtualRasterSizeInTilesX) || (this.SizeY != other.VirtualRasterSizeInTilesY) ||
+                (GridGeoTransform.Equals(this.Transform, other.TileTransform) == false))
             {
                 return false;
             }

@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 using Mars.Clouds.Cmdlets.Hardware;
-using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Las
@@ -153,11 +152,10 @@ namespace Mars.Clouds.Las
             return unbuffered ? (1.0F, 4.3F) : (1.2F, 7.1F);
         }
 
-        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToXyzcsBandwidth()
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToLasBandwidth(bool unbuffered)
         {
-            // TODO: profile DDR
-            // SN770 on 5950X CPU lanes
-            return (2.2F, 4.5F * 2.2F);
+            // SN850X on 5950X CPU lanes, aerial and ground means accumulated
+            return unbuffered ? (1.6F, 4.4F) : (1.9F, 5.7F);
         }
 
         /// <returns>false if point is classified as noise or is withdrawn</returns>
@@ -351,12 +349,22 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
-        #region ReadPoints() synchronous
-        public PointList<PointBatchXyzcs> ReadPoints(LasTile openedTile, ObjectPool<PointBatchXyzcs> pointBatchPool)
+        public void ReadPointsToDsm(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
+        {
+            LasReader.ThrowOnUnsupportedPointFormat(openedTile.Header);
+            if (this.Unbuffered)
+            {
+                this.ReadPointsToDsmUnbuffered(openedTile, dsmTile, ref pointReadBuffer);
+            }
+            else
+            {
+                this.ReadPointsToDsmBuffered(openedTile, dsmTile, ref pointReadBuffer);
+            }
+        }
+
+        private void ReadPointsToDsmBuffered(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
         {
             LasHeader10 lasHeader = openedTile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            PointList<PointBatchXyzcs> tilePoints = new(openedTile, pointBatchPool);
             this.MoveToPoints(openedTile);
 
             // read points
@@ -364,39 +372,24 @@ namespace Mars.Clouds.Las
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
 
-            int pointBatchIndex = 0;
-            PointBatchXyzcs pointBatch = tilePoints[pointBatchIndex];
-            //GCHandle classificationHandle = GCHandle.Alloc(pointBatch.Classification, GCHandleType.Pinned);
-            //UInt32* batchClassificationAddress = (UInt32*)classificationHandle.AddrOfPinnedObject();
-            //GCHandle xHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-            //int* batchXaddress = (int*)xHandle.AddrOfPinnedObject();
-            //GCHandle yHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-            //int* batchYaddress = (int*)yHandle.AddrOfPinnedObject();
-            //GCHandle zHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-            //int* batchZaddress = (int*)zHandle.AddrOfPinnedObject();
-            //GCHandle sourceIDhandle = GCHandle.Alloc(pointBatch.SourceID, GCHandleType.Pinned);
-            //UInt64* batchSourceIDaddress = (UInt64*)sourceIDhandle.AddrOfPinnedObject();
+            double xOffset = lasHeader.XOffset;
+            double xScale = lasHeader.XScaleFactor;
+            double yOffset = lasHeader.YOffset;
+            double yScale = lasHeader.YScaleFactor;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
 
-            int pointIndexInBatch = 0;
-            //int xyzStoreIndex = 0;
-            //int classificationStoreIndex = 0;
-            //int sourceIDstoreIndex = 0;
+            int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
+            if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
+            {
+                pointReadBuffer = new byte[pointBufferLength];
+            }
 
-            //UInt64 classificationBuffer64 = 0;
-            //Vector128<UInt64> classificationBuffer128 = Vector128<UInt64>.Zero;
-            //Vector128<int> xBuffer128 = Vector128<int>.Zero;
-            //Vector128<int> yBuffer128 = Vector128<int>.Zero;
-            //Vector128<int> zBuffer128 = Vector128<int>.Zero;
-            //UInt64 sourceIDbuffer64 = 0;
-            //Vector128<UInt64> sourceIDbuffer128 = Vector128<UInt64>.Zero;
-
-            // basic perf profile on tiles cached in memory: ReadPoints() for xyzcs, 5950X, DDR4-3200, .NET 8, 9 tiles totaling 28.4 GB
-            // batch size, points  read speed, GB/s
-            // 1                   1.4-1.5
-            // 2                   1.8-1.9
-            // 4                   2.0-2.1
-            // 8, 16, 32           2.2-2.4
-            byte[] pointReadBuffer = new byte[LasReader.ReadBufferSizeInPoints * pointRecordLength];
+            Debug.Assert(dsmTile.SourceIDSurface != null);
+            bool dsmHasAerialMean = dsmTile.AerialMean != null;
+            Debug.Assert(dsmTile.AerialPoints != null);
+            bool dsmHasGroundMean = dsmTile.GroundMean != null;
+            Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
                 UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
@@ -404,19 +397,6 @@ namespace Mars.Clouds.Las
                 int bytesToRead = pointsToRead * pointRecordLength;
                 this.BaseStream.ReadExactly(pointReadBuffer.AsSpan(0, bytesToRead));
 
-                // ~400 MB/s slower to unroll this loop than to leave it rolled
-                // BinaryPrimitives.ReadInt32LittleEndian(), BitConverter.ToInt32(), and shifting bytes all bench to near identical performance
-                // MemoryMarshal.Read<int>() may be slightly slower than BinaryPrimitives.ReadInt32LittleEndian(). Benchmarking also shows no benefit
-                // (and suggests maybe some detriment) to MemoryMarshal.Cast<byte, int>() rather than BinaryPrimitives.ReadInt32LittleEndian().
-                // 
-                // Since batch contains eight points Avx2.GatherVector256() and Store() could be used in the typical case no points are noise or
-                // withheld. Testing suggests batching stores, at least, can offer speed increases but realizing meaningful gains in a complete
-                // implementation appears difficult. Of the various SIMD combinations possible within the commented out code, the most effective
-                // appears to be batching just x, y, and z, which increases read speeds by perhaps ~100 MB/s. Profiling shows batching classification
-                // and source ID most likely results in decreased read speeds.
-                //
-                // Because stores and buffer reads are misaligned, gathering x, y, and z from pointReadBuffer is not practical (pointReadBuffer could
-                // easily be allocated on the heap and pinned for access, however).
                 for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += pointRecordLength)
                 {
                     ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
@@ -426,304 +406,255 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
-                    //classificationBuffer64 = (classificationBuffer64 << 8) | (byte)classification;
-                    pointBatch.Classification[pointIndexInBatch] = classification;
-                    //xBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), xBuffer128);
-                    //yBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), yBuffer128);
-                    //zBuffer128 = AvxExtensions.ShuffleInAndUp(BinaryPrimitives.ReadInt32LittleEndian(pointBytes), zBuffer128);
-                    pointBatch.X[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                    pointBatch.Y[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                    pointBatch.Z[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
-                    // somehow ~200 MB/s faster to inline this than to call a static function, even with [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                    pointBatch.SourceID[pointIndexInBatch] = pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
-                    //UInt16 sourceID = pointFormat < 6 ? BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]) : BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
-                    //sourceIDbuffer64 = (sourceIDbuffer64 << 16) | sourceID;
-                    ++pointIndexInBatch;
-                    //++xyzStoreIndex;
-
-                    // noise and withheld points result in pointIndexInBatch not being aligned with batchOffset
-                    // Transition to next batch can therefore occur on at (literally) point.
-                    //if (xyzStoreIndex == 4)
-                    //{
-                    //    Avx2.Store(batchXaddress, xBuffer128);
-                    //    batchXaddress += 4;
-                    //    Avx2.Store(batchYaddress, yBuffer128);
-                    //    batchYaddress += 4;
-                    //    Avx2.Store(batchZaddress, zBuffer128);
-                    //    batchZaddress += 4;
-                    //    xyzStoreIndex = 0;
-                    //
-                    //    sourceIDbuffer128 = AvxExtensions.ShuffleInAndUp(sourceIDbuffer64, sourceIDbuffer128);
-                    //    sourceIDstoreIndex += 4;
-                    //}
-                    //if (sourceIDstoreIndex == 8)
-                    //{
-                    //    Avx2.Store(batchSourceIDaddress, sourceIDbuffer128);
-                    //    batchSourceIDaddress += 2;
-                    //    sourceIDstoreIndex = 0;
-                    //
-                    //    classificationBuffer128 = AvxExtensions.ShuffleInAndUp(classificationBuffer64, classificationBuffer128);
-                    //    classificationBuffer64 = 0;
-                    //    classificationStoreIndex += 8;
-                    //
-                    //}
-                    //if (classificationStoreIndex == 16)
-                    //{
-                    //    Avx2.Store(batchClassificationAddress, classificationBuffer128);
-                    //    batchClassificationAddress += 4;
-                    //    classificationStoreIndex = 0;
-                    //}
-                    if (pointIndexInBatch == pointBatch.Capacity)
+                    double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                    double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                    (int xIndex, int yIndex) = dsmTile.ToGridIndices(x, y);
+                    if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTile.SizeX) || (yIndex >= dsmTile.SizeY))
                     {
-                        //classificationHandle.Free();
-                        //xHandle.Free();
-                        //yHandle.Free();
-                        //zHandle.Free();
-                        //sourceIDhandle.Free();
+                        // point lies outside of the DSM tile and is therefore not of interest
+                        // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
+                        // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
+                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                    }
 
-                        pointBatch.Count = pointIndexInBatch;
-                        pointBatch = tilePoints[++pointBatchIndex];
-                        pointIndexInBatch = 0;
+                    int cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                    float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                    if ((classification == PointClassification.Ground) && dsmHasGroundMean)
+                    {
+                        // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
+                        UInt32 groundPoints = dsmTile.GroundPoints![cellIndex];
+                        if (groundPoints == 0)
+                        {
+                            dsmTile.GroundMean![cellIndex] = z;
+                        }
+                        else
+                        {
+                            dsmTile.GroundMean![cellIndex] += z;
+                        }
 
-                        //classificationHandle = GCHandle.Alloc(pointBatch.Classification, GCHandleType.Pinned);
-                        //batchClassificationAddress = (UInt32*)classificationHandle.AddrOfPinnedObject();
-                        //xHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-                        //batchXaddress = (int*)xHandle.AddrOfPinnedObject();
-                        //yHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-                        //batchYaddress = (int*)yHandle.AddrOfPinnedObject();
-                        //zHandle = GCHandle.Alloc(pointBatch.X, GCHandleType.Pinned);
-                        //batchZaddress = (int*)zHandle.AddrOfPinnedObject();
-                        //sourceIDhandle = GCHandle.Alloc(pointBatch.SourceID, GCHandleType.Pinned);
-                        //batchSourceIDaddress = (UInt64*)sourceIDhandle.AddrOfPinnedObject();
+                        dsmTile.GroundPoints[cellIndex] = groundPoints + 1;
+                    }
+                    else
+                    {
+                        // for now, assume all non-ground point types are aerial (noise and withheld points are excluded above)
+                        // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
+                        //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
+                        //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
+                        // PointClassification.Water is currently also treated as non-ground, which is debatable
+                        float dsmZ = dsmTile.Surface[cellIndex];
+                        UInt32 aerialPoints = dsmTile.AerialPoints[cellIndex];
+                        if ((dsmZ < z) || (aerialPoints == 0))
+                        {
+                            dsmTile.Surface[cellIndex] = z;
+                            if (pointFormat < 6)
+                            {
+                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]);
+                            }
+                            else
+                            {
+                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                            }
+                        }
+
+                        dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                        if (dsmHasAerialMean)
+                        {
+                            if (aerialPoints == 0)
+                            {
+                                dsmTile.AerialMean![cellIndex] = z;
+                            }
+                            else
+                            {
+                                dsmTile.AerialMean![cellIndex] += z;
+                            }
+                        }
                     }
                 }
             }
-
-            // TODO if using SIMD: last store
-            //classificationHandle.Free();
-            //xHandle.Free();
-            //yHandle.Free();
-            //zHandle.Free();
-            //sourceIDhandle.Free();
-
-            // batch size typically leaves unused capacity at ends of arrays
-            // Noise or withheld points also result in unused capacity.
-            // Pull batches from object pool on demand to avoid need to trim unused batches from tile points list? For now an unused batch
-            // at the end is possible, though fairly unlikely.
-            pointBatch.Count = pointIndexInBatch;
-            return tilePoints;
         }
-        #endregion
 
-        #region ReadPoints() asynchronous FileStream at queue depth 2
-        //public PointList<PointBatchXyirnRgbn> ReadPoints(LasTile openedTile, ObjectPool<PointBatchXyirnRgbn> pointBatchPool, ArrayPool<byte> readBufferPool)
-        //{
-        //    if (this.BaseStream.IsAsync == false)
-        //    {
-        //        throw new InvalidOperationException("This implementation of " + nameof(this.ReadPoints) + " uses asynchronous IO but this " + nameof(LasReader) + " was created with a stream enabled only for synchronous IO. Specify asynchronous rather than synchronous when creating the reader.");
-        //    }
+        private unsafe void ReadPointsToDsmUnbuffered(LasTile lasTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
+        {
+            LasHeader10 lasHeader = lasTile.Header;
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
 
-        //    LasHeader10 lasHeader = openedTile.Header;
-        //    LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-        //    this.MoveToPoints(openedTile);
+            bool hasRgb = lasHeader.PointsHaveRgb;
+            bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
 
-        //    // read points
-        //    // Profiling with RGB+NIR tiles, SN770 on 5950X CPU lanes, Get-Orthoimages with read semaphore but without conversion to averages or 
-        //    // writing tiles to disk, 1+ MB FileStream buffers.
-        //    //                                                              total throughput, GB/s
-        //    // FileStream buffering      read size           queue depth    1 thread     2 threads    4 threads
-        //    // 4 MB + Windows            1 MB                2              2.9          2.8          2.8
-        //    // 4 MB + Windows            512 kB, 1, 2 MB     8              2.8          2.8          2.8
-        //    // 4 MB + Windows            1 MB                1              2.7          2.7          2.6
-        //    // 4 MB + Windows            256 points          synchronous    2.7          2.6          2.5
-        //    // 4 MB + Windows            64 points           synchronous    2.6          2.6          2.5
-        //    // FILE_FLAG_NO_BUFFERING    1 MB                synchronous    1.8          1.8          1.8       
-        //    //                                                              1 process    2 processes  4 processes
-        //    // 4 MB + Windows            1 MB                1              2.7          3.7          4.5
-        //    //                                                        drive 61% active   91%          92-100%
-        //    UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
-        //    byte pointFormat = lasHeader.PointDataRecordFormat;
-        //    int pointRecordLength = lasHeader.PointDataRecordLength;
-        //    bool hasRgb = lasHeader.PointsHaveRgb;
-        //    bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
-        //    int returnNumberMask = lasHeader.GetReturnNumberMask();
+            double xOffset = lasHeader.XOffset;
+            double xScale = lasHeader.XScaleFactor;
+            double yOffset = lasHeader.YOffset;
+            double yScale = lasHeader.YScaleFactor;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
 
-        //    PointList<PointBatchXyirnRgbn> tilePoints = new(openedTile, pointBatchPool);
-        //    int pointBatchIndex = 0;
-        //    PointBatchXyirnRgbn pointBatch = tilePoints[pointBatchIndex];
+            Debug.Assert(dsmTile.SourceIDSurface != null);
+            bool dsmHasAerialMean = dsmTile.AerialMean != null;
+            Debug.Assert(dsmTile.AerialPoints != null);
+            bool dsmHasGroundMean = dsmTile.GroundMean != null;
+            Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
 
-        //    int readBufferSizeInPoints = readBufferPool.ArrayLength / pointRecordLength;
-        //    byte[] pointReadBufferCurrent;
-        //    byte[] pointReadBufferNext;
-        //    byte[] pointReadBufferNextNext;
-        //    lock (readBufferPool)
-        //    {
-        //        pointReadBufferCurrent = readBufferPool.TryGetOrAllocateUninitialized();
-        //        pointReadBufferNext = readBufferPool.TryGetOrAllocateUninitialized();
-        //        pointReadBufferNextNext = readBufferPool.TryGetOrAllocateUninitialized();
-        //    }
-        //    UInt64 readBufferSizeInPointsUInt64 = (UInt64)readBufferSizeInPoints;
+            if ((pointReadBuffer == null) || (pointReadBuffer.Length != LasReader.FloatingPointReadBufferSizeInBytes))
+            {
+                pointReadBuffer = new byte[LasReader.FloatingPointReadBufferSizeInBytes];
+            }
+            byte[] pointSpanBuffer = new byte[pointRecordLength]; // CS9080 if stackallocked because of https://github.com/dotnet/roslyn/issues/43591
+            fixed (byte* pointReadBufferUnalignedStart = pointReadBuffer)
+            {
+                byte* pointReadBufferAlignedStart = (byte*)(LasReader.SectorSizeInBytes * ((nuint)pointReadBufferUnalignedStart / LasReader.SectorSizeInBytes));
+                if (pointReadBufferAlignedStart < pointReadBufferUnalignedStart)
+                {
+                    pointReadBufferAlignedStart += LasReader.SectorSizeInBytes;
+                }
+                Span<byte> alignedReadBuffer = new(pointReadBufferAlignedStart, LasReader.FloatingPointReadBufferSizeInBytes - LasReader.SectorSizeInBytes);
 
-        //    UInt64 pointReadsRemainingToInitiate = numberOfPoints;
-        //    int pointsToInitiate = pointReadsRemainingToInitiate >= readBufferSizeInPointsUInt64 ? readBufferSizeInPoints : (int)pointReadsRemainingToInitiate;
-        //    int bytesToInitiate = pointsToInitiate * pointRecordLength;
-        //    Task readCurrentTask = this.BaseStream.ReadExactlyAsync(pointReadBufferCurrent, 0, bytesToInitiate).AsTask();
-        //    pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
+                long endOfPointsPosition = Int64.Min(this.BaseStream.Length, LasReader.SectorSizeInBytes * ((lasHeader.OffsetToPointData + (long)numberOfPoints * (long)pointRecordLength) / LasReader.SectorSizeInBytes + 1));
+                long readPosition = LasReader.SectorSizeInBytes * (lasHeader.OffsetToPointData / LasReader.SectorSizeInBytes);
+                this.BaseStream.Position = readPosition;
 
-        //    pointsToInitiate = pointReadsRemainingToInitiate >= readBufferSizeInPointsUInt64 ? readBufferSizeInPoints : (int)pointReadsRemainingToInitiate;
-        //    bytesToInitiate = pointsToInitiate * pointRecordLength;
-        //    Task readNextTask = this.BaseStream.ReadExactlyAsync(pointReadBufferNext, 0, bytesToInitiate).AsTask();
-        //    pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
+                int firstPointInBufferIndex = (int)(lasHeader.OffsetToPointData - readPosition);
+                while (readPosition < endOfPointsPosition)
+                {
+                    long bytesRemainingToRead = endOfPointsPosition - readPosition;
+                    int bytesRead;
+                    if (bytesRemainingToRead > alignedReadBuffer.Length)
+                    {
+                        // first or intermediate read
+                        this.BaseStream.ReadExactly(alignedReadBuffer);
+                        bytesRead = alignedReadBuffer.Length;
+                        //bytesRead = RandomAccess.Read(this.BaseStream.SafeFileHandle, alignedReadBuffer, readPosition);
+                        //if (bytesRead != alignedReadBuffer.Length)
+                        //{
+                        //    // TODO: handle reads past the end of the last point
+                        //    throw new NotSupportedException("Expected read at position " + readPosition + " to return " + alignedReadBuffer.Length + " bytes but " + bytesRead + " bytes were read.");
+                        //}
+                    }
+                    else
+                    {
+                        // last read: to end of sector containing the last point or the end of the file, whichever comes first
+                        bytesRead = this.BaseStream.Read(alignedReadBuffer);
+                        //bytesRead = RandomAccess.Read(this.BaseStream.SafeFileHandle, alignedReadBuffer, readPosition);
+                        if (bytesRead != bytesRemainingToRead)
+                        {
+                            // TODO: handle reads past the end of the last point
+                            throw new NotSupportedException("Last read in file did not end exactly at the end of point records. This will be caused by extended variable length records or can be caused by the read not returning as many bytes as expected.");
+                        }
+                    }
 
-        //    // alternate path using RandomAccess.ReadAsync() directly rather than going through FileStream
-        //    // Runs slightly slower than FileStream at 2.6 GB/s and is unsafe as the end of the Memory<byte>s used is overrun.
-        //    //SafeFileHandle lasFileHandle = this.BaseStream.SafeFileHandle;
-        //    //long lasFilePosition = this.BaseStream.Position;
+                    // reads are most likely to align with points
+                    // Second and subsequent reads of point data therefore likely read the bytes needed to complete a point whose initial bytes
+                    // were obtained in the previous read. It's easier (and likely faster) to merge bytes from the previous and current reads into
+                    // one span than to have point parsing look into two different ReadOnlySpan<byte>s.
+                    if (firstPointInBufferIndex < 0)
+                    {
+                        int bytesToCompleteFirstPoint = pointRecordLength + firstPointInBufferIndex;
+                        alignedReadBuffer[..bytesToCompleteFirstPoint].CopyTo(pointSpanBuffer.AsSpan(-firstPointInBufferIndex));
+                    }
 
-        //    //UInt64 pointReadsRemainingToInitiate = (UInt64)numberOfPoints;
-        //    //int pointsToInitiate = pointReadsRemainingToInitiate >= readBufferSizeInPointsUInt64 ? readBufferSizeInPoints : (int)pointReadsRemainingToInitiate;
-        //    //int bytesToInitiate = pointsToInitiate * pointRecordLength;
-        //    //Memory<byte> pointReadMemoryCurrent = new(pointReadBufferCurrent, 0, bytesToInitiate);
-        //    //Task<int> readCurrentTask = RandomAccess.ReadAsync(lasFileHandle, pointReadBufferCurrent, lasFilePosition).AsTask();
-        //    //lasFilePosition += bytesToInitiate;
-        //    //pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
+                    // number of points read into the main buffer plus the point in the span buffer, if present
+                    int pointsInBuffers = (bytesRead - firstPointInBufferIndex) / pointRecordLength;
+                    // take the total number of point bytes available and offset it into place on the current main read buffer
+                    // Indexing is from the the start of span buffer as it partially overlaps the beginning of the main buffer.
+                    int lastPointStartIndexInBuffer = pointRecordLength * (pointsInBuffers - 1) + firstPointInBufferIndex;
+                    for (int bufferIndex = firstPointInBufferIndex; bufferIndex < lastPointStartIndexInBuffer; bufferIndex += pointRecordLength)
+                    {
+                        ReadOnlySpan<byte> pointBytes;
+                        if (bufferIndex >= 0)
+                        {
+                            pointBytes = alignedReadBuffer.Slice(bufferIndex, pointRecordLength);
+                        }
+                        else
+                        {
+                            pointBytes = pointSpanBuffer;
+                        }
 
-        //    //pointsToInitiate = pointReadsRemainingToInitiate >= readBufferSizeInPointsUInt64 ? readBufferSizeInPoints : (int)pointReadsRemainingToInitiate;
-        //    //bytesToInitiate = pointsToInitiate * pointRecordLength;
-        //    //Memory<byte> pointReadMemoryNext = new(pointReadBufferNext, 0, bytesToInitiate);
-        //    //Task<int> readNextTask = RandomAccess.ReadAsync(lasFileHandle, pointReadMemoryNext, lasFilePosition).AsTask();
-        //    //lasFilePosition += bytesToInitiate;
-        //    //pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
+                        bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                        if (notNoiseOrWithheld == false)
+                        {
+                            // point isn't valid data => skip
+                            continue;
+                        }
 
-        //    //Memory<byte> pointReadMemoryNextNext = new(pointReadBufferNext, 0, bytesToInitiate);
+                        double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
+                        double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
+                        (int xIndex, int yIndex) = dsmTile.ToGridIndices(x, y);
+                        if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTile.SizeX) || (yIndex >= dsmTile.SizeY))
+                        {
+                            // point lies outside of the DSM tile and is therefore not of interest
+                            // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
+                            // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
+                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                        }
 
-        //    int pointIndexInBatch = 0;
-        //    for (UInt64 pointReadsCompleted = 0; pointReadsCompleted < numberOfPoints; pointReadsCompleted += readBufferSizeInPointsUInt64)
-        //    {
-        //        Task? readNextNextTask = null;
-        //        //Task<int>? readNextNextTask = null;
-        //        if (pointReadsRemainingToInitiate > 0)
-        //        {
-        //            pointsToInitiate = pointReadsRemainingToInitiate >= readBufferSizeInPointsUInt64 ? readBufferSizeInPoints : (int)pointReadsRemainingToInitiate;
-        //            bytesToInitiate = pointsToInitiate * pointRecordLength;
-        //            readNextNextTask = this.BaseStream.ReadExactlyAsync(pointReadBufferNextNext, 0, bytesToInitiate).AsTask();
-        //            pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
-        //            //if (bytesToInitiate != pointReadMemoryNextNext.Length)
-        //            //{
-        //            //    pointReadMemoryNextNext = new(pointReadBufferNext, 0, bytesToInitiate);
-        //            //}
-        //            //readNextNextTask = RandomAccess.ReadAsync(lasFileHandle, pointReadMemoryNextNext, lasFilePosition).AsTask();
-        //            //lasFilePosition += bytesToInitiate;
-        //            //pointReadsRemainingToInitiate -= (UInt64)pointsToInitiate;
-        //        }
+                        int cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                        float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                        if ((classification == PointClassification.Ground) && dsmHasGroundMean)
+                        {
+                            // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
+                            UInt32 groundPoints = dsmTile.GroundPoints![cellIndex];
+                            if (groundPoints == 0)
+                            {
+                                dsmTile.GroundMean![cellIndex] = z;
+                            }
+                            else
+                            {
+                                dsmTile.GroundMean![cellIndex] += z;
+                            }
 
-        //        readCurrentTask.GetAwaiter().GetResult();
-        //        //int bytesRead = readCurrentTask.GetAwaiter().GetResult();
-        //        //if (bytesRead != pointReadMemoryCurrent.Length)
-        //        //{
-        //        //    throw new InvalidOperationException("Expected " + pointReadMemoryCurrent.Length + " bytes to be read instead of " + bytesRead + ".");
-        //        //}
-        //        for (int batchOffset = 0; batchOffset < bytesToInitiate; batchOffset += pointRecordLength)
-        //        {
-        //            ReadOnlySpan<byte> pointBytes = pointReadBufferCurrent.AsSpan(batchOffset, pointRecordLength);
+                            dsmTile.GroundPoints[cellIndex] = groundPoints + 1;
+                        }
+                        else
+                        {
+                            // for now, assume all non-ground point types are aerial (noise and withheld points are excluded above)
+                            // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
+                            //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
+                            //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
+                            // PointClassification.Water is currently also treated as non-ground, which is debatable
+                            float dsmZ = dsmTile.Surface[cellIndex];
+                            UInt32 aerialPoints = dsmTile.AerialPoints[cellIndex];
+                            if ((dsmZ < z) || (aerialPoints == 0))
+                            {
+                                dsmTile.Surface[cellIndex] = z;
+                                if (pointFormat < 6)
+                                {
+                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]);
+                                }
+                                else
+                                {
+                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                                }
+                            }
 
-        //            byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
-        //            if (returnNumber > 2)
-        //            {
-        //                // third and subsequent returns not currently used
-        //                // Points marked with return number 0 (which is LAS 1.4 compliance issue) pass through this check.
-        //                continue;
-        //            }
+                            dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                            if (dsmHasAerialMean)
+                            {
+                                if (aerialPoints == 0)
+                                {
+                                    dsmTile.AerialMean![cellIndex] = z;
+                                }
+                                else
+                                {
+                                    dsmTile.AerialMean![cellIndex] += z;
+                                }
+                            }
+                        }
+                    }
 
-        //            bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification _);
-        //            if (notNoiseOrWithheld == false)
-        //            {
-        //                continue;
-        //            }
+                    int bytesOfNextPointRead = bytesRead - lastPointStartIndexInBuffer - pointRecordLength;
+                    if (bytesOfNextPointRead > 0)
+                    {
+                        int nextPointStartIndex = alignedReadBuffer.Length - bytesOfNextPointRead;
+                        alignedReadBuffer[nextPointStartIndex..].CopyTo(pointSpanBuffer);
+                    }
 
-        //            pointBatch.X[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-        //            pointBatch.Y[pointIndexInBatch] = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-        //            pointBatch.ReturnNumber[pointIndexInBatch] = returnNumber;
-
-        //            if (hasRgb)
-        //            {
-        //                UInt16 red;
-        //                UInt16 green;
-        //                UInt16 blue;
-        //                if (pointFormat < 6)
-        //                {
-        //                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[28..]);
-        //                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-        //                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
-        //                }
-        //                else
-        //                {
-        //                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-        //                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
-        //                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[34..]);
-        //                }
-        //                pointBatch.Red[pointIndexInBatch] = red;
-        //                pointBatch.Green[pointIndexInBatch] = green;
-        //                pointBatch.Blue[pointIndexInBatch] = blue;
-        //            }
-
-        //            if (hasNearInfrared)
-        //            {
-        //                UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[36..]);
-        //                pointBatch.NearInfrared[pointIndexInBatch] = nir;
-        //            }
-
-        //            UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
-        //            pointBatch.Intensity[pointIndexInBatch] = intensity;
-
-        //            float scanAngleInDegrees;
-        //            if (pointFormat < 6)
-        //            {
-        //                scanAngleInDegrees = (sbyte)pointBytes[16];
-        //            }
-        //            else
-        //            {
-        //                scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
-        //            }
-        //            pointBatch.ScanAngleInDegrees[pointIndexInBatch] = scanAngleInDegrees;
-
-        //            ++pointIndexInBatch;
-        //            if (pointIndexInBatch == pointBatch.Capacity)
-        //            {
-        //                pointBatch.Count = pointIndexInBatch;
-        //                pointBatch = tilePoints[++pointBatchIndex];
-        //                pointIndexInBatch = 0;
-        //            }
-        //        }
-
-        //        byte[] pointReadBufferSwapPointer = pointReadBufferCurrent;
-        //        pointReadBufferCurrent = pointReadBufferNext;
-        //        pointReadBufferNext = pointReadBufferNextNext;
-        //        pointReadBufferNextNext = pointReadBufferSwapPointer;
-        //        //Memory<byte> pointReadMemorySwapPointer = pointReadMemoryCurrent;
-        //        //pointReadMemoryCurrent = pointReadMemoryNext;
-        //        //pointReadMemoryNext = pointReadMemoryNextNext;
-        //        //pointReadMemoryNextNext = pointReadMemorySwapPointer;
-        //        readCurrentTask = readNextTask;
-        //        if (readNextNextTask != null)
-        //        {
-        //            readNextTask = readNextNextTask;
-        //        }
-        //    }
-
-        //    pointBatch.Count = pointIndexInBatch;
-        //    //Debug.Assert(lasFilePosition == this.BaseStream.Position + (long)numberOfPoints * pointRecordLength);
-
-        //    lock (readBufferPool)
-        //    {
-        //        readBufferPool.Return(pointReadBufferCurrent);
-        //        readBufferPool.Return(pointReadBufferNext);
-        //        readBufferPool.Return(pointReadBufferNextNext);
-        //    }
-
-        //    return tilePoints;
-        //}
-        #endregion
+                    firstPointInBufferIndex = -bytesOfNextPointRead;
+                    readPosition += bytesRead;
+                }
+            }
+        }
 
         #region ReadPointsToImage() asynchronous FileStream at queue depth 2
         //public void ReadPointsToImage(LasTile lasTile, ImageRaster<UInt64> imageTile, ArrayPool<byte> readBufferPool)
@@ -923,37 +854,23 @@ namespace Mars.Clouds.Las
         //}
         #endregion
 
-        public void ReadPointsToImage(LasTile lasTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
-        {
-            if (this.Unbuffered)
-            {
-                this.ReadPointsToImageUnbuffered(lasTile, imageTile, ref pointReadBuffer);
-            }
-            else
-            {
-                this.ReadPointsToImageBuffered(lasTile, imageTile, ref pointReadBuffer);
-            }
-        }
-
-        private void ReadPointsToImageBuffered(LasTile lasTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
+        public void ReadPointsToImage(LasTile openedTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
         {
             if (this.BaseStream.IsAsync)
             {
                 throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToImage) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
             }
 
-            LasHeader10 lasHeader = lasTile.Header;
+            LasHeader10 lasHeader = openedTile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
 
-            bool hasRgb = lasHeader.PointsHaveRgb;
-            bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
-            if (hasNearInfrared)
+            if (lasHeader.PointsHaveNearInfrared)
             {
                 if (imageTile.NearInfrared == null)
                 {
                     // for now, fail if points have NIR data but image won't capture it
                     // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' contains near infrared data but image lacks a near infrared band to transfer the data to.");
+                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + openedTile.FilePath + "' contains near infrared data but image lacks a near infrared band to transfer the data to.");
                 }
             }
             else
@@ -962,21 +879,31 @@ namespace Mars.Clouds.Las
                 {
                     // for now, fail if image has an NIR band but points lack data to populate it
                     // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
+                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + openedTile.FilePath + "' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
                 }
             }
 
-            this.MoveToPoints(lasTile);
+            this.MoveToPoints(openedTile);
+            if (this.Unbuffered)
+            {
+                this.ReadPointsToImageUnbuffered(openedTile, imageTile, ref pointReadBuffer);
+            }
+            else
+            {
+                this.ReadPointsToImageBuffered(openedTile, imageTile, ref pointReadBuffer);
+            }
+        }
 
-            // read points
-            // Profiling with RGB+NIR tiles, SN850X on 5950X CPU lanes, Get-Orthoimages without writing tiles to disk.
-            //                                                              total throughput, GB/s
-            // FileStream buffering      read size           queue depth    1 thread     2 threads    4 threads
-            // 4 MB + Windows            256 points          synchronous    1.0          2.0          3.5
+        private void ReadPointsToImageBuffered(LasTile openedTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
+        {
+            LasHeader10 lasHeader = openedTile.Header;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
             int returnNumberMask = lasHeader.GetReturnNumberMask();
+            bool hasRgb = lasHeader.PointsHaveRgb;
+            bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
+
             double xOffset = lasHeader.XOffset;
             double xScale = lasHeader.XScaleFactor;
             double yOffset = lasHeader.YOffset;
@@ -1085,47 +1012,17 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private unsafe void ReadPointsToImageUnbuffered(LasTile lasTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
+        private unsafe void ReadPointsToImageUnbuffered(LasTile openedTile, ImageRaster<UInt64> imageTile, ref byte[]? pointReadBuffer)
         {
-            if (this.BaseStream.IsAsync)
-            {
-                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToImage) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
-            }
-
-            LasHeader10 lasHeader = lasTile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-
-            bool hasRgb = lasHeader.PointsHaveRgb;
-            bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
-            if (hasNearInfrared)
-            {
-                if (imageTile.NearInfrared == null)
-                {
-                    // for now, fail if points have NIR data but image won't capture it
-                    // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' contains near infrared data but image lacks a near infrared band to transfer the data to.");
-                }
-            }
-            else
-            {
-                if (imageTile.NearInfrared != null)
-                {
-                    // for now, fail if image has an NIR band but points lack data to populate it
-                    // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
-                }
-            }
-
-            // read points
-            // Profiling with RGB+NIR tiles, SN770 on 5950X CPU lanes, Get-Orthoimages with read semaphore but without conversion to averages or 
-            // writing tiles to disk, 1+ MB FileStream buffers.
-            //                                                              total throughput, GB/s
-            // FileStream buffering      read size           queue depth    1 thread     2 threads    4 threads
-            // 4 MB + Windows            256 points          synchronous    
+            LasHeader10 lasHeader = openedTile.Header;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
             int returnNumberMask = lasHeader.GetReturnNumberMask();
+
+            bool hasRgb = lasHeader.PointsHaveRgb;
+            bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
+
             double xOffset = lasHeader.XOffset;
             double xScale = lasHeader.XScaleFactor;
             double yOffset = lasHeader.YOffset;
