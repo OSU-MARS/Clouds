@@ -4,7 +4,6 @@ using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -42,10 +41,21 @@ namespace Mars.Clouds.Las
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string filePath, RasterBand<float> dtmTile)
-            : base(dtmTile)
+        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, RasterBand<float> dtmTile)
+            : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
         {
-            this.FilePath = filePath;
+            if (this.Crs.IsCompound() == 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lasFile), dsmFilePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
+            }
+
+            SpatialReference lasTileCrs = lasFile.GetSpatialReference();
+            if (SpatialReferenceExtensions.IsSameCrs(lasTileCrs, dtmTile.Crs) == false)
+            {
+                throw new ArgumentOutOfRangeException(nameof(dtmTile), dsmFilePath + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
+            }
+
+            this.FilePath = dsmFilePath;
 
             this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
             this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
@@ -460,19 +470,24 @@ namespace Mars.Clouds.Las
             return new(dsmDataset, readData);
         }
 
-        public void Reset(string filePath, Grid newCrsAndExtents)
+        public void Reset(string filePath, LasFile lasFile, Grid newExtents)
         {
             // inherited from Grid
-            if ((this.SizeX != newCrsAndExtents.SizeX) || (this.SizeY != newCrsAndExtents.SizeY))
+            if ((this.SizeX != newExtents.SizeX) || (this.SizeY != newExtents.SizeY))
             {
-                throw new NotSupportedException(nameof(this.Reset) + " does not currently support changing the DSM's size from " + this.SizeX + " x " + this.SizeY + " cells to " + newCrsAndExtents.SizeX + " x " + newCrsAndExtents.SizeY + ".");
+                throw new NotSupportedException(nameof(this.Reset) + " does not currently support changing the DSM's size from " + this.SizeX + " x " + this.SizeY + " cells to " + newExtents.SizeX + " x " + newExtents.SizeY + ".");
             }
 
-            if (SpatialReferenceExtensions.IsSameCrs(this.Crs, newCrsAndExtents.Crs) == false)
+            SpatialReference lasFileCrs = lasFile.GetSpatialReference();
+            if (SpatialReferenceExtensions.IsSameCrs(this.Crs, lasFileCrs) == false)
             {
-                this.Crs = newCrsAndExtents.Crs.Clone();
+                if (lasFileCrs.IsCompound() == 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(lasFile), filePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
+                }
+                this.Crs = lasFileCrs;
             }
-            this.Transform.Copy(newCrsAndExtents.Transform);
+            this.Transform.Copy(newExtents.Transform);
 
             // inherited from Raster
             this.FilePath = filePath;
@@ -506,6 +521,11 @@ namespace Mars.Clouds.Las
             {
                 Array.Fill(this.SourceIDSurface.Data, this.SourceIDSurface.NoDataValue);
             }
+        }
+
+        public override void Reset(string filePath, Dataset rasterDataset, bool readData)
+        {
+            throw new NotImplementedException(); // TODO when needed
         }
 
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)

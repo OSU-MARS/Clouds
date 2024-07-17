@@ -269,6 +269,11 @@ namespace Mars.Clouds.Las
             }
         }
 
+        public override void Reset(string filePath, Dataset rasterDataset, bool readData)
+        {
+            throw new NotImplementedException(); // TODO when needed
+        }
+
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
             if ((name == null) || String.Equals(name, this.Red.Name, StringComparison.Ordinal))

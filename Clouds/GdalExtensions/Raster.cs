@@ -134,7 +134,7 @@ namespace Mars.Clouds.GdalExtensions
             return (absRowOffset + absColumnOffset) > 0;
         }
 
-        public static Raster Read(Dataset rasterDataset, bool readData)
+        public static Raster Read(string filePath, Dataset rasterDataset, bool readData)
         {
             if (rasterDataset.RasterCount < 1)
             {
@@ -160,8 +160,12 @@ namespace Mars.Clouds.GdalExtensions
                 //DataType.GDT_CInt32 or
                 _ => throw new NotSupportedException("Unhandled raster data type " + gdalBand1.DataType + ".")
             };
+
+            raster.FilePath = filePath;
             return raster;
         }
+
+        public abstract void Reset(string filePath, Dataset rasterDataset, bool readData);
 
         public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
 
@@ -173,6 +177,8 @@ namespace Mars.Clouds.GdalExtensions
     /// </summary>
     public class Raster<TBand> : Raster, IRasterSerializable<Raster<TBand>> where TBand : IMinMaxValue<TBand>, INumber<TBand>
     {
+        // private byte[]? buffer; // for performance testing
+
         public RasterBand<TBand>[] Bands { get; private init; }
 
         public Raster(Dataset rasterDataset, bool readData)
@@ -295,6 +301,56 @@ namespace Mars.Clouds.GdalExtensions
             Raster<TBand> raster = new(rasterDataset, readData);
             Debug.Assert(String.Equals(rasterPath, rasterPath, StringComparison.OrdinalIgnoreCase));
             return raster;
+        }
+
+        public override void Reset(string filePath, Dataset rasterDataset, bool readData)
+        {
+            if ((this.Bands.Length != rasterDataset.RasterCount) || (this.SizeX != rasterDataset.RasterXSize) || (this.SizeY != rasterDataset.RasterYSize))
+            {
+                throw new NotSupportedException(nameof(rasterDataset));
+            }
+
+            this.Crs = rasterDataset.GetSpatialRef();
+            this.FilePath = filePath;
+            this.Transform.SetTransform(rasterDataset);
+            // this.SizeX already checked
+            // this.SizeY already checked
+
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
+            {
+                int gdalBandIndex = bandIndex + 1;
+                Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                this.Bands[bandIndex].Reset(this.Crs, this.Transform, gdalBand, readData);
+            }
+
+            // incomplete stub for performance testing: read entire raster at once
+            // Whole raster read increases DDR bandwidth by 50% compared to per band read when GDAL's defaulted to GTIFF_DIRECT_IO = NO,
+            // reduces single threaded read rates by 60% when GTIFF_DIRECT_IO = YES.
+            //DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
+            //int bytesPerCell = thisDataType.GetSizeInBytes();
+            //int requiredBufferSizeInBytes = rasterDataset.RasterCount * rasterDataset.RasterXSize * rasterDataset.RasterYSize * bytesPerCell;
+            //if ((this.buffer == null) || (this.buffer.Length <= requiredBufferSizeInBytes))
+            //{
+            //    this.buffer = new byte[requiredBufferSizeInBytes];
+            //}
+
+            //int[] bandMap = new int[rasterDataset.RasterCount];
+            //for (int bandIndex = 0; bandIndex < rasterDataset.RasterCount; ++bandIndex)
+            //{
+            //    bandMap[bandIndex] = bandIndex + 1;
+            //}
+
+            //GCHandle dataPin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            //try
+            //{
+            //    // read entire band from GDAL's cache at once
+            //    CPLErr gdalErrorCode2 = rasterDataset.ReadRaster(xOff: 0, yOff: 0, xSize: rasterDataset.RasterXSize, ySize: rasterDataset.RasterYSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: rasterDataset.RasterXSize, buf_ySize: rasterDataset.RasterYSize, buf_type: thisDataType, rasterDataset.RasterCount, bandMap, pixelSpace: 0, lineSpace: 0, bandSpace: 0);
+            //    GdalException.ThrowIfError(gdalErrorCode2, nameof(rasterDataset.ReadRaster));
+            //}
+            //finally
+            //{
+            //    dataPin.Free();
+            //}
         }
 
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)

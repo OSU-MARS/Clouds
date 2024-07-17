@@ -15,14 +15,13 @@ Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.P
 
 # extraction of .vrt bands
 # If a .vrt is generated for all bands then bands can be sliced out of it for more performant viewing in QGIS.
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 test"
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
 $vrt = [System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt")
 Export-VrtBands -Input $vrt -Bands "dsm" -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm.vrt"))
 Export-VrtBands -Input $vrt -Bands "cmm3" -Output ([System.IO.Path]::Combine($vrtDirectory, "cmm3.vrt"))
 Export-VrtBands -Input $vrt -Bands "chm" -Output ([System.IO.Path]::Combine($vrtDirectory, "chm.vrt"))
-Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm.vrt"))
-Export-VrtBands -Input $vrt -Bands ("dsm", "chm", "sourceIDsurface") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm chm sourceIDsurface.vrt"))
-Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "sourceIDsurface") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm sourceIDsurface.vrt"))
+Export-VrtBands -Input $vrt -Bands "sourceIDsurface" -Output ([System.IO.Path]::Combine($vrtDirectory, "sourceIDsurface.vrt"))
+Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "aerialMean") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm aerialMean.vrt"))
 Export-VrtBands -Input $vrt -Bands ("nAerial", "nGround") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm density.vrt"))
 
 $vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3"

@@ -27,7 +27,7 @@ Get-Orthoimages -ReadThreads 2 -Las ("F:\Elliott\GIS\DOGAMI\2021 OLC Coos County
 
 ## local maxima in DSM, 3x3 group of tiles
 $tiles = "s042?0w068?0"
-Get-LocalMaxima -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\$tiles.tif" -LocalMaxima "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing\local maxima" -Verbose
+Get-LocalMaxima -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\$tiles.tif" -LocalMaxima "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\local maxima" -Verbose
 
 # local maxima in DSM, all tiles
 Get-LocalMaxima -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -LocalMaxima "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\local maxima" -Verbose
@@ -91,6 +91,6 @@ Register-Cloud -Lat 44.64663 -Long -123.27204 -Z 429.0 -HorizontalEpsg 6556 -Rot
 Register-Cloud -Lat 44.64663 -Long -123.27204 -Z 429.3 -HorizontalEpsg 6556 -RotationXY -25 -NudgeX 5 -FallbackDate ([System.DateOnly]::new(2024, 5, 11)) -SourceID 3 -Las ([System.IO.Path]::Combine($scanDir, "scan 4\scan 4 RGB+class.las"))
 Register-Cloud -Lat 44.64800 -Long -123.27089 -Z 429.5 -HorizontalEpsg 6556 -RotationXY -43 -FallbackDate ([System.DateOnly]::new(2024, 5, 11)) -SourceID 5 -Las (([System.IO.Path]::Combine($scanDir, "scan 5\scan 5 RGB+class.las")), ([System.IO.Path]::Combine($scanDir, "scan 6\scan 6 RGB+class.las")))
 
-# reference cloud reprojection (EPSG:2994, English units, to 6556, metric, in this case)
+# reference cloud reprojection (EPSG:2994, English units, to 6556, metric, in this example)
 $lazPath = [System.IO.Path]::Combine($env:USERPROFILE, "PhD\data\McDonald-Dunn\LDQ-44123F3 Airlie South\2012_OLC_Central Coast\pointz\44123F3419.laz")
 Convert-CloudCrs -Las $lazPath -HorizontalEpsg 6556

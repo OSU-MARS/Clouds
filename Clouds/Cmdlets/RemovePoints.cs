@@ -12,12 +12,15 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Remove, "Points")]
     public class RemovePoints : LasCmdlet
     {
+        private CancellationTokenSource? cancellationTokenSource;
+
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "Output locations of filtered point clouds.")]
         [ValidateNotNullOrEmpty]
         public string Filtered { get; set; }
 
         public RemovePoints() 
         {
+            this.cancellationTokenSource = null;
             this.Filtered = String.Empty;
         }
 
@@ -41,6 +44,7 @@ namespace Mars.Clouds.Cmdlets
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
             int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
+            this.cancellationTokenSource = new();
             int cloudFiltrationsInitiated = -1;
             int cloudFiltrationsCompleted = 0;
             UInt64 pointsRemoved = 0;
@@ -76,7 +80,7 @@ namespace Mars.Clouds.Cmdlets
                     Interlocked.Increment(ref cloudFiltrationsCompleted);
                     Interlocked.Add(ref pointsRemoved, nonNoisePoints.PointsRemoved);
                 }
-            }, new());
+            }, this.cancellationTokenSource);
 
             TimedProgressRecord progress = new("Register-Cloud", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -89,6 +93,12 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Removed " + pointsRemoved.ToString("n0") + " points from " + sourceCloudPaths.Count + (sourceCloudPaths.Count > 1 ? " clouds in " : " cloud in ") + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
     }
 }

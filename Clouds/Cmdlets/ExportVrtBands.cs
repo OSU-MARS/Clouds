@@ -1,7 +1,6 @@
 ﻿using Mars.Clouds.Vrt;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets

@@ -67,6 +67,10 @@ namespace Mars.Clouds.Cmdlets
 
             this.directorySizes.Add(directorySize);
 
+            if (this.Stopping)
+            {
+                return;
+            }
             if (this.directorySizes.Count % 100 == 0)
             {
                 this.WriteProgress(new ProgressRecord(0, "directory enumeration", this.directorySizes.Count + " directories..."));

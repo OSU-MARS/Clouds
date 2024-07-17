@@ -18,6 +18,7 @@ namespace Mars.Clouds.Cmdlets
 
         static GdalCmdlet()
         {
+            // Gdal.SetConfigOption("GTIFF_DIRECT_IO", "YES"); // bypass GDAL tile cache: slower than using the cache
             GdalBase.ConfigureAll();
         }
 
@@ -55,7 +56,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData) where TTile : Raster, IRasterSerializable<TTile>
         {
-            Debug.Assert(this.MaxThreads < 0);
+            Debug.Assert(this.MaxThreads > 0);
 
             VirtualRaster<TTile> vrt = [];
 
@@ -89,7 +90,7 @@ namespace Mars.Clouds.Cmdlets
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = "Loaded " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile..." : "tiles...");
+                    progress.StatusDescription = "Read " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
                     progress.Update(tileRead.TilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }

@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Hardware;
-using Mars.Clouds.Las;
+﻿using Mars.Clouds.Las;
 using System.Collections.Generic;
 using System.Management.Automation;
 
@@ -10,6 +9,7 @@ namespace Mars.Clouds.Cmdlets
     {
         protected override void ProcessRecord()
         {
+            // TODO: drop tile requirement
             LasTileGrid lasTileGrid = this.ReadLasHeadersAndFormGrid("Get-LasInfo", requiredEpsg: null);
             List<LasTile> tiles = new(lasTileGrid.NonNullCells);
             for (int tileIndex = 0; tileIndex < lasTileGrid.Cells; ++tileIndex)
@@ -18,6 +18,11 @@ namespace Mars.Clouds.Cmdlets
                 if (tile != null)
                 {
                     tiles.Add(tile);
+                }
+
+                if (this.Stopping)
+                {
+                    return;
                 }
             }
 

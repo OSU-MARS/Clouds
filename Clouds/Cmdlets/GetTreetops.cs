@@ -1,5 +1,4 @@
 ﻿using Mars.Clouds.Extensions;
-using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;
 using System;
@@ -7,15 +6,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
-using System.Reflection.Metadata.Ecma335;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "Treetops")]
     public class GetTreetops : GdalCmdlet
     {
+        private CancellationTokenSource? cancellationTokenSource;
+
         [Parameter(HelpMessage = "Path where diagnostic files will be written. No diagnostics will be output if null (default), empty, or blank.")]
         public string? Diagnostics { get; set; }
 
@@ -46,6 +45,8 @@ namespace Mars.Clouds.Cmdlets
 
         public GetTreetops()
         {
+            this.cancellationTokenSource = null;
+
             this.Diagnostics = null;
             // this.Dsm is mandatory
             this.DsmBand = "dsm";
@@ -72,7 +73,8 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // load all DSM and DTM tiles
-            // TODO: update to current dtim
+            // TODO: update to current DTM
+            this.cancellationTokenSource = new();
             string? mostRecentDsmTileName = null;
             int tileLoadsInitiated = -1;
             int tileLoadsCompleted = 0;
@@ -90,7 +92,7 @@ namespace Mars.Clouds.Cmdlets
                     mostRecentDsmTileName = tileName;
                     Interlocked.Increment(ref tileLoadsCompleted);
                 }
-            }, new());
+            }, this.cancellationTokenSource);
 
             TimedProgressRecord progress = new("Get-Treetops", "placeholder"); // can't pass null or empty statusDescription
             while (loadTilesTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -150,6 +152,12 @@ namespace Mars.Clouds.Cmdlets
             string tileOrTiles = dsmTilePaths.Count > 1 ? "tiles" : "tile";
             this.WriteVerbose(dsmTilePaths.Count + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
     }
 }

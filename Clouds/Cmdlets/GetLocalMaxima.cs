@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Cmdlets.Hardware;
-using Mars.Clouds.Extensions;
+﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using Mars.Clouds.Segmentation;
@@ -9,12 +8,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
 using System.Runtime;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "LocalMaxima")]
     public class GetLocalMaxima : GdalCmdlet
     {
+        private TileReadWriteStreaming<DigitalSurfaceModel>? maximaReadWrite;
+
         [Parameter(HelpMessage = "Whether or not to compress output rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
@@ -32,13 +34,15 @@ namespace Mars.Clouds.Cmdlets
 
         public GetLocalMaxima() 
         {
+            this.maximaReadWrite = null;
+
             this.CompressRasters = false;
             this.Dsm = String.Empty;
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
             this.LocalMaxima = String.Empty;
         }
 
-        private static int FindLocalMaxima(LocalMaximaState state)
+        private int FindLocalMaxima(LocalMaximaState state)
         {
             VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
             RasterBand<float> currentSurface = currentNeighborhood.Center;
@@ -55,7 +59,7 @@ namespace Mars.Clouds.Cmdlets
                 bool hasSurfaceZ = currentSurface.IsNoData(surfaceZ) == false;
                 float nextSurfaceZ;
                 bool hasNextSurfaceZ;
-                for (int tileNextXindex = 1; tileNextXindex < currentSurface.SizeX - 1; ++tileNextXindex)
+                for (int tileNextXindex = 1; tileNextXindex < currentSurface.SizeX; ++tileNextXindex)
                 {
                     nextSurfaceZ = currentSurface[tileNextXindex, tileYindex];
                     hasNextSurfaceZ = currentSurface.IsNoData(nextSurfaceZ) == false;
@@ -134,7 +138,7 @@ namespace Mars.Clouds.Cmdlets
                             ring1maximumZ = Single.MinValue;
                             ring1minimumZ = Single.MaxValue;
                         }
-                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, ring1maximumZ, ring1minimumZ, surfaceZ, state))
+                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, surfaceZ, ring1maximumZ, ring1minimumZ, state))
                         {
                             ++localMaximaFound;
                         }
@@ -145,6 +149,11 @@ namespace Mars.Clouds.Cmdlets
                         // not a maxima so nothing for vector output
                     }
                 } // else no z value for cell so local maxima radius is undefined; leave as no data
+
+                if (this.Stopping)
+                {
+                    return localMaximaFound; // no point continuing to next row
+                }
             }
 
             return localMaximaFound;
@@ -155,11 +164,22 @@ namespace Mars.Clouds.Cmdlets
             // setup
             Stopwatch stopwatch = Stopwatch.StartNew();
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRaster<DigitalSurfaceModel>("Get-LocalMaxima", this.Dsm, readData: false);
-            TileReadWriteStreaming<DigitalSurfaceModel> maximaReadWrite = new(dsm, Directory.Exists(this.LocalMaxima));
-            if ((dsm.TileCount > 1) && (maximaReadWrite.OutputPathIsDirectory == false))
+
+            bool localMaximaPathIsDirectory = Directory.Exists(this.LocalMaxima);
+            if ((dsm.TileCount > 1) && (localMaximaPathIsDirectory == false))
             {
-                throw new ParameterOutOfRangeException(nameof(this.LocalMaxima), "-" + nameof(this.LocalMaxima) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
+                if (File.Exists(this.LocalMaxima))
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.LocalMaxima), "-" + nameof(this.LocalMaxima) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
+                }
+                else
+                {
+                    Directory.CreateDirectory(this.LocalMaxima);
+                    localMaximaPathIsDirectory = true;
+                }
             }
+
+            this.maximaReadWrite = new(dsm, localMaximaPathIsDirectory);
 
             // find local maxima in all tiles
             // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
@@ -176,7 +196,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxComputeThreads, dsm.TileCount), () =>
             {
                 LocalMaximaRaster? localMaximaRaster = null; // cache for reuse to offload GC
-                for (int tileIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileIndex < maximaReadWrite.MaxTileIndex; tileIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe())
+                for (int tileIndex = this.maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileIndex < this.maximaReadWrite.MaxTileIndex; tileIndex = this.maximaReadWrite.GetNextTileWriteIndexThreadSafe())
                 {
                     DigitalSurfaceModel? dsmTile = dsm[tileIndex];
                     if (dsmTile == null) 
@@ -186,12 +206,12 @@ namespace Mars.Clouds.Cmdlets
 
                     // assist in read until neighborhood complete or no more tiles left to read
                     // If necessary, the outer while loop spin waits for other threads to complete neighborhood read.
-                    int maxNeighborhoodIndex = maximaReadWrite.GetMaximumIndexNeighborhood8(tileIndex);
-                    while (maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex) == false)
+                    int maxNeighborhoodIndex = this.maximaReadWrite.GetMaximumIndexNeighborhood8(tileIndex);
+                    while (this.maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex) == false)
                     {
-                        if (maximaReadWrite.TileReadIndex < maximaReadWrite.MaxTileIndex) // guard against integer overflow of read index if a significant amount of spin waiting occurs
+                        if (this.maximaReadWrite.TileReadIndex < this.maximaReadWrite.MaxTileIndex) // guard against integer overflow of read index if a significant amount of spin waiting occurs
                         {
-                            for (int tileDataReadIndex = maximaReadWrite.GetNextTileReadIndexThreadSafe(); tileDataReadIndex < maximaReadWrite.MaxTileIndex; tileDataReadIndex = maximaReadWrite.GetNextTileReadIndexThreadSafe())
+                            for (int tileDataReadIndex = this.maximaReadWrite.GetNextTileReadIndexThreadSafe(); tileDataReadIndex < this.maximaReadWrite.MaxTileIndex; tileDataReadIndex = this.maximaReadWrite.GetNextTileReadIndexThreadSafe())
                             {
                                 DigitalSurfaceModel? tileToRead = dsm[tileDataReadIndex];
                                 if (tileToRead == null)
@@ -201,17 +221,17 @@ namespace Mars.Clouds.Cmdlets
 
                                 // must load DSM tile at given index even if it's beyond the necessary neighborhood
                                 // Otherwise some tiles would not get loaded.
-                                tileToRead.Read(DigitalSufaceModelBands.Required | DigitalSufaceModelBands.SourceIDSurface, maximaReadWrite.TilePool);
-                                if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                                tileToRead.Read(DigitalSufaceModelBands.Required | DigitalSufaceModelBands.SourceIDSurface, this.maximaReadWrite.TilePool);
+                                if (this.Stopping || this.maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
                                 {
                                     return;
                                 }
 
-                                lock (maximaReadWrite)
+                                lock (this.maximaReadWrite)
                                 {
-                                    maximaReadWrite.OnTileRead(tileDataReadIndex);
+                                    this.maximaReadWrite.OnTileRead(tileDataReadIndex);
                                 }
-                                if (maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex))
+                                if (this.maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex))
                                 {
                                     break;
                                 }
@@ -223,13 +243,13 @@ namespace Mars.Clouds.Cmdlets
                     string tileName = Tile.GetName(dsmTile.FilePath);
                     localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile);
                     localMaximaRaster.FilePath = this.LocalMaxima;
-                    if (maximaReadWrite.OutputPathIsDirectory)
+                    if (this.maximaReadWrite.OutputPathIsDirectory)
                     {
                         localMaximaRaster.FilePath = Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension);
                     }
 
                     string vectorTilePath = this.LocalMaxima;
-                    if (maximaReadWrite.OutputPathIsDirectory)
+                    if (this.maximaReadWrite.OutputPathIsDirectory)
                     {
                         vectorTilePath = Path.Combine(vectorTilePath, tileName + Constant.File.GeoPackageExtension);
                     }
@@ -241,8 +261,8 @@ namespace Mars.Clouds.Cmdlets
                     {
                         CurrentStatistics = dsmMaximaPoints
                     };
-                    int dsmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
-                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    int dsmMaximaFound = this.FindLocalMaxima(state);
+                    if (this.Stopping || this.maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -251,8 +271,8 @@ namespace Mars.Clouds.Cmdlets
                     state.CurrentNeighborhood = state.CmmNeighborhood;
                     state.CurrentStatistics = null;
                     state.CurrentRadii = localMaximaRaster.CmmMaxima;
-                    int cmmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
-                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    int cmmMaximaFound = this.FindLocalMaxima(state);
+                    if (this.Stopping || this.maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -260,8 +280,8 @@ namespace Mars.Clouds.Cmdlets
                     // find CHM maxima radii
                     state.CurrentNeighborhood = state.ChmNeighborhood;
                     state.CurrentRadii = localMaximaRaster.ChmMaxima;
-                    int chmMaximaFound = GetLocalMaxima.FindLocalMaxima(state);
-                    if (this.Stopping || maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    int chmMaximaFound = this.FindLocalMaxima(state);
+                    if (this.Stopping || this.maximaReadWrite.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -269,22 +289,22 @@ namespace Mars.Clouds.Cmdlets
                     Debug.Assert(localMaximaRaster != null);
                     localMaximaRaster.Write(localMaximaRaster.FilePath, this.CompressRasters);
 
-                    lock (maximaReadWrite)
+                    lock (this.maximaReadWrite)
                     {
-                        maximaReadWrite.OnTileWritten(tileIndex);
+                        this.maximaReadWrite.OnTileWritten(tileIndex);
                         dsmMaximaTotal += dsmMaximaFound;
                         cmmMaximaTotal += cmmMaximaFound;
                         chmMaximaTotal += chmMaximaFound;
                     }
                 }
-            }, new());
+            }, this.maximaReadWrite.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...");
+            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + (findLocalMaximaTasks.Count == 1 ? " thread)..." : " threads)..."));
             this.WriteProgress(progress);
             while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles...";
-                progress.Update(maximaReadWrite.TilesWritten, dsm.TileCount);
+                progress.StatusDescription = "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + (findLocalMaximaTasks.Count == 1 ? " thread)..." : " threads)...");
+                progress.Update(this.maximaReadWrite.TilesWritten, dsm.TileCount);
                 this.WriteProgress(progress);
             }
 
@@ -294,8 +314,14 @@ namespace Mars.Clouds.Cmdlets
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
             long meanMaximaPerTile = dsmMaximaTotal / dsm.TileCount;
-            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.TileCount + " " + (dsm.TileCount > 1 ? "tiles" : "tile") + " in " + stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " maxima/tile).");
+            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.TileCount + " " + (dsm.TileCount > 1 ? "tiles" : "tile") + " in " + stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " DSM maxima/tile).");
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.maximaReadWrite?.CancellationTokenSource.Cancel();
+            base.StopProcessing();
         }
 
         private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, float surfaceZ, float ring1maximumZ, float ring1minimumZ, LocalMaximaState state)

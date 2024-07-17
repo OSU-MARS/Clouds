@@ -34,7 +34,7 @@ namespace Mars.Clouds.Cmdlets
         {
             string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
                             this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + totalThreads + 
-                            (totalThreads == 1 ? "thread, " : " threads, ") + activeReadThreads + " reading)...";
+                            (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
             return status;
         }
         

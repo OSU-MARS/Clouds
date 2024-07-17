@@ -2,8 +2,10 @@
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using OSGeo.OSR;
 using System;
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO;
 using System.Management.Automation;
 using System.Reflection.Metadata;
@@ -155,11 +157,6 @@ namespace Mars.Clouds.Cmdlets
                             dtmTile = RasterBand<float>.CreateOrLoad(dtmTilePath, this.DtmBand, dtmTile);
 
                             // tilePoints must be in the same CRS as the DTM but can have any extent equal to or smaller than the DSM and DTM tiles
-                            // If the points extend beyond the DSM/DTM tile then ToInteriorGridIndices() will throw while points are being read.
-                            if (SpatialReferenceExtensions.IsSameCrs(lasTile.GetSpatialReference(), dtmTile.Crs) == false)
-                            {
-                                throw new NotSupportedException(tileName + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTile.GetSpatialReference().GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
-                            }
                             if (dtmTile.IsSameExtent(lasTile.GridExtent) == false)
                             {
                                 throw new NotSupportedException(tileName + ": DTM tile extent (" + dtmTile.GetExtentString() + ") does not match point cloud tile extent (" + lasTile.GridExtent.GetExtentString() + ").");
@@ -192,11 +189,11 @@ namespace Mars.Clouds.Cmdlets
                             string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
                             if (dsmTile == null)
                             {
-                                dsmTile = new(dsmTilePath, dtmTile);
+                                dsmTile = new(dsmTilePath, lasTile, dtmTile);
                             }
                             else
                             {
-                                dsmTile.Reset(dsmTilePath, dtmTile); // update to new path and clear all bands
+                                dsmTile.Reset(dsmTilePath, lasTile, dtmTile); // update to new path and clear all bands
                             }
                             // assertions for fully tiled cases
                             // Unlikely to hold for untiled cases, such as UAV flights or handheld scans.
@@ -213,7 +210,7 @@ namespace Mars.Clouds.Cmdlets
                             dsmTile.OnPointAdditionComplete(dtmTile);
                             lock (this.dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
                             {
-                                // (int dsmTileIndexX, int dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTileToAdd); // sometimes useful to get tile's xy position in grid when debugging
+                                // (int dsmTileIndexX, int dsmTileIndexY) = this.dsmReadCreateWrite.Dsm.Add(dsmTileToAdd); // sometimes useful to get tile's xy position in grid when debugging
                                 this.dsmReadCreateWrite.Dsm.Add(dsmTile);
                             }
 
@@ -228,7 +225,7 @@ namespace Mars.Clouds.Cmdlets
                         }
                     }
                 }
-            }, dsmReadCreateWrite.CancellationTokenSource);
+            }, this.dsmReadCreateWrite.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
             TimedProgressRecord progress = new(cmdletName, this.dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
@@ -253,6 +250,12 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose(this.dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (this.dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.ToElapsedString() + ": " + this.dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (this.dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (this.dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (this.dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.dsmReadCreateWrite?.CancellationTokenSource.Cancel();
+            base.StopProcessing();
         }
 
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, DigitalSurfaceModel>

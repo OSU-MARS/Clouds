@@ -38,11 +38,11 @@ namespace Mars.Clouds.UnitTests
             LasTile lasTile = this.ReadLasTile();
             (double lasTileCentroidX, double lasTileCentroidY) = lasTile.GridExtent.GetCentroid();
             VirtualRaster<Raster<float>> dtmRaster = this.ReadDtm();
-            Assert.IsTrue(dtmRaster.TileCount == 1);
-            Assert.IsTrue((dtmRaster.Crs.IsSame(lasTile.GetSpatialReference(), []) == 1) && SpatialReferenceExtensions.IsSameCrs(dtmRaster.Crs, lasTile.GetSpatialReference()));
+            Assert.IsTrue((dtmRaster.TileCount == 1) && (dtmRaster.Crs.IsVertical() == 0));
+            Assert.IsTrue((dtmRaster.Crs.IsSameGeogCS(lasTile.GetSpatialReference()) == 1) && SpatialReferenceExtensions.IsSameCrs(dtmRaster.Crs, lasTile.GetSpatialReference()));
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
-            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", dtmTile);
+            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, dtmTile);
 
             using LasReader pointReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
             byte[]? pointReadBuffer = null;
@@ -116,7 +116,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(lasHeader14.FileCreationDayOfYear == 282);
             Assert.IsTrue(lasHeader14.FileCreationYear == 2023);
             Assert.IsTrue(lasHeader14.HeaderSize == LasHeader14.HeaderSizeInBytes);
-            Assert.IsTrue(lasHeader14.OffsetToPointData == 1131);
+            Assert.IsTrue(lasHeader14.OffsetToPointData == 1937);
             Assert.IsTrue(lasHeader14.NumberOfVariableLengthRecords == 1);
             Assert.IsTrue(lasHeader14.PointDataRecordFormat == 6);
             Assert.IsTrue(lasHeader14.PointDataRecordLength == 30);
@@ -164,28 +164,14 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(lasTile.GridExtent.YMax == lasHeader14.MaxY);
 
             Assert.IsTrue(lasTile.VariableLengthRecords.Count == 1);
-            GeoKeyDirectoryTagRecord crs = (GeoKeyDirectoryTagRecord)lasTile.VariableLengthRecords[0];
-            Assert.IsTrue(crs.Reserved == 43707); // bug in originating writer; should be zero
+            OgcCoordinateSystemWktRecord crs = (OgcCoordinateSystemWktRecord)lasTile.VariableLengthRecords[0];
+            Assert.IsTrue(crs.Reserved == 0); // bug in originating writer; should be zero
             Assert.IsTrue(String.Equals(crs.UserID, "LASF_Projection", StringComparison.Ordinal));
-            Assert.IsTrue(crs.RecordID == GeoKeyDirectoryTagRecord.LasfProjectionRecordID);
-            Assert.IsTrue(crs.RecordLengthAfterHeader == 48);
-            Assert.IsTrue(String.Equals(crs.Description, "Geotiff Projection Keys", StringComparison.Ordinal));
-            Assert.IsTrue(crs.KeyDirectoryVersion == 1);
-            Assert.IsTrue(crs.KeyRevision == 1);
-            Assert.IsTrue(crs.MinorRevision == 0);
-            Assert.IsTrue(crs.NumberOfKeys == 3); // bug in originating writer, should be two
-            Assert.IsTrue(crs.KeyEntries.Count == crs.NumberOfKeys);
-            GeoKeyEntry projectedCrsKey = crs.KeyEntries[0];
-            Assert.IsTrue(projectedCrsKey.KeyID == GeoKey.ProjectedCSTypeGeoKey);
-            Assert.IsTrue(projectedCrsKey.TiffTagLocation == 0);
-            Assert.IsTrue(projectedCrsKey.Count == 1);
-            Assert.IsTrue(projectedCrsKey.ValueOrOffset == 32610);
-            GeoKeyEntry verticalCrsKey = crs.KeyEntries[1];
-            Assert.IsTrue(verticalCrsKey.KeyID == GeoKey.VerticalUnitsGeoKey);
-            Assert.IsTrue(verticalCrsKey.TiffTagLocation == 0);
-            Assert.IsTrue(verticalCrsKey.Count == 1);
-            Assert.IsTrue(verticalCrsKey.ValueOrOffset == 32610);
-            // third key is a write error and is all zero; ignore for now
+            Assert.IsTrue(crs.RecordID == OgcCoordinateSystemWktRecord.LasfProjectionRecordID);
+            Assert.IsTrue(crs.RecordLengthAfterHeader == 854);
+            Assert.IsTrue(String.Equals(crs.Description, "WKT Projection", StringComparison.Ordinal));
+            string wkt = crs.SpatialReference.GetWkt();
+            Assert.IsTrue(String.Equals(wkt, "COMPD_CS[\"WGS 84 / UTM zone 10N + NAVD88 height\",PROJCS[\"WGS 84 / UTM zone 10N\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",-123],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32610\"]],VERT_CS[\"NAVD88 height\",VERT_DATUM[\"North American Vertical Datum 1988\",2005,AUTHORITY[\"EPSG\",\"5103\"]],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Gravity-related height\",UP],AUTHORITY[\"EPSG\",\"5703\"]]]", StringComparison.Ordinal));
 
             Assert.IsTrue(lasTile.ExtendedVariableLengthRecords.Count == 0);
 

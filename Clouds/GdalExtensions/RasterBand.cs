@@ -94,25 +94,40 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract void ReadDataInSameCrsAndTransform(Dataset rasterDataset);
 
-        protected static void ReadDataAssumingSameCrsTransformSizeAndNoData<TBand>(Band gdalBand, TBand[] data)
+        protected static void ReadDataAssumingSameCrsTransformSizeAndNoData<TBand>(Band gdalBand, DataType bufferDataType, TBand[] buffer) where TBand : INumber<TBand>
         {
-            GCHandle dataPin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            GCHandle dataPin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             try
             {
                 // read entire band from GDAL's cache at once
-                CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
-                GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
+                CPLErr gdalErrorCode2 = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: bufferDataType, pixelSpace: 0, lineSpace: 0);
+                GdalException.ThrowIfError(gdalErrorCode2, nameof(gdalBand.ReadRaster));
 
                 // read entire band in block y size increments
-                // Profiling results are ambiguous but many smaller read calls may be somewhat faster than a single large one. It's unclear what
-                // GDAL expects of callers when the block x size is not the raster width, though, and further testing's needed to see if choosing
-                // y sizes intermediate between 1 (the usual block y size for GDAL's GTiff driver) and the entire raster are more performant.
+                // GDAL documentation recommends this approach for performance but's no faster than entire band reads and increases DDR bandwidth
+                // demand. Reading many blocks, but not the entire band, hasn't been profiled to see if there's any advantage.
                 //gdalBand.GetBlockSize(out int blockXsize, out int blockYsize);
                 //nint dataPointer = dataPin.AddrOfPinnedObject();
-                //for (int y = 0; y < gdalBand.YSize; y += blockYsize)
+                //nint yBlockedBufferStrideInBytes = gdalBand.XSize * blockYsize * gdalBand.DataType.GetSizeInBytes();
+                //for (int yOffset = 0; yOffset < gdalBand.YSize; dataPointer += yBlockedBufferStrideInBytes, yOffset += blockYsize)
                 //{
-                //    CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: y, xSize: gdalBand.XSize, ySize: 1, buffer: dataPointer, buf_xSize: gdalBand.XSize, buf_ySize: blockYsize, buf_type: gdalBand.DataType, pixelSpace: 0, lineSpace: 0);
+                //    CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: yOffset, xSize: gdalBand.XSize, ySize: blockYsize, buffer: dataPointer, buf_xSize: gdalBand.XSize, buf_ySize: blockYsize, buf_type: bufferDataType, pixelSpace: 0, lineSpace: 0);
                 //    GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
+                //}
+
+                // for debugging: check consistency of blocked and whole band reads
+                //int cells = gdalBand.XSize * gdalBand.YSize;
+                //TBand[] buffer2 = new TBand[cells];
+                //GCHandle dataPin2 = GCHandle.Alloc(buffer2, GCHandleType.Pinned);
+                //CPLErr gdalErrorCode2 = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin2.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: bufferDataType, pixelSpace: 0, lineSpace: 0);
+                //GdalException.ThrowIfError(gdalErrorCode2, nameof(gdalBand.ReadRaster));
+                //dataPin2.Free();
+                //for (int index = 0; index < cells; ++index)
+                //{
+                //    if (buffer[index] != buffer2[index])
+                //    {
+                //        int q = 0;
+                //    }
                 //}
             }
             finally
@@ -123,8 +138,8 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract Array ReleaseData();
 
-        // can't set this.NoDataIsNaN as data type is not known, require derived classes to override
-        //public abstract void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData);
+        //  require derived classes to override as this.NoDataIsNaN can't set when data type is not known
+        public abstract void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData);
 
         public static double ResolveSignedIntegerNoDataValue(List<double> candidateNoDataValues, double minValue, double maxValue)
         {
@@ -556,41 +571,42 @@ namespace Mars.Clouds.GdalExtensions
 
             if (gdalBand.DataType == thisDataType)
             {
-                RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, this.Data);
+                RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, thisDataType, this.Data);
             }
             else
             {
                 // no data values are left unchanged
+                // TODO: evaluate GDAL's data type translation in its RasterIO()
                 switch (gdalBand.DataType)
                 {
                     case DataType.GDT_Byte:
                         byte[] bufferUInt8 = GC.AllocateUninitializedArray<byte>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt8);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt8);
                         DataTypeExtensions.Convert(bufferUInt8, this.Data);
                         break;
                     case DataType.GDT_Int8:
                         sbyte[] bufferInt8 = GC.AllocateUninitializedArray<sbyte>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt8);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt8);
                         DataTypeExtensions.Convert(bufferInt8, this.Data);
                         break;
                     case DataType.GDT_Int16:
                         Int16[] bufferInt16 = GC.AllocateUninitializedArray<Int16>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt16);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt16);
                         DataTypeExtensions.Convert(bufferInt16, this.Data);
                         break;
                     case DataType.GDT_Int32:
                         Int32[] bufferInt32 = GC.AllocateUninitializedArray<Int32>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferInt32);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt32);
                         DataTypeExtensions.Convert(bufferInt32, this.Data);
                         break;
                     case DataType.GDT_UInt16:
                         UInt16[] bufferUInt16 = GC.AllocateUninitializedArray<UInt16>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt16);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt16);
                         DataTypeExtensions.Convert(bufferUInt16, this.Data);
                         break;
                     case DataType.GDT_UInt32:
                         UInt32[] bufferUInt32 = GC.AllocateUninitializedArray<UInt32>(this.Cells);
-                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, bufferUInt32);
+                        RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt32);
                         DataTypeExtensions.Convert(bufferUInt32, this.Data);
                         break;
                     default:
@@ -607,18 +623,18 @@ namespace Mars.Clouds.GdalExtensions
             return buffer;
         }
 
-        //public override void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData)
-        //{
-        //    this.Crs = crs;
-        //    this.Name = gdalBand.GetDescription();
-        //    this.Transform = transform;
-        //    this.SetNoDataValue(gdalBand); // this.HasNoDataValue, NoDataValue, NoDataIsNaN
-            
-        //    if (readData)
-        //    {
-        //        this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
-        //    }
-        //}
+        public override void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData)
+        {
+            this.Crs = crs;
+            this.Name = gdalBand.GetDescription();
+            this.Transform = transform;
+            this.SetNoDataValue(gdalBand); // this.HasNoDataValue, NoDataValue, NoDataIsNaN
+
+            if (readData)
+            {
+                this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+            }
+        }
 
         [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
         private void SetNoDataValue(Band gdalBand)

@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.Bibliography;
-using Mars.Clouds.Cmdlets.Hardware;
+﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -7,7 +6,6 @@ using OSGeo.OGR;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Management.Automation;
 using System.Threading;
 
@@ -16,6 +14,8 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsLifecycle.Register, "Cloud")]
     public class RegisterCloud : GdalCmdlet
     {
+        private CancellationTokenSource? cancellationTokenSource;
+
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to set origin and coordinate system of.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
@@ -69,6 +69,8 @@ namespace Mars.Clouds.Cmdlets
 
         public RegisterCloud()
         {
+            this.cancellationTokenSource = null;
+
             this.Las = [];
             this.Lat = Double.NaN;
             this.Long = Double.NaN;
@@ -129,6 +131,7 @@ namespace Mars.Clouds.Cmdlets
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
             int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
+            this.cancellationTokenSource = new();
             int cloudRegistrationsInitiated = -1;
             int cloudRegistrationsCompleted = 0;
             ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
@@ -178,7 +181,7 @@ namespace Mars.Clouds.Cmdlets
                         break;
                     }
                 }
-            }, new());
+            }, this.cancellationTokenSource);
 
             TimedProgressRecord progress = new("Register-Cloud", "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false) 
@@ -189,6 +192,12 @@ namespace Mars.Clouds.Cmdlets
             }
 
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
     }
 }

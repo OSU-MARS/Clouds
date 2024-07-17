@@ -6,4 +6,5 @@ TestResults/
 
 # Visual Studio cache/options directory and RStudio user profile
 .vs/
+.Rhistory
 .Rproj.user

@@ -17,6 +17,8 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Vrt")]
     public class GetVrt : GdalCmdlet
     {
+        private CancellationTokenSource? cancellationTokenSource;
+
         [Parameter(Mandatory = true, HelpMessage = "List of directory paths, including wildcards, to search for virtual raster tiles. Each directory is assumed to contain a distinct set of tiles.")]
         [ValidateNotNullOrEmpty]
         public List<string> TilePaths { get; set; }
@@ -52,6 +54,8 @@ namespace Mars.Clouds.Cmdlets
 
         public GetVrt()
         {
+            this.cancellationTokenSource = null;
+
             this.Bands = [];
             this.EnumerationOptions = new()
             {
@@ -70,7 +74,7 @@ namespace Mars.Clouds.Cmdlets
 
         private VirtualRasterBandsAndStatistics AssembleVrts()
         {
-            Debug.Assert(this.TilePaths.Count > 0);
+            Debug.Assert((this.cancellationTokenSource != null) && (this.TilePaths.Count > 0));
 
             // find all tiles
             VirtualRasterBandsAndStatistics vrtBandsAndStats = new(this.TilePaths.Count);
@@ -121,6 +125,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks readVrts = new(Int32.Min(readThreads, tileCountAcrossAllVrts), () =>
             {
                 SortedList<DataType, Array?> bandBuffersByDataType = []; // pool buffers for bands to avoid overloading the GC
+                // Raster? tile = null; // for performance testing
                 TileEnumerator tileEnumerator = new(tilePathsByVrtIndex, this.MinTilesSampled, this.MinSamplingFraction);
                 for (int tileReadIndex = Interlocked.Increment(ref tileReadsInitiated); tileReadIndex < tileCountAcrossAllVrts; tileReadIndex = Interlocked.Increment(ref tileReadsInitiated))
                 {
@@ -133,7 +138,19 @@ namespace Mars.Clouds.Cmdlets
                     // must be newed distinctly since added to vrt
                     // Defer data read so band data buffers can be object pooled to avoid overloading the GC.
                     using Dataset tileDataset = Gdal.Open(tileEnumerator.Current, Access.GA_ReadOnly);
-                    Raster tile = Raster.Read(tileDataset, readData: false);
+                    Raster tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: false);
+                    //if (tile == null) // for performance testing
+                    //{
+                    //    tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: tileEnumerator.SampleTile);
+                    //}
+                    //else
+                    //{
+                    //    tile.Reset(tileEnumerator.Current, tileDataset, readData: tileEnumerator.SampleTile);
+                    //}
+                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    {
+                        return; // no point in continuing if task is cancelled
+                    }
 
                     int vrtIndex = tileEnumerator.VrtIndex;
                     VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
@@ -175,7 +192,7 @@ namespace Mars.Clouds.Cmdlets
                         tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex][ungriddedTileIndexInVrt] = tileStatistics;
                     }
                 }
-            }, new());
+            }, this.cancellationTokenSource);
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
             TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)..."));
@@ -185,6 +202,10 @@ namespace Mars.Clouds.Cmdlets
                 progress.StatusDescription = tileMetadataReadsCompleted + " tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)...");
                 progress.Update(tileMetadataReadsCompleted, tileCountAcrossAllVrts); // likely optimistic by band sampling time
                 this.WriteProgress(progress);
+            }
+            if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+            {
+                return vrtBandsAndStats; // no point in continuing if task is cancelled
             }
 
             // check virtual rasters for consistency with each other
@@ -293,12 +314,17 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // read tile metadata, checking inputs for spatial and band data type consistency
+            this.cancellationTokenSource = new();
             VirtualRasterBandsAndStatistics vrtBandsAndStats = this.AssembleVrts();
+            if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+            {
+                return; // should not write a .vrt if tile loading was cancelled (vrtBandsAndStats is very likely incomplete anyways)
+            }
 
             // create and write .vrt
             // Incremental progress is not shown for dataset generation as time spent is negligible at 2000+ tiles. Runtime is dominated
             // by getting tile metadata through GDAL and estimating band statistics.
-            ProgressRecord progress = new(0, "Get-Vrt", "Creating and writing .vrt...");
+            ProgressRecord progress = new(1, "Get-Vrt", "Creating and writing .vrt...");
             this.WriteProgress(progress);
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
@@ -348,6 +374,12 @@ namespace Mars.Clouds.Cmdlets
 
             this.WriteVerbose("Assembled " + vrtBandsAndStats.GetTileCount() + " tiles into " + vrtBandsAndStats.Vrts.Length + " virtual rasters in " + vrtBandsAndStats.VrtAssemblyTime.ToElapsedString() + ".");
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
 
         private class VirtualRasterBandsAndStatistics

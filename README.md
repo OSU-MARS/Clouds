@@ -12,14 +12,7 @@ memory use. [LAS](https://www.asprs.org/divisions-committees/lidar-division/lase
 file formats are supported, though GDAL testing is limited to GeoPackage and GeoTIFF. In cases where directories are searched for data tiles 
 .las and .tif are the default file extensions.
 
-DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3, Intel Raptor Lake, or newer processors with 12–16 cores and 
-64–128 GB of DDR are assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most processing 
-likely fitting within 64 GB of DDR per terabyte of point cloud data. Tile processing rates depend on drive and processor core capabilities but
-desktop hardware has been shown to sustain .las read speeds up to 4.9 GB/s with operating system agnostic code, increasing to 7.0 GB/s with
-operating system specific optimizations. Also, peak transfer rates of 7 GB/s have been observed from some cmdlets. AVX, AVX2, and FMA instructions 
-are used at times for processing. AVX10/256 and AVX10/512 are not currently utilized.
-
-Monitoring of component temperatures is advised during workloads characterization. System fan speeds are most commonly controlled by processor
+Monitoring of component temperatures is advised during workload characterization. System fan speeds are most commonly controlled by processor
 temperatures but often are not linked to DDR or drive temperatures. In IO intensive workloads with little compute demand the processor may remain
 cool while drives get hot or, if poorly positioned for airflow, drives may just become hot during the long running, intensive operations 
 characteristic of LiDAR processing. For example, larger datasets can overwhelm motherboard armor's heat dissipation ability and pushing even energy 
@@ -28,9 +21,12 @@ drives lacking throttling, drives may be permanently marked with S.M.A.R.T. erro
 needed. On Windows systems which are not OEM locked, [FanControl](https://github.com/Rem0o/FanControl.Releases) may be helpful for linking
 airflow to drive temperatures.
 
-QGIS (as of the 3.34 LTR) tends to be slow to work with virtual rasters produced from LiDAR point cloud processing, apparently due to GDAL's 
-inclination to set `BlockYSize="1"` in .vrt files in contradiction to the guidance in [GDAL's own documentation](https://gdal.org/drivers/raster/vrt.html). 
-Clouds can't really do anything about this, though it adheres to GDAL guidance and offers a cmdlet to remove block sizes.
+Clouds' DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3, Intel Raptor Lake, or newer processors with 12–16 cores 
+and 64–128 GB of DDR are assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most processing 
+likely fitting within 64 GB of DDR per terabyte of point cloud data. Tile processing rates depend on drive and processor core capabilities but
+desktop hardware has been shown to sustain .las read speeds up to 4.9 GB/s with operating system agnostic code, increasing to 7.0 GB/s with
+operating system specific optimizations. Also, peak transfer rates of 7 GB/s have been observed from some cmdlets. AVX, AVX2, and FMA instructions 
+are used at times for processing. AVX10/256 and AVX10/512 are not currently utilized.
 
 Code is currently pre-alpha and provided as is. Typically, the head commit should compile and pass unit tests but this isn't guaranteed (the
 commit before head should be fine). APIs are volatile and breaking changes are routine.
@@ -52,7 +48,7 @@ manipulating point clouds, working with virtual rasters, and characterizing driv
 - `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 - `Convert-DiskSpd`: reformat [DiskSpd](https://github.com/microsoft/diskspd) .xml result files as longform data
 
-### Dataset structure
+### LiDAR dataset (project) file structure
 A LiDAR dataset is assumed to consist of
 
 - .las point cloud tiles
@@ -72,6 +68,38 @@ Outputs often consist of data tiles with accompanying diagnostic tiles. This arr
 avoid collapses observed with tools such as QGIS which, as of version 3.34.6 (April 2024), become effectively unusuable on data such as 
 100 GB virtual rasters with a dozen bands. Subsequent processing, such as treetop identification, may load bands from both data and
 diagnostic raster tiles.
+
+### Integration with other tools
+Clouds exists primarily to provide performance or processing capabilities which aren't available with established tool ecosystems such as [R](https://www.r-project.org/), 
+[Julia](https://julialang.org/), and [OSGEO](https://www.osgeo.org/) ([GDAL](https://gdal.org/), [QGIS](https://qgis.org/)). In principle, 
+interactions between Clouds and other packages consist of handing off data files in well established, interoperable formats such as LAS,
+GeoTIFF, and GeoPackage. In practice, interoperability tends to be complex in its details and Clouds does the best it can within available
+development resources. In particular,
+
+- LAS specification compliance is often poor, resulting in malformed .las (and .laz) files or tools that fail to work unless a file happens
+  fit within the specification's grey zones in a particular way. Clouds tries to work around errors, such as indicating an incorrect number 
+  of variable length records (VLRs) in the LAS header, and quirks of common implementations, such as requiring two padding bytes between the 
+  VLRs and point data, as best it can.
+- GDAL's design doesn't always match well to its actual uses. Because one of Clouds' major workflows is generating raster tiles from aerial
+  LiDAR flights, Clouds interacts extensively with GDAL's [GeoTIFF](https://gdal.org/drivers/raster/gtiff.html) and [virtual raster](https://gdal.org/drivers/raster/vrt.html) 
+  drivers. However, generation and manipulation of a virtual raster's .vrt is only part of setting up a virtual raster. Clouds does not
+  (currently) get involved with pyramid generation.
+
+QGIS raster layer properties, as of the 3.34 LTR, include basic support for generating pyramids at GDAL's default power of two levels (half of 
+a virtual raster's dimensions, a quarter, an eighth...). [`gdaladdo`](https://gdal.org/programs/gdaladdo.html), available from the OSGeo shell
+installed with QGIS (or from any other GDAL installation), provides more granular control and incremental update of pyramid .ovr files when a 
+tile is changed. However, as of GDAL 3.9, `gdaladdo` doesn't support wildcard inputs and thus likely be scripted over a virtual raster's tiles.
+It's also not well understood which pyramid levels, as well as which levels to generate for the virtual raster as a whole versus as individual 
+files at tile level, produce the greatest usuability in QGIS is not well understood. Anecdotally, power of two level spacing may be more dense
+than is required and generating a couple lower levels (e.g. 4 and 8 or 3 and 10) per tile and then a limited resolution pyramid for the virtual 
+raster as a whole (perhaps level 16 or 20) may be a reasonable starting point for minimizing QGIS render times for flights in the 20,000–50,000 
+ha range. Roughly 100 MB seems reasonably practical for the whole raster .ovr. (Also, QGIS tends to leak render threads so, if rendering becomes
+less responsive, check whether QGIS is keeping one or more cores active at idle. If it is, those are probably lost threads. A QGIS restart is
+required to clear them.)
+
+GDAL tends to to set `BlockYSize="1"` in .vrt files in contradiction to [GDAL's own guidance](https://gdal.org/drivers/raster/vrt.html), 
+resulting in slower rendering in QGIS. Clouds can't really do anything about this, though it adheres to GDAL guidance, offers `Remove-VrtBlockSize`
+to remove block sizes, and leaves GDAL free to pick up its [configuration options](https://gdal.org/user/configoptions.html).
 
 ### No data values
 No data values are detected and ignored for all rasters and, in general, propagate. For example, a no data value in either the digital 
@@ -194,26 +222,6 @@ A few other performance details are notable.
   arrangements being used to actuators. If Exos 2X18 halves or similar hardware pairings are being used in JBOD with tiles striped across the 
   halves then `-ReadThreads 2` allows Clouds to operate both actuators simultaneously.
 
-### Dependencies
-Clouds is a .NET 8 assembly which includes C# cmdlets for PowerShell Core. It therefore makes use of both the System.Management.Automation
-nuget package and the system's PowerShell Core installation, creating a requirement the PowerShell Core version be the same or newer than 
-the nuget's. If Visual Studio Code is used for PowerShell Core execution then corresponding updates to Visual Studio Code and its PowerShell 
-extension are required.
-
-Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, notably where GDAL's design forces single 
-threaded write transactions on large GeoPackages and its raster tile cache (for groups of pixels within individual, not to be confused with 
-virtual raster tiles) imposes memory and DDR bandwidth overhead. Clouds mitigates the former by regularly GeoPackage committing transactions for 
-GDAL's SQL background thread to process in parallel with the single thread GDAL allows Clouds to use to assemble transactions (it's possible
-multithreaded transaction generation is supported but, as of GDAL 3.8.3, it's not documented to be and thus has to be assumed unsafe). For the
-latter, specifying [`GTIFF_DIRECT_IO=YES`](https://gdal.org/drivers/raster/gtiff.html) as a [GDAL option](https://gdal.org/user/configoptions.html) 
-will bypass GDAL's cache for GeoTIFF operations at the expense of performance. (GDAL's C# interface also lacks support for `Span<T>` and remains 
-missing nullability annotations.)
-
-Clouds is developed and tested using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/).
-Clouds is only tested on Windows 10 22H2 but should run on any .NET supported platform once an implementation of `HardwareCapabilities` 
-necessarily operating system specific detection of DDR bandwidth and drive types is provided. RAID0, RAID1, and RAID10 receive limited 
-attention and parity based RAIDs have not been tested.
-
 ### Limitations
 Currently, each rasterization cmdlet performs its own independent read of point cloud tiles. With hard drives and moderate bandwidth SSDs 
 this very likely means tile processing bottlenecks on the drive. Scripting cmdlets sequences and letting them running unattended mitigates 
@@ -245,3 +253,23 @@ Also,
 - In certain situations GDAL bypasses its callers and writes directly to the console. The common case for this is `ERROR 4` when a malformed 
   dataset (GIS file) is encountered. If error 4 occurs during a raster write Clouds catches it and tries to recreate the raster, which typically 
   succeeds,but Clouds has no ability to prevent the error from appearing in PowerShell.
+
+### Dependencies
+Clouds is a .NET 8 assembly which includes C# cmdlets for PowerShell Core. It therefore makes use of both the System.Management.Automation
+nuget package and the system's PowerShell Core installation, creating a requirement the PowerShell Core version be the same or newer than 
+the nuget's. If Visual Studio Code is used for PowerShell Core execution then corresponding updates to Visual Studio Code and its PowerShell 
+extension are required.
+
+Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, notably where GDAL's design forces single 
+threaded write transactions on large GeoPackages and its raster tile cache (for groups of pixels within individual, not to be confused with 
+virtual raster tiles) imposes memory and DDR bandwidth overhead. Clouds mitigates the former by regularly GeoPackage committing transactions for 
+GDAL's SQL background thread to process in parallel with the single thread GDAL allows Clouds to use to assemble transactions (it's possible
+multithreaded transaction generation is supported but, as of GDAL 3.8.3, it's not documented to be and thus has to be assumed unsafe). For the
+latter, specifying [`GTIFF_DIRECT_IO=YES`](https://gdal.org/drivers/raster/gtiff.html) as a [GDAL option](https://gdal.org/user/configoptions.html) 
+will bypass GDAL's cache for GeoTIFF operations at the expense of performance. (GDAL's C# interface also lacks support for `Span<T>` and remains 
+missing nullability annotations.)
+
+Clouds is developed and tested using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/).
+Clouds is only tested on Windows 10 22H2 but should run on any .NET supported platform once an implementation of `HardwareCapabilities` 
+necessarily operating system specific detection of DDR bandwidth and drive types is provided. RAID0, RAID1, and RAID10 receive limited 
+attention and parity based RAIDs have not been tested.

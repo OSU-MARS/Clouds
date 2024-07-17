@@ -62,6 +62,11 @@ namespace Mars.Clouds.Segmentation
             yield return this.ChmMaxima;
         }
 
+        public override void Reset(string filePath, Dataset rasterDataset, bool readData)
+        {
+            throw new NotImplementedException(); // TODO when needed
+        }
+
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
             if (String.Equals(this.DsmMaxima.Name, name, StringComparison.Ordinal))

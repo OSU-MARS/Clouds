@@ -24,7 +24,7 @@ namespace Mars.Clouds.Las
         {
             string wkt = crs.GetWkt();
             byte[] wktBytes = Encoding.UTF8.GetBytes(wkt);
-            return new OgcCoordinateSystemWktRecord((UInt16)wktBytes.Length, "WKT Projection", crs);
+            return new OgcCoordinateSystemWktRecord((UInt16)(wktBytes.Length + 1), "WKT Projection", crs); // wkt plus required trailing null
         }
     }
 }

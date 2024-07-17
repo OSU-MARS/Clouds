@@ -31,6 +31,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 Results results = new(logFiles[fileIndex]);
                 resultsByFile.Add(results);
+
+                if (this.Stopping)
+                {
+                    return;
+                }
             }
 
             DiskSpdLongformResults longformResults = new(resultsByFile);

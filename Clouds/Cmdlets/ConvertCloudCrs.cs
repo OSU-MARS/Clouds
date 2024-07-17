@@ -14,6 +14,8 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Convert, "CloudCrs")]
     public class ConvertCloudCrs : GdalCmdlet
     {
+        private CancellationTokenSource? cancellationTokenSource;
+
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
@@ -28,6 +30,8 @@ namespace Mars.Clouds.Cmdlets
 
         public ConvertCloudCrs() 
         {
+            this.cancellationTokenSource = null;
+
             this.Las = [];
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
             this.VerticalEpsg = Constant.Epsg.Navd88m;
@@ -49,6 +53,7 @@ namespace Mars.Clouds.Cmdlets
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
             int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
+            this.cancellationTokenSource = new();
             int cloudReprojectionsInitiated = -1;
             int cloudReprojectionsCompleted = 0;
             ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
@@ -56,20 +61,21 @@ namespace Mars.Clouds.Cmdlets
                 for (int cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudReprojectionsInitiated))
                 {
                     // load cloud and get its current coordinate system
-                    // If cloud is missing a vertical coordinate system, assign a default vertical CRS.
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
                     LasFile cloud = new(reader, fallbackCreationDate: null);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
-                    if (cloudCrs.IsVertical() == 0)
-                    {
-                        cloudCrs = SpatialReferenceExtensions.CreateCompoundCrs(cloudCrs, verticalCrs);
-                    }
-                    
-                    if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs))
+                    int cloudHasVerticalCrs = cloudCrs.IsVertical();
+                    if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs) && (cloudHasVerticalCrs == 1)) // IsSameCrs() allows missing vertical CRSes
                     {
                         // TODO: pass message back to main cmdlet thread indicating cloud was skipped
                         continue; // nothing to do as cloud is already in desired coordinate system
+                    }
+                    if (cloudHasVerticalCrs == 0)
+                    {
+                        // if cloud is missing a vertical CRS assume its vertical units are the same as those of -VerticalEpsg
+                        // Otherwise vertical aspects of the coordinate system transform are undefined.
+                        cloudCrs = SpatialReferenceExtensions.CreateCompoundCrs(cloudCrs, verticalCrs);
                     }
 
                     // change cloud's coordinate system
@@ -116,12 +122,12 @@ namespace Mars.Clouds.Cmdlets
                     writer.CopyPointsAndExtendedVariableLengthRecords(reader, cloud);
 
                     Interlocked.Increment(ref cloudReprojectionsCompleted);
-                    if (this.Stopping)
+                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
                 }
-            }, new());
+            }, this.cancellationTokenSource);
 
             TimedProgressRecord progress = new("Register-Cloud", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -132,6 +138,12 @@ namespace Mars.Clouds.Cmdlets
             }
 
             base.ProcessRecord();
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
     }
 }

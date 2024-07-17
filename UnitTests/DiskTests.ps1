@@ -4,5 +4,6 @@ $buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0")
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
+## convert DiskSpd XML results files to longform data
 $resultPath = [System.IO.Path]::Combine($env:USERPROFILE, "PhD\\tools\\marmot\DiskSpd logs")
 Convert-DiskSpd -Result $resultPath -Longform ([System.IO.Path]::Combine($resultPath, "DiskSpd.xlsx"))

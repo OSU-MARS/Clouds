@@ -66,7 +66,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Read(gridCellDefinitionDataset, readData: true);
+            Raster cellDefinitions = Raster.Read(this.Cells, gridCellDefinitionDataset, readData: true);
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
             const string cmdletName = "Get-GridMetrics";
