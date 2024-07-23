@@ -68,29 +68,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                         {
-                            float ring1minimumZ;
-                            float ring1maximumZ;
-                            if (hasPreviousSurfaceZ && hasNextSurfaceZ)
-                            {
-                                ring1maximumZ = previousSurfaceZ > nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
-                                ring1minimumZ = previousSurfaceZ < nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
-                            }
-                            else if (hasPreviousSurfaceZ)
-                            {
-                                ring1maximumZ = previousSurfaceZ;
-                                ring1minimumZ = previousSurfaceZ;
-                            }
-                            else if (hasNextSurfaceZ)
-                            {
-                                ring1maximumZ = nextSurfaceZ;
-                                ring1minimumZ = nextSurfaceZ;
-                            }
-                            else
-                            {
-                                ring1maximumZ = Single.MinValue;
-                                ring1minimumZ = Single.MaxValue;
-                            }
-                            if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, surfaceZ, ring1maximumZ, ring1minimumZ, state))
+                            if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, state))
                             {
                                 ++localMaximaFound;
                             }
@@ -116,29 +94,7 @@ namespace Mars.Clouds.Cmdlets
                     int tileXIndex = currentSurface.SizeX - 1;
                     if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                     {
-                        float ring1minimumZ;
-                        float ring1maximumZ;
-                        if (hasPreviousSurfaceZ && hasNextSurfaceZ)
-                        {
-                            ring1maximumZ = previousSurfaceZ > nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
-                            ring1minimumZ = previousSurfaceZ < nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
-                        }
-                        else if (hasPreviousSurfaceZ)
-                        {
-                            ring1maximumZ = previousSurfaceZ;
-                            ring1minimumZ = previousSurfaceZ;
-                        }
-                        else if (hasNextSurfaceZ)
-                        {
-                            ring1maximumZ = nextSurfaceZ;
-                            ring1minimumZ = nextSurfaceZ;
-                        }
-                        else
-                        {
-                            ring1maximumZ = Single.MinValue;
-                            ring1minimumZ = Single.MaxValue;
-                        }
-                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, surfaceZ, ring1maximumZ, ring1minimumZ, state))
+                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, state))
                         {
                             ++localMaximaFound;
                         }
@@ -191,7 +147,7 @@ namespace Mars.Clouds.Cmdlets
             long dsmMaximaTotal = 0;
             long cmmMaximaTotal = 0;
             long chmMaximaTotal = 0;
-            int geopackageSqlBackgroundThreads = this.MaxThreads / 8; // for now, best guess/crude estimate
+            int geopackageSqlBackgroundThreads = this.MaxThreads / 16; // based on testing up to 16 cores
             int maxComputeThreads = this.MaxThreads - geopackageSqlBackgroundThreads;
             ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxComputeThreads, dsm.TileCount), () =>
             {
@@ -254,7 +210,7 @@ namespace Mars.Clouds.Cmdlets
                         vectorTilePath = Path.Combine(vectorTilePath, tileName + Constant.File.GeoPackageExtension);
                     }
                     using DataSource localMaximaVector = OgrExtensions.Open(vectorTilePath);
-                    using LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, dsmTile, "dsmMaxima");
+                    using LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, dsmTile, tileName);
 
                     // find DSM maxima radii and statistics
                     LocalMaximaState state = new(tileName, dsm, tileIndex, localMaximaRaster)
@@ -299,11 +255,11 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.maximaReadWrite.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + (findLocalMaximaTasks.Count == 1 ? " thread)..." : " threads)..."));
+            TimedProgressRecord progress = new("Get-LocalMaxima", "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + "[+ " + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)..."));
             this.WriteProgress(progress);
             while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + (findLocalMaximaTasks.Count == 1 ? " thread)..." : " threads)...");
+                progress.StatusDescription = "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.TileCount + " tiles (" + findLocalMaximaTasks.Count + "[+" + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)...");
                 progress.Update(this.maximaReadWrite.TilesWritten, dsm.TileCount);
                 this.WriteProgress(progress);
             }
@@ -324,14 +280,53 @@ namespace Mars.Clouds.Cmdlets
             base.StopProcessing();
         }
 
-        private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, float surfaceZ, float ring1maximumZ, float ring1minimumZ, LocalMaximaState state)
+        private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, bool hasPreviousSurfaceZ, float previousSurfaceZ, float surfaceZ, bool hasNextSurfaceZ, float nextSurfaceZ, LocalMaximaState state)
         {
             // check remainder of first ring: caller has checked xOffset = ±1, yOffset = 0
             VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
-            Span<float> maxRingZ = stackalloc float[LocalMaximaVector.RingCount];
-            Span<float> minRingZ = stackalloc float[LocalMaximaVector.RingCount];
-            float ringMaximumZ = ring1maximumZ;
-            float ringMinimumZ = ring1minimumZ;
+            Span<float> maxRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
+            Span<float> meanRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
+            Span<float> minRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
+            Span<float> varianceRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
+
+            byte ringDataCells;
+            float ringMinimumZ;
+            float ringMaximumZ;
+            float ringSumZ;
+            float ringSumZsquared;
+            if (hasPreviousSurfaceZ && hasNextSurfaceZ)
+            {
+                ringMaximumZ = previousSurfaceZ > nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                ringMinimumZ = previousSurfaceZ < nextSurfaceZ ? previousSurfaceZ : nextSurfaceZ;
+                ringSumZ = ringMinimumZ + ringMaximumZ;
+                ringSumZsquared = ringMinimumZ * ringMinimumZ + ringMaximumZ * ringMaximumZ;
+                ringDataCells = 2;
+            }
+            else if (hasPreviousSurfaceZ)
+            {
+                ringMaximumZ = previousSurfaceZ;
+                ringMinimumZ = previousSurfaceZ;
+                ringSumZ = previousSurfaceZ;
+                ringSumZsquared = previousSurfaceZ * previousSurfaceZ;
+                ringDataCells = 1;
+            }
+            else if (hasNextSurfaceZ)
+            {
+                ringMaximumZ = nextSurfaceZ;
+                ringMinimumZ = nextSurfaceZ;
+                ringSumZ = nextSurfaceZ;
+                ringSumZsquared = nextSurfaceZ * nextSurfaceZ;
+                ringDataCells = 1;
+            }
+            else
+            {
+                ringMaximumZ = Single.MinValue;
+                ringMinimumZ = Single.MaxValue;
+                ringSumZ = 0.0F;
+                ringSumZsquared = 0.0F;
+                ringDataCells = 0;
+            }
+
             for (int yOffset = -1; yOffset < 2; yOffset += 2)
             {
                 int cellYindex = tileYindex + yOffset;
@@ -346,6 +341,7 @@ namespace Mars.Clouds.Cmdlets
                             return false;
                         }
 
+                        ++ringDataCells;
                         if (z < ringMinimumZ)
                         {
                             ringMinimumZ = z;
@@ -354,12 +350,31 @@ namespace Mars.Clouds.Cmdlets
                         {
                             ringMaximumZ = z;
                         }
+
+                        ringSumZ += z;
+                        ringSumZsquared += z * z;
                     }
                 }
             }
 
             maxRingZ[0] = ringMaximumZ;
             minRingZ[0] = ringMinimumZ;
+            if (ringDataCells > 0)
+            {
+                float ringDataCellsAsFloat = (float)ringDataCells;
+                float ringMean = ringSumZ / ringDataCellsAsFloat;
+                meanRingZ[0] = ringMean;
+                // most rings are complete and thus do not need Bessel's 1/(N - 1) bias correction
+                // For now, neglect bias correction for truncated rings at edge of available data. Without a complete neighborhood it can't
+                // reliably be determined if a cell is a local maxima, making the statistical properties of edge effects most likely
+                // unimportant.
+                varianceRingZ[0] = ringSumZsquared / ringDataCellsAsFloat - ringMean * ringMean;
+            }
+            else
+            {
+                meanRingZ[0] = Single.NaN;
+                varianceRingZ[0] = Single.NaN;
+            }
 
             // local maxima radius is one minus the ring radius when a higher z value is encountered
             // Ring index is also one minus the ring radius so can just be returned as the local maxima radius.
@@ -373,12 +388,15 @@ namespace Mars.Clouds.Cmdlets
             bool hasStatistics = state.CurrentStatistics != null;
             bool ringRadiusFound = false;
             byte ringRadiusInCells = (byte)Ring.Rings.Count; // default to no higher z value found within search radius
-            for (byte ringIndex = 1; ringIndex < LocalMaximaVector.RingCount; ++ringIndex)
+            for (byte ringIndex = 1; ringIndex < LocalMaximaVector.RingsWithStatistics; ++ringIndex)
             {
                 Ring ring = Ring.Rings[ringIndex];
+
+                ringDataCells = 0;
                 ringMinimumZ = Single.MaxValue;
                 ringMaximumZ = Single.MinValue;
-
+                ringSumZ = 0.0F;
+                ringSumZsquared = 0.0F;
                 for (int offsetIndex = 0; offsetIndex < ring.Count; ++offsetIndex)
                 {
                     int cellYindex = tileYindex + ring.XIndices[offsetIndex];
@@ -400,6 +418,7 @@ namespace Mars.Clouds.Cmdlets
                             }
                         }
 
+                        ++ringDataCells;
                         if (z < ringMinimumZ)
                         {
                             ringMinimumZ = z;
@@ -408,16 +427,31 @@ namespace Mars.Clouds.Cmdlets
                         {
                             ringMaximumZ = z;
                         }
+
+                        ringSumZ += z;
+                        ringSumZsquared += z * z;
                     }
                 }
 
                 maxRingZ[ringIndex] = ringMaximumZ;
                 minRingZ[ringIndex] = ringMinimumZ;
+                if (ringDataCells > 0)
+                {
+                    float ringDataCellsAsFloat = (float)ringDataCells;
+                    float ringMean = ringSumZ / ringDataCellsAsFloat;
+                    meanRingZ[ringIndex] = ringMean;
+                    varianceRingZ[ringIndex] = ringSumZsquared / ringDataCellsAsFloat - ringMean * ringMean;
+                }
+                else
+                {
+                    meanRingZ[ringIndex] = Single.NaN;
+                    varianceRingZ[ringIndex] = Single.NaN;
+                }
             }
 
             if (ringRadiusFound == false)
             {
-                for (byte ringIndex = LocalMaximaVector.RingCount; ringIndex < Ring.Rings.Count; ++ringIndex)
+                for (byte ringIndex = LocalMaximaVector.RingsWithStatistics; ringIndex < Ring.Rings.Count; ++ringIndex)
                 {
                     Ring ring = Ring.Rings[ringIndex];
                     for (int offsetIndex = 0; offsetIndex < ring.Count; ++offsetIndex)
@@ -452,7 +486,7 @@ namespace Mars.Clouds.Cmdlets
                 UInt16 sourceID = state.DsmTile.SourceIDSurface[tileXindex, tileYindex];
                 float cmmZ = state.DsmTile.CanopyMaxima3[tileXindex, tileYindex];
                 float chmHeight = state.DsmTile.CanopyHeight[tileXindex, tileYindex];
-                state.CurrentStatistics.Add(sourceID, x, y, chmHeight, surfaceZ, cmmZ, ringRadiusInCells, maxRingZ, minRingZ);
+                state.CurrentStatistics.Add(sourceID, x, y, surfaceZ, cmmZ, chmHeight, ringRadiusInCells, maxRingZ, meanRingZ, minRingZ, varianceRingZ);
             }
 
             return true;

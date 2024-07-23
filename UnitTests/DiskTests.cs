@@ -50,7 +50,7 @@ namespace Mars.Clouds.UnitTests
         public void HostSpecificHardwareCapabilities()
         {
             DriveInfo[] drives = DriveInfo.GetDrives();
-            if ((drives.Length <= 5) || (drives[1].TotalSize != 1798944456704) || (drives[2].TotalSize != 4000768323584))
+            if ((drives.Length <= 4) || (drives[1].TotalSize != 1798944456704) || (drives[2].TotalSize != 4000768323584))
             {
                 return;
             }
@@ -58,20 +58,29 @@ namespace Mars.Clouds.UnitTests
             HardwareCapabilities capabilities = HardwareCapabilities.Current;
             PhysicalDisk c = capabilities.PhysicalDisksByRoot["C:\\"];
             PhysicalDisk d = capabilities.PhysicalDisksByRoot["D:\\"];
-            PhysicalDisk e = capabilities.PhysicalDisksByRoot["E:\\"];
             PhysicalDisk f = capabilities.PhysicalDisksByRoot["F:\\"];
             PhysicalDisk g = capabilities.PhysicalDisksByRoot["G:\\"];
             Assert.IsTrue((c.BusType == BusType.NVMe) && (c.MediaType == MediaType.SolidStateDrive) && (c.PcieVersion == 3) && (c.PcieLanes == 4) && (c.GetEstimatedMaximumTransferRateInGBs() == 3.5F));
             Assert.IsTrue((d.BusType == BusType.NVMe) && (d.MediaType == MediaType.SolidStateDrive) && (d.PcieVersion == 4) && (d.PcieLanes == 4) && (d.GetEstimatedMaximumTransferRateInGBs() == 7.0F));
-            Assert.IsTrue((e.BusType == BusType.SATA) && (e.MediaType == MediaType.HardDrive) && (e.PcieVersion == -1) && (e.PcieLanes == -1) && (e.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
             Assert.IsTrue((f.BusType == BusType.SATA) && (f.MediaType == MediaType.HardDrive) && (f.PcieVersion == -1) && (f.PcieLanes == -1) && (f.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
             Assert.IsTrue(Object.ReferenceEquals(g, f));
 
             int cThreads = capabilities.GetPracticalReadThreadCount(["C:\\"], 1.0F, 4.5F);
             int dThreads = capabilities.GetPracticalReadThreadCount(["D:\\"], 1.0F, 4.5F);
-            int eThreads = capabilities.GetPracticalReadThreadCount(["E:\\"], 1.0F, 4.5F);
             int fgThreads = capabilities.GetPracticalReadThreadCount(["F:\\", "G:\\"], 1.0F, 4.5F);
-            Assert.IsTrue((cThreads == 4) && (dThreads == 11) && (eThreads == 1) && (fgThreads == 1));
+            Assert.IsTrue((cThreads == 4) && (dThreads == 11) && (fgThreads == 1));
+
+            for (int driveIndex = 0; driveIndex < drives.Length; ++driveIndex)
+            {
+                if (String.Equals("E:\\", drives[driveIndex].Name))
+                {
+                    PhysicalDisk e = capabilities.PhysicalDisksByRoot["E:\\"];
+                    Assert.IsTrue((e.BusType == BusType.SATA) && (e.MediaType == MediaType.HardDrive) && (e.PcieVersion == -1) && (e.PcieLanes == -1) && (e.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
+                    int eThreads = capabilities.GetPracticalReadThreadCount(["E:\\"], 1.0F, 4.5F);
+                    Assert.IsTrue(eThreads == 1);
+                    break;
+                }
+            }
         }
 
         [TestMethod]

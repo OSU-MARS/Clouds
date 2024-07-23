@@ -24,10 +24,12 @@ namespace Mars.Clouds.Cmdlets
         public int GetMaximumIndexNeighborhood8(int writeIndex)
         {
             int vrtSizeInTilesX = this.tileReadPosition.Vrt.VirtualRasterSizeInTilesX;
+            int writeIndexX = writeIndex % vrtSizeInTilesX;
+
             int readCompletionIndexInclusive = writeIndex + vrtSizeInTilesX; // advance one row
-            if (writeIndex % vrtSizeInTilesX != 0)
+            if (writeIndexX != vrtSizeInTilesX - 1)
             {
-                ++readCompletionIndexInclusive; // if not at the +x end of a row, advance one neighbor
+                ++readCompletionIndexInclusive; // if not at the +x end of a row, include bishop adjacent neighbor (southeast corner, usually)
             }
 
             if (readCompletionIndexInclusive >= this.MaxTileIndex)
