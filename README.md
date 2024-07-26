@@ -47,6 +47,7 @@ manipulating point clouds, working with virtual rasters, and characterizing driv
 - `Remove-VrtBlockSize`: work around QGIS's tendency to further degrade its performance displaying virtual rasters (see below)
 - `Get-TreeSize`: get sizes of directories on disk, including some common file types (filesystem trees, not actual trees)
 - `Convert-DiskSpd`: reformat [DiskSpd](https://github.com/microsoft/diskspd) .xml result files as longform data
+- `Read-Files`: complements DiskSpd with multithreaded reads of directories or wildcarded files for drive load testing
 
 ### LiDAR dataset (project) file structure
 A LiDAR dataset is assumed to consist of

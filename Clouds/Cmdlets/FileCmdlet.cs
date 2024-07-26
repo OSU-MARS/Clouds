@@ -7,7 +7,7 @@ namespace Mars.Clouds.Cmdlets
 {
     public class FileCmdlet : Cmdlet
     {
-        protected static List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension)
+        protected static List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
         {
             ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
             if (fileSearchPaths.Count < 1)
@@ -52,7 +52,7 @@ namespace Mars.Clouds.Cmdlets
                         throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Wildcarded file search path '" + fileSearchPath + "' doesn't contain a directory path.");
                     }
 
-                    string[] filePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern);
+                    string[] filePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern, searchDepth);
                     if (filePathsInDirectory.Length == 0)
                     {
                         throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't load files. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
@@ -63,7 +63,7 @@ namespace Mars.Clouds.Cmdlets
 
             if (filePaths.Count == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "No files loaded as no files matched search paths '" + String.Join("', '", fileSearchPaths) + "'.");
+                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "No files found as no files matched search paths '" + String.Join("', '", fileSearchPaths) + "'.");
             }
             return filePaths;
         }
