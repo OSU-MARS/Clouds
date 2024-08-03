@@ -13,7 +13,7 @@ namespace Mars.Clouds.Cmdlets
     public class GdalCmdlet : FileCmdlet
     {
         [Parameter(HelpMessage = "Maximum number of threads to use when processing tiles in parallel. Default is cmdlet specific but is usually the number of physical cores.")]
-        [ValidateRange(1, 256)] // arbitrary upper bound
+        [ValidateRange(1, Constant.DefaultMaximumThreads)] // arbitrary upper bound
         public int MaxThreads { get; set; }
 
         static GdalCmdlet()

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using DocumentFormat.OpenXml.Vml;
 using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.GdalExtensions;
 
@@ -152,10 +153,10 @@ namespace Mars.Clouds.Las
             return unbuffered ? (1.0F, 4.3F) : (1.2F, 7.1F);
         }
 
-        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToLasBandwidth(bool unbuffered)
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToDsmBandwidth(bool unbuffered)
         {
             // SN850X on 5950X CPU lanes, aerial and ground means accumulated
-            return unbuffered ? (1.6F, 4.4F) : (1.9F, 5.7F);
+            return unbuffered ? (1.77F, 4.80F) : (2.27F, 6.40F);
         }
 
         /// <returns>false if point is classified as noise or is withdrawn</returns>
@@ -372,10 +373,7 @@ namespace Mars.Clouds.Las
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
 
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmTile);
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
@@ -406,19 +404,18 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
-                    double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                    double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                    (int xIndex, int yIndex) = dsmTile.ToGridIndices(x, y);
-                    if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTile.SizeX) || (yIndex >= dsmTile.SizeY))
+                    if (lasToDsmTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                     {
                         // point lies outside of the DSM tile and is therefore not of interest
                         // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
                         // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
+                        double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
+                        double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
                         throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
                     }
 
-                    int cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
-                    float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                    Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                    float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
                     if ((classification == PointClassification.Ground) && dsmHasGroundMean)
                     {
                         // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
@@ -448,11 +445,11 @@ namespace Mars.Clouds.Las
                             dsmTile.Surface[cellIndex] = z;
                             if (pointFormat < 6)
                             {
-                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]);
+                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..20]);
                             }
                             else
                             {
-                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..22]);
                             }
                         }
 
@@ -484,10 +481,7 @@ namespace Mars.Clouds.Las
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
 
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmTile);
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
@@ -578,19 +572,18 @@ namespace Mars.Clouds.Las
                             continue;
                         }
 
-                        double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                        double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                        (int xIndex, int yIndex) = dsmTile.ToGridIndices(x, y);
-                        if ((xIndex < 0) || (yIndex < 0) || (xIndex >= dsmTile.SizeX) || (yIndex >= dsmTile.SizeY))
+                        if (lasToDsmTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                         {
                             // point lies outside of the DSM tile and is therefore not of interest
                             // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
                             // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
+                            double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
+                            double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
                             throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
                         }
 
-                        int cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
-                        float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                        Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                        float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
                         if ((classification == PointClassification.Ground) && dsmHasGroundMean)
                         {
                             // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
@@ -620,11 +613,11 @@ namespace Mars.Clouds.Las
                                 dsmTile.Surface[cellIndex] = z;
                                 if (pointFormat < 6)
                                 {
-                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..]);
+                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..20]);
                                 }
                                 else
                                 {
-                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..]);
+                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..22]);
                                 }
                             }
 
@@ -904,10 +897,7 @@ namespace Mars.Clouds.Las
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
 
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+            LasToGridTransform lasToImageTransformXY = new(lasHeader, imageTile);
 
             int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
             if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
@@ -940,18 +930,14 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
-                    double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                    double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                    (int xIndex, int yIndex) = imageTile.ToGridIndices(x, y);
-                    if ((xIndex < 0) || (yIndex < 0) || (xIndex >= imageTile.SizeX) || (yIndex >= imageTile.SizeY))
+                    if (lasToImageTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                     {
-                        // point lies outside of the DSM tile and is therefore not of interest
-                        // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
-                        // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
-                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                        double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
+                        double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
                     }
 
-                    int cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
+                    Int64 cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
                     UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
                     if (returnNumber == 1)
                     {
@@ -965,15 +951,15 @@ namespace Mars.Clouds.Las
                             UInt16 blue;
                             if (pointFormat < 6)
                             {
-                                red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[28..]);
-                                green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-                                blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
+                                red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[28..30]);
+                                green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..32]);
+                                blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..34]);
                             }
                             else
                             {
-                                red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-                                green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
-                                blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[34..]);
+                                red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..32]);
+                                green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..34]);
+                                blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[34..36]);
                             }
                             imageTile.Red[cellIndex] += red;
                             imageTile.Green[cellIndex] += green;
@@ -982,7 +968,7 @@ namespace Mars.Clouds.Las
 
                         if (hasNearInfrared)
                         {
-                            UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[36..]);
+                            UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[36..38]);
                             imageTile.NearInfrared![cellIndex] += nir;
                         }
 
@@ -1001,7 +987,7 @@ namespace Mars.Clouds.Las
                     }
                     else
                     {
-                        scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
+                        scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..20]);
                     }
                     if (scanAngleInDegrees < 0.0F)
                     {
@@ -1023,10 +1009,7 @@ namespace Mars.Clouds.Las
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
 
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+            LasToGridTransform lasToImageTransformXY = new(lasHeader, imageTile);
 
             if ((pointReadBuffer == null) || (pointReadBuffer.Length != LasReader.FloatingPointReadBufferSizeInBytes))
             {
@@ -1117,19 +1100,15 @@ namespace Mars.Clouds.Las
                             continue;
                         }
 
-                        double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                        double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                        (int xIndex, int yIndex) = imageTile.ToGridIndices(x, y);
-                        if ((xIndex < 0) || (yIndex < 0) || (xIndex >= imageTile.SizeX) || (yIndex >= imageTile.SizeY))
+                        if (lasToImageTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                         {
-                            // point lies outside of the DSM tile and is therefore not of interest
-                            // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
-                            // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
-                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                            double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
+                            double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
                         }
 
-                        int cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
-                        UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
+                        Int64 cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
+                        UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
                         if (returnNumber == 1)
                         {
                             // assume first returns are always the most representative => only first returns contribute to RGB+NIR
@@ -1142,15 +1121,15 @@ namespace Mars.Clouds.Las
                                 UInt16 blue;
                                 if (pointFormat < 6)
                                 {
-                                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[28..]);
-                                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-                                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
+                                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[28..30]);
+                                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..32]);
+                                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..34]);
                                 }
                                 else
                                 {
-                                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..]);
-                                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..]);
-                                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[34..]);
+                                    red = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[30..32]);
+                                    green = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[32..34]);
+                                    blue = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[34..36]);
                                 }
                                 imageTile.Red[cellIndex] += red;
                                 imageTile.Green[cellIndex] += green;
@@ -1159,7 +1138,7 @@ namespace Mars.Clouds.Las
 
                             if (hasNearInfrared)
                             {
-                                UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[36..]);
+                                UInt16 nir = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[36..38]);
                                 imageTile.NearInfrared![cellIndex] += nir;
                             }
 
@@ -1178,7 +1157,7 @@ namespace Mars.Clouds.Las
                         }
                         else
                         {
-                            scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
+                            scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..20]);
                         }
                         if (scanAngleInDegrees < 0.0F)
                         {
@@ -1211,26 +1190,22 @@ namespace Mars.Clouds.Las
             bool hasGpsTime = lasHeader.PointsHaveGpsTime;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+
+            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, scanMetrics);
+
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
             Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {
                 this.BaseStream.ReadExactly(pointBytes);
-                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = scanMetrics.ToGridIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= scanMetrics.SizeX) || (yIndex >= scanMetrics.SizeY))
+                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                 {
                     // point lies outside of the assigned metrics grid and is therefore not of interest
                     continue;
                 }
 
-                int cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
+                Int64 cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
                 bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
                 if (notNoiseOrWithheld)
                 {
@@ -1343,10 +1318,9 @@ namespace Mars.Clouds.Las
             // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
-            double xOffset = lasHeader.XOffset;
-            double xScale = lasHeader.XScaleFactor;
-            double yOffset = lasHeader.YOffset;
-            double yScale = lasHeader.YScaleFactor;
+
+            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
+
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
             int returnNumberMask = lasHeader.GetReturnNumberMask();
@@ -1360,43 +1334,25 @@ namespace Mars.Clouds.Las
                     continue;
                 }
 
-                double x = xOffset + xScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes);
-                double y = yOffset + yScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..]);
-                (int xIndex, int yIndex) = metricsGrid.ToGridIndices(x, y);
-                if ((xIndex < 0) || (yIndex < 0) || (xIndex >= metricsGrid.SizeX) || (yIndex >= metricsGrid.SizeY))
+                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
                 {
                     // point lies outside of the ABA grid and is therefore not of interest
                     // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
                     continue;
                 }
-                PointListZirnc? abaCell = metricsGrid[xIndex, yIndex];
+
+                Int64 cellIndex = metricsGrid.ToCellIndex(xIndex, yIndex);
+                PointListZirnc? abaCell = metricsGrid[cellIndex];
                 if (abaCell == null)
                 {
                     // point lies within ABA grid but is not within a cell of interest
                     continue;
                 }
 
-                if (x < abaCell.PointXMin)
-                {
-                    abaCell.PointXMin = x;
-                }
-                if (x > abaCell.PointXMax)
-                {
-                    abaCell.PointXMax = x;
-                }
-                if (y < abaCell.PointYMin)
-                {
-                    abaCell.PointYMin = y;
-                }
-                if (y > abaCell.PointYMax)
-                {
-                    abaCell.PointYMax = y;
-                }
-
-                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..]);
+                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
                 abaCell.Z.Add(z);
 
-                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
+                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
                 abaCell.Intensity.Add(intensity);
 
                 byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);

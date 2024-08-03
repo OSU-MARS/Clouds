@@ -76,7 +76,11 @@ namespace Mars.Clouds.GdalExtensions
 
         public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(double xMin, double xMax, double yMin, double yMax)
         {
-            Debug.Assert(this.Transform.CellHeight < 0.0);
+            if (this.Transform.ColumnRotation != 0.0)
+            {
+                throw new NotSupportedException("Rotated grids are not currently handled by " + nameof(this.GetIntersectingCellIndices) + "().");
+            }
+
             (int xIndexMin, int yIndexMin) = this.ToGridIndices(xMin, yMax);
             (int xIndexMaxInclusive, int yIndexMaxInclusive) = this.ToGridIndices(xMax, yMin);
             
@@ -164,6 +168,12 @@ namespace Mars.Clouds.GdalExtensions
             return xIndex + yIndex * this.SizeX;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Int64 ToCellIndex(Int64 xIndex, Int64 yIndex)
+        {
+            return xIndex + yIndex * this.SizeX;
+        }
+
         // needs testing with nonzero row and column rotations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToInteriorGridIndices(double x, double y)
@@ -242,6 +252,7 @@ namespace Mars.Clouds.GdalExtensions
             }
             else if ((xIndex == this.SizeX) && (x == this.Transform.OriginX + this.Transform.CellWidth * this.SizeX))
             {
+                // TODO: support rotated rasters
                 xIndex -= 1; // if x lies exactly on grid edge, consider point part of the grid
             }
 
@@ -252,6 +263,7 @@ namespace Mars.Clouds.GdalExtensions
             else if (yIndex == this.SizeY)
             {
                 // similarly, if y lies exactly on grid edge consider point part of the grid
+                // TODO: support rotated rasters
                 if (this.Transform.CellHeight < 0.0)
                 {
                     if (y == this.Transform.OriginY + this.Transform.CellHeight * this.SizeX)
@@ -299,7 +311,19 @@ namespace Mars.Clouds.GdalExtensions
             set { this.Data[cellIndex] = value; }
         }
 
+        public TCell this[Int64 cellIndex]
+        {
+            get { return this.Data[cellIndex]; }
+            set { this.Data[cellIndex] = value; }
+        }
+
         public TCell this[int xIndex, int yIndex]
+        {
+            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }
+        }
+
+        public TCell this[Int64 xIndex, Int64 yIndex]
         {
             get { return this[this.ToCellIndex(xIndex, yIndex)]; }
             set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }

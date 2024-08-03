@@ -2,10 +2,8 @@
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
-using OSGeo.OSR;
 using System;
 using System.Diagnostics;
-using System.Formats.Tar;
 using System.IO;
 using System.Management.Automation;
 using System.Reflection.Metadata;
@@ -61,7 +59,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
-            this.dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory);
+            this.dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
 
             // spin up point cloud read and tile worker threads
             // For small sets of tiles, runtime is dominated by DSM creation latency after tiles are read into memory (streaming read
@@ -69,7 +67,7 @@ namespace Mars.Clouds.Cmdlets
             // the primary component of runtime. Smaller sets therefore benefit from having up to one worker thread per tile and, up to
             // the point cloud density, greater initial list capacities. For larger sets of tiles, worker requirements set by tile read
             // speed.
-            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToLasBandwidth(this.Unbuffered);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDsmBandwidth(this.Unbuffered);
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
 
             int preferredCompletionThreadsAsymptotic = Int32.Min(this.MaxThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
@@ -260,6 +258,8 @@ namespace Mars.Clouds.Cmdlets
 
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, DigitalSurfaceModel>
         {
+            private readonly bool noWrite;
+
             public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
             public bool DtmPathIsDirectory { get; private init; }
             public LasTileGrid Las { get; private init; }
@@ -269,7 +269,7 @@ namespace Mars.Clouds.Cmdlets
             public UInt64 TotalNumberOfPoints { get; private init; }
             public float TotalPointDataInGB { get; private init; }
 
-            public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, bool dsmPathIsDirectory, bool dtmPathIsDirectory)
+            public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, bool dsmPathIsDirectory, bool dtmPathIsDirectory, bool noWrite)
                 : base(lasGrid, dsm, dsmPathIsDirectory)
             {
                 Debug.Assert(SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dsm.Crs));
@@ -277,6 +277,8 @@ namespace Mars.Clouds.Cmdlets
                 {
                     throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " with extent (" + lasGrid.GetExtentString() + ") while the DSM tile grid is " + dsm.VirtualRasterSizeInTilesX + " x " + dsm.VirtualRasterSizeInTilesY + " with extent " + dsm.GetExtentString() + ". Are the LAS and DTM tiles matched?");
                 }
+
+                this.noWrite = noWrite;
 
                 this.Dsm = dsm;
                 this.DtmPathIsDirectory = dtmPathIsDirectory;
@@ -303,7 +305,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
                                 this.Dsm.TileCount + (this.Dsm.TileCount == 1 ? " DSM created, " : " DSMs created, ") +
-                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + totalThreads +
+                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (noWrite ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;
             }

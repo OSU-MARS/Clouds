@@ -248,7 +248,6 @@ namespace Mars.Clouds.UnitTests
                 IntensityPCumulativeZQ = true,
                 IntensityTotal = true,
                 Kurtosis = true,
-                PointBoundingArea = true,
                 ZPCumulative = true
             };
             SpatialReference lasSpatialReference = lasTile.GetSpatialReference();
@@ -272,7 +271,6 @@ namespace Mars.Clouds.UnitTests
             abaMetrics.SetMetrics(adjacentCell1, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
             abaMetrics.SetMetrics(adjacentCell2, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
 
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox != null);
             Assert.IsTrue((abaMetrics.IntensityKurtosis != null) && (abaMetrics.ZKurtosis != null));
             Assert.IsTrue((abaMetrics.IntensityPCumulativeZQ10 != null) && (abaMetrics.IntensityPCumulativeZQ30 != null) && (abaMetrics.IntensityPCumulativeZQ50 != null) && (abaMetrics.IntensityPCumulativeZQ70 != null) && (abaMetrics.IntensityPCumulativeZQ90 != null));
             Assert.IsTrue(abaMetrics.IntensityTotal != null);
@@ -346,7 +344,6 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn[8, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PFifthReturn[8, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PGround[8, 14] == 0.0F); // points not classified
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[8, 14] == 11.5402412F);
 
             Assert.IsTrue(abaMetrics.AcceptedPoints[9, 14] == 44853.0F);
             Assert.IsTrue(abaMetrics.ZMax[9, 14] == 926.576538F);
@@ -416,7 +413,6 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PFifthReturn[9, 14] == 0.0F);
             Assert.IsTrue(abaMetrics.PGround[9, 14] == 0.0F);
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox[9, 14] == 3.70189786F);
 
             Assert.IsTrue(abaMetrics.AcceptedPoints[8, 15] == 0);
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax[8, 15]));
@@ -486,7 +482,6 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn[8, 15]));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround[8, 15]));
-            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox[8, 15]));
 
             Assert.IsTrue(abaMetrics.AcceptedPoints[9, 15] == 0);
             // for now, remaining bands aren't checked for NaN as coverage of previous cell should suffice
@@ -550,7 +545,6 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(abaMetrics.PFourthReturn.HasNoDataValue);
             Assert.IsTrue(abaMetrics.PFifthReturn.HasNoDataValue);
             Assert.IsTrue(abaMetrics.PGround.HasNoDataValue);
-            Assert.IsTrue(abaMetrics.AreaOfPointBoundingBox.HasNoDataValue);
 
             Assert.IsTrue(Single.IsNaN(abaMetrics.AcceptedPoints.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.ZMax.NoDataValue));
@@ -611,7 +605,6 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFourthReturn.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PFifthReturn.NoDataValue));
             Assert.IsTrue(Single.IsNaN(abaMetrics.PGround.NoDataValue));
-            Assert.IsTrue(Single.IsNaN(abaMetrics.AreaOfPointBoundingBox.NoDataValue));
         }
 
         [TestMethod]

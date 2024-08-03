@@ -242,6 +242,8 @@ GeoTIFFs, and raster formats with more complete support for mixed band types.
 
 Also,
 
+- All raster testing and use is currently coordinate system aligned (unrotated) with negative cell heights. Clouds is rotation and positive
+  cell height aware but not all code paths support such rasters and the lack of testing likely means edge cases aren't completely handled.
 - Currently NAVD88 is the only well known vertical coordinate system. `Convert-CloudCrs`'s imputation of missing vertical coordinate systems
   therefore doesn't behave correctly outside of North America.
 - Supported raster data types are real values (8, 16, 32, and 64 bit signed and unsigned integers, single and double precision floating point).

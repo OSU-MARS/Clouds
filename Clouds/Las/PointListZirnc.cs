@@ -18,12 +18,6 @@ namespace Mars.Clouds.Las
         public List<byte> ReturnNumber { get; private init; }
         public List<float> Z { get; private init; }
 
-        // range of points within the cell
-        public double PointXMax { get; set; }
-        public double PointXMin { get; set; }
-        public double PointYMax { get; set; }
-        public double PointYMin { get; set; }
-
         // x and y indices in destination raster (grid metrics or DSM tile)
         public int XIndex { get; private init; }
         public int YIndex { get; private init; }
@@ -39,11 +33,6 @@ namespace Mars.Clouds.Las
             this.Intensity = [];
             this.ReturnNumber = [];
             this.Z = [];
-
-            this.PointXMax = Double.MinValue;
-            this.PointXMin = Double.MaxValue;
-            this.PointYMax = Double.MinValue;
-            this.PointYMin = Double.MaxValue;
         }
 
         public int Capacity

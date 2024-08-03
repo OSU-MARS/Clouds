@@ -63,7 +63,6 @@ namespace Mars.Clouds.Las
         public RasterBand<float> PGround { get; private init; }
 
         // optional bands
-        public RasterBand<float>? AreaOfPointBoundingBox { get; private init; }
         public RasterBand<float>? IntensityKurtosis { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ10 { get; private init; }
         public RasterBand<float>? IntensityPCumulativeZQ30 { get; private init; }
@@ -147,7 +146,6 @@ namespace Mars.Clouds.Las
             this.IntensityPCumulativeZQ70 = null;
             this.IntensityPCumulativeZQ90 = null;
             this.IntensityTotal = null;
-            this.AreaOfPointBoundingBox = null;
 
             if (settings.IntensityPCumulativeZQ)
             {
@@ -165,10 +163,6 @@ namespace Mars.Clouds.Las
             {
                 this.IntensityKurtosis = this.Bands[bandIndex++];
                 this.ZKurtosis = this.Bands[bandIndex++];
-            }
-            if (settings.PointBoundingArea)
-            {
-                this.AreaOfPointBoundingBox = this.Bands[bandIndex++];
             }
             if (settings.ZPCumulative)
             {
@@ -199,10 +193,6 @@ namespace Mars.Clouds.Las
             if (settings.Kurtosis)
             {
                 bandCount += 2;
-            }
-            if (settings.PointBoundingArea)
-            {
-                ++bandCount;
             }
             if (settings.ZPCumulative)
             {
@@ -281,10 +271,6 @@ namespace Mars.Clouds.Las
             {
                 bandNames[++bandIndex] = "intensityKurtosis";
                 bandNames[++bandIndex] = "zKurtosis";
-            }
-            if (settings.PointBoundingArea)
-            {
-                bandNames[++bandIndex] = "areaOfPointBoundingBox";
             }
             if (settings.ZPCumulative)
             {
@@ -744,11 +730,6 @@ namespace Mars.Clouds.Las
                     this.IntensityQuantile80[cellIndex] = sortedIntensity[8 * pointCount / 10 - 1];
                     this.IntensityQuantile90[cellIndex] = sortedIntensity[9 * pointCount / 10 - 1];
                 }
-            }
-
-            if (this.AreaOfPointBoundingBox != null)
-            {
-                this.AreaOfPointBoundingBox[cellIndex] = (float)((cell.PointXMax - cell.PointXMin) * (cell.PointYMax - cell.PointYMin));
             }
         }
     }

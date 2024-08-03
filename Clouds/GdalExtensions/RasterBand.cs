@@ -301,7 +301,19 @@ namespace Mars.Clouds.GdalExtensions
             set { this.Data[cellIndex] = value; }
         }
 
+        public TBand this[Int64 cellIndex]
+        {
+            get { return this.Data[cellIndex]; }
+            set { this.Data[cellIndex] = value; }
+        }
+
         public TBand this[int xIndex, int yIndex]
+        {
+            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            set { this[this.ToCellIndex(xIndex, yIndex)] = value; }
+        }
+
+        public TBand this[Int64 xIndex, Int64 yIndex]
         {
             get { return this[this.ToCellIndex(xIndex, yIndex)]; }
             set { this[this.ToCellIndex(xIndex, yIndex)] = value; }

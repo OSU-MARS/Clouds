@@ -201,7 +201,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                     catch (Exception exception)
                     {
-                        throw new TaskCanceledException("Error calculating metrics for ABA cell with extent (" + gridCell.PointXMin + ", " + gridCell.PointXMax + ", " + gridCell.PointYMin + ", " + gridCell.PointYMax + ") at grid position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, tileRead.CancellationTokenSource.Token);
+                        throw new TaskCanceledException("Error calculating metrics for metrics grid cell at position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, tileRead.CancellationTokenSource.Token);
                     }
 
                     if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)

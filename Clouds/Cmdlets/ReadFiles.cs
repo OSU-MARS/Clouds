@@ -18,6 +18,7 @@ namespace Mars.Clouds.Cmdlets
         public TimeSpan Duration { get; set; }
 
         [Parameter(HelpMessage = "Number of threads to use for read. Default is 1.")]
+        [ValidateRange(1, Constant.DefaultMaximumThreads)] // arbitrary upper bound
         public int Threads { get; set; }
 
         [Parameter(HelpMessage = "If -Input contains directories or wildcarded paths, read files only from top directory specified (the default) or from all subdirectories.")]

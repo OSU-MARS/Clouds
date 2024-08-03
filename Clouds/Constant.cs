@@ -4,6 +4,7 @@ namespace Mars.Clouds
 {
     public static class Constant
     {
+        public const int DefaultMaximumThreads = 256;
         public static readonly TimeSpan DefaultProgressInterval = TimeSpan.FromSeconds(1.5);
 
         public static class Epsg
