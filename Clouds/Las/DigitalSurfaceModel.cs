@@ -6,12 +6,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.Las
 {
     public class DigitalSurfaceModel : Raster, IRasterSerializable<DigitalSurfaceModel>
     {
         private const string DiagnosticDirectoryPointCounts = "nPoints";
+        private const string DiagnosticDirectoryReturnNumber = "returnNumber";
         private const string DiagnosticDirectorySourceID = "sourceID";
         private const string DiagnosticDirectoryZ = "z";
 
@@ -19,18 +21,22 @@ namespace Mars.Clouds.Las
         public const string CanopyHeightBandName = "chm";
         public const string CanopyMaximaBandName = "cmm3";
         public const string SurfaceBandName = "dsm";
+        public const string SubsurfaceBandName = "subsurfaceDsm";
         public const string AerialMeanBandName = "aerialMean";
         public const string GroundMeanBandName = "groundMean";
         public const string GroundPointsBandName = "nGround";
+        public const string ReturnNumberBandName = "returnNumberSurface";
         public const string SourceIDSurfaceBandName = "sourceIDsurface";
+        public const int SubsurfaceBufferDepth = 8; // half a cache line per DSM cell
 
         // primary data bands
+        // Digital terrain model can be calculated as DTM = DSM - CHM = Surface - CanopyHeight or stored separately.
         public RasterBand<float> Surface { get; private set; } // digital surface model
         public RasterBand<float> CanopyMaxima3 { get; private set; } // canopy maxima model obtained from the digital surface model using a 3x3 kernel
         public RasterBand<float> CanopyHeight { get; private set; } // canopy height model obtained from DSM - DTM
 
         // diagnostic bands in z
-        // Digital terrain model can be calculated as DTM = DSM - CHM or stored separately.
+        public RasterBand<float>? Subsurface { get; private set; } // estimate of next surface layer below digital surface model
         public RasterBand<float>? AerialMean { get; private set; } // mean elevation of aerial points in cell
         public RasterBand<float>? GroundMean { get; private set; } // mean elevation of ground points in cell
 
@@ -38,12 +44,19 @@ namespace Mars.Clouds.Las
         public RasterBand<UInt32>? AerialPoints { get; private set; } // number of points in cell not classified as ground
         public RasterBand<UInt32>? GroundPoints { get; private set; } // number of ground points in cell
 
+        // diagnostic bands: return number
+        public RasterBand<byte>? ReturnNumberSurface { get; private set; }
+
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, RasterBand<float> dtmTile)
+        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSufaceModelBands bands, RasterBand<float> dtmTile)
             : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
         {
+            if ((bands & DigitalSufaceModelBands.Required) != DigitalSufaceModelBands.Required)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bands), "One or more required bands is missing from " + nameof(bands) + ".");
+            }
             if (this.Crs.IsCompound() == 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(lasFile), dsmFilePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
@@ -60,11 +73,43 @@ namespace Mars.Clouds.Las
             this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
             this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
             this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
-            this.AerialMean = new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
-            this.GroundMean = new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
-            this.AerialPoints = new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
-            this.GroundPoints = new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
-            this.SourceIDSurface = new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
+
+            this.Subsurface = null;
+            this.AerialMean = null;
+            this.GroundMean = null;
+            this.AerialPoints = null;
+            this.GroundPoints = null;
+            this.ReturnNumberSurface = null;
+            this.SourceIDSurface = null;
+
+            if (bands.HasFlag(DigitalSufaceModelBands.Subsurface))
+            {
+                this.Subsurface = new(this, DigitalSurfaceModel.SubsurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.AerialMean))
+            {
+                this.AerialMean = new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.GroundMean))
+            {
+                this.GroundMean = new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.AerialPoints))
+            {
+                this.AerialPoints = new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.GroundPoints))
+            {
+                this.GroundPoints = new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.ReturnNumberSurface))
+            {
+                this.ReturnNumberSurface = new(this, DigitalSurfaceModel.ReturnNumberBandName, 0, RasterBandInitialValue.Default); // leave at default of zero, which is defined as no data in LAS specification
+            }
+            if (bands.HasFlag(DigitalSufaceModelBands.SourceIDSurface))
+            {
+                this.SourceIDSurface = new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
+            }
         }
 
         public DigitalSurfaceModel(Dataset dsmDataset, bool readData)
@@ -86,6 +131,9 @@ namespace Mars.Clouds.Las
                         this.CanopyHeight = new(dsmDataset, gdalBand, readData);
                         break;
                     // only required bands are expected in the primary dataset but it's possible diagnostic bands have been merged
+                    case DigitalSurfaceModel.SubsurfaceBandName:
+                        this.Subsurface = new(dsmDataset, gdalBand, readData);
+                        break;
                     case DigitalSurfaceModel.AerialMeanBandName:
                         this.AerialMean = new(dsmDataset, gdalBand, readData);
                         break;
@@ -97,6 +145,9 @@ namespace Mars.Clouds.Las
                         break;
                     case DigitalSurfaceModel.GroundPointsBandName:
                         this.GroundPoints = new(dsmDataset, gdalBand, readData);
+                        break;
+                    case DigitalSurfaceModel.ReturnNumberBandName:
+                        this.ReturnNumberSurface = new(dsmDataset, gdalBand, readData);
                         break;
                     case DigitalSurfaceModel.SourceIDSurfaceBandName:
                         this.SourceIDSurface = new(dsmDataset, gdalBand, readData);
@@ -129,6 +180,10 @@ namespace Mars.Clouds.Las
             yield return this.CanopyMaxima3;
             yield return this.CanopyHeight;
 
+            if (this.Subsurface != null)
+            {
+                yield return this.Subsurface;
+            }
             if (this.AerialMean != null)
             {
                 yield return this.AerialMean;
@@ -147,6 +202,10 @@ namespace Mars.Clouds.Las
                 yield return this.GroundPoints;
             }
 
+            if (this.ReturnNumberSurface != null)
+            {
+                yield return this.ReturnNumberSurface;
+            }
             if (this.SourceIDSurface != null)
             {
                 yield return this.SourceIDSurface;
@@ -169,11 +228,19 @@ namespace Mars.Clouds.Las
             }
 
             int bandIndex = 3;
+            if (this.Subsurface != null)
+            {
+                if (String.Equals(name, this.Subsurface.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
             if (this.AerialMean != null)
             {
                 if (String.Equals(name, this.AerialMean.Name, StringComparison.Ordinal))
                 {
-                    return 3;
+                    return bandIndex;
                 }
                 ++bandIndex;
             }
@@ -203,6 +270,14 @@ namespace Mars.Clouds.Las
                 ++bandIndex;
             }
 
+            if (this.ReturnNumberSurface != null)
+            {
+                if (String.Equals(name, this.ReturnNumberSurface.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
             if (this.SourceIDSurface != null)
             {
                 if (String.Equals(name, this.SourceIDSurface.Name, StringComparison.Ordinal))
@@ -214,9 +289,85 @@ namespace Mars.Clouds.Las
             throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
         }
 
-        // TODO: SIMD
-        public void OnPointAdditionComplete(RasterBand<float> dtm)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void MaybeInsertSubsurfacePoint(int cellIndex, float dsmZ, int aerialPoints, float z, float[] subsurfaceBuffer)
         {
+            float subsurfaceCandidateZ = z;
+            if (dsmZ < z)
+            {
+                // point lifts DSM so current DSM point moves to first subsurface point
+                // first subsurface point becuomes buffer candidate point
+                subsurfaceCandidateZ = this.Subsurface![cellIndex];
+                this.Subsurface![cellIndex] = dsmZ;
+            }
+            else if (aerialPoints == 1)
+            {
+                // DSM has been established but first subsurface point hasn't been set
+                this.Subsurface![cellIndex] = z;
+            }
+
+            if (aerialPoints > 1)
+            {
+                // both DSM and subsurface points are set; does subsurface candidate point ripple into buffer?
+                float subsurfaceZ = this.Subsurface![cellIndex];
+                if (subsurfaceZ < subsurfaceCandidateZ)
+                {
+                    // candidate point becomes first subsurface position and current subsurface becomes buffer candidate
+                    this.Subsurface![cellIndex] = subsurfaceCandidateZ;
+                    subsurfaceCandidateZ = subsurfaceZ;
+                }
+
+                Span<float> cellSubsurfaceBuffer = subsurfaceBuffer.AsSpan().Slice(DigitalSurfaceModel.SubsurfaceBufferDepth * (int)cellIndex, DigitalSurfaceModel.SubsurfaceBufferDepth);
+                int aeriaPointsAvailableToCellSubsurfaceBuffer = (int)aerialPoints - 2;
+                if (aeriaPointsAvailableToCellSubsurfaceBuffer >= DigitalSurfaceModel.SubsurfaceBufferDepth)
+                {
+                    // subsurface buffer is full: if point is to be inserted another must be evicted
+                    for (int cellSubsurfaceBufferIndex = 0; cellSubsurfaceBufferIndex < DigitalSurfaceModel.SubsurfaceBufferDepth; ++cellSubsurfaceBufferIndex)
+                    {
+                        float subsurfaceBufferZ = cellSubsurfaceBuffer![cellSubsurfaceBufferIndex];
+                        if (subsurfaceBufferZ > subsurfaceCandidateZ)
+                        {
+                            cellSubsurfaceBuffer![cellSubsurfaceBufferIndex] = subsurfaceCandidateZ;
+                            for (int moveDestinationIndex = cellSubsurfaceBufferIndex + 1; moveDestinationIndex < DigitalSurfaceModel.SubsurfaceBufferDepth; ++moveDestinationIndex)
+                            {
+                                (subsurfaceBufferZ, cellSubsurfaceBuffer[moveDestinationIndex]) = (cellSubsurfaceBuffer[moveDestinationIndex], subsurfaceBufferZ);
+                            }
+
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    // insert point into subsurface buffer in ascending order
+                    int pointsInCellSubsurfaceBuffer = aeriaPointsAvailableToCellSubsurfaceBuffer;
+                    for (int cellSubsurfaceBufferIndex = 0; cellSubsurfaceBufferIndex <= pointsInCellSubsurfaceBuffer; ++cellSubsurfaceBufferIndex)
+                    {
+                        float subsurfaceBufferZ = cellSubsurfaceBuffer![cellSubsurfaceBufferIndex];
+                        if (subsurfaceBufferZ < subsurfaceCandidateZ)
+                        {
+                            cellSubsurfaceBuffer![cellSubsurfaceBufferIndex] = subsurfaceCandidateZ;
+                            for (int moveDestinationIndex = cellSubsurfaceBufferIndex + 1; moveDestinationIndex <= pointsInCellSubsurfaceBuffer; ++moveDestinationIndex)
+                            {
+                                (subsurfaceBufferZ, cellSubsurfaceBuffer[moveDestinationIndex]) = (cellSubsurfaceBuffer[moveDestinationIndex], subsurfaceBufferZ);
+                            }
+
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // TODO: SIMD
+        public void OnPointAdditionComplete(RasterBand<float> dtm, float subsurfaceGapDistance, float[]? subsurfaceBuffer)
+        {
+            bool hasSubsurface = (this.Subsurface != null) && (subsurfaceBuffer != null);
+            if (hasSubsurface && (this.AerialPoints == null))
+            {
+                throw new NotSupportedException("Aerial point count is required to adjust subsurface z values.");
+            }
+
             if (SpatialReferenceExtensions.IsSameCrs(this.Crs, dtm.Crs) == false)
             {
                 throw new ArgumentOutOfRangeException(nameof(dtm), "DSMs and DTMs are currently required to be in the same CRS. The DSM CRS is '" + this.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
@@ -226,17 +377,58 @@ namespace Mars.Clouds.Las
                 throw new ArgumentOutOfRangeException(nameof(dtm), "DTM extent (" + dtm.GetExtentString() + ") or size (" + dtm.SizeX + " x " + dtm.SizeY + ") does not match DSM extent (" + this.GetExtentString() + ") or size (" + this.SizeX + " by " + this.SizeY + ").");
             }
 
-            // canopy height is calculated relative to DTM
-            // If needed, mean ground elevation can be used instead.
+            // nothing to do for this.Surface
+            // for now, population of the canopy maxima model is deferred until a virtual raster neighborhood is available
+            // Binomial.Smooth3x3(this.Surface, this.CanopyMaxima3);
+
+            // set canopy height and, if available, adjust subsurface based on subsurface buffer
             for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
-                this.CanopyHeight[cellIndex] = this.Surface[cellIndex] - dtm[cellIndex];
+                float dsmZ = this.Surface[cellIndex];
+                // canopy height is calculated relative to DTM
+                // If needed, mean ground elevation can be used instead.
+                this.CanopyHeight[cellIndex] = dsmZ - dtm[cellIndex];
+
+                if (hasSubsurface) // if there's no subsurface buffer nothing to do but leave this.Subsurface as is
+                {
+                    float subsurfaceGappedZ = dsmZ - subsurfaceGapDistance;
+                    float subsurfaceZ = this.Subsurface![cellIndex]; // nothing to do if this.Subsurface satisifes gap
+                    if (subsurfaceZ > subsurfaceGappedZ)
+                    {
+                        int cellSubsurfacePoints = (int)this.AerialPoints![cellIndex] - 2;
+                        if (cellSubsurfacePoints > DigitalSurfaceModel.SubsurfaceBufferDepth)
+                        {
+                            cellSubsurfacePoints = DigitalSurfaceModel.SubsurfaceBufferDepth;
+                        }
+
+                        Span<float> cellSubsurfaceBuffer = subsurfaceBuffer.AsSpan().Slice(DigitalSurfaceModel.SubsurfaceBufferDepth * (int)cellIndex, DigitalSurfaceModel.SubsurfaceBufferDepth);
+                        bool subsurfaceGapFound = false;
+                        for (int cellSubsurfaceIndex = cellSubsurfacePoints - 1; cellSubsurfaceIndex > 0; --cellSubsurfaceIndex)
+                        {
+                            subsurfaceZ = cellSubsurfaceBuffer[cellSubsurfaceIndex];
+                            if (subsurfaceZ < subsurfaceGappedZ)
+                            {
+                                this.Subsurface[cellIndex] = subsurfaceZ;
+                                subsurfaceGapFound = true;
+                                break;
+                            }
+                        }
+
+                        if (subsurfaceGapFound == false)
+                        {
+                            this.Subsurface[cellIndex] = cellSubsurfaceBuffer[0];
+                        }
+                    }
+                }
             }
 
             // find mean elevations of aerial and ground points
-            if (this.AerialPoints != null)
+            if (this.AerialMean != null)
             {
-                Debug.Assert(this.AerialMean != null);
+                if (this.AerialPoints == null)
+                {
+                    throw new NotSupportedException("Mean z of aerial points cannot be calculated without the aerial point count.");
+                }
                 for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
                 {
                     UInt32 nAerial = this.AerialPoints[cellIndex];
@@ -247,9 +439,12 @@ namespace Mars.Clouds.Las
                     // otherwise leave mean aerial elevation as no data
                 }
             }
-            if (this.GroundPoints != null)
+            if (this.GroundMean != null)
             {
-                Debug.Assert(this.GroundMean != null);
+                if (this.GroundPoints == null)
+                {
+                    throw new NotSupportedException("Mean z of ground points cannot be calculated without the ground point count.");
+                }
                 for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
                 {
                     UInt32 nGround = this.GroundPoints[cellIndex];
@@ -261,8 +456,9 @@ namespace Mars.Clouds.Las
                 }
             }
 
-            // for now, population of the canopy maxima model is deferred until a virtual raster neighborhood is available
-            // Binomial.Smooth3x3(this.Surface, this.CanopyMaxima3);
+            // nothing to do for
+            // this.ReturnNumber
+            // this.SourceIDSurface
         }
 
         /// <summary>
@@ -289,6 +485,11 @@ namespace Mars.Clouds.Las
                 this.CanopyMaxima3.TakeOwnershipOfDataArray(unusedTile.CanopyMaxima3);
                 this.CanopyHeight.TakeOwnershipOfDataArray(unusedTile.CanopyHeight);
 
+                if ((this.Subsurface == null) && (unusedTile.Subsurface != null))
+                {
+                    this.Subsurface = unusedTile.Subsurface;
+                    unusedTile.Subsurface = null;
+                }
                 if ((this.AerialMean == null) && (unusedTile.AerialMean != null))
                 {
                     this.AerialMean = unusedTile.AerialMean;
@@ -311,6 +512,11 @@ namespace Mars.Clouds.Las
                     unusedTile.GroundPoints = null;
                 }
 
+                if ((this.ReturnNumberSurface == null) && (unusedTile.ReturnNumberSurface != null))
+                {
+                    this.ReturnNumberSurface = unusedTile.ReturnNumberSurface;
+                    unusedTile.SourceIDSurface = null;
+                }
                 if ((this.SourceIDSurface == null) && (unusedTile.SourceIDSurface != null))
                 {
                     this.SourceIDSurface = unusedTile.SourceIDSurface;
@@ -357,6 +563,19 @@ namespace Mars.Clouds.Las
                     string bandName = gdalBand.GetDescription();
                     switch (bandName)
                     {
+                        case DigitalSurfaceModel.SubsurfaceBandName:
+                            if (bands.HasFlag(DigitalSufaceModelBands.Subsurface))
+                            {
+                                if (this.Subsurface == null)
+                                {
+                                    this.Subsurface = new(zDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.Subsurface.Read(zDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
                         case DigitalSurfaceModel.AerialMeanBandName:
                             if (bands.HasFlag(DigitalSufaceModelBands.AerialMean))
                             {
@@ -432,6 +651,36 @@ namespace Mars.Clouds.Las
                 }
             }
 
+            if ((bands & DigitalSufaceModelBands.ReturnNumberSurface) != DigitalSufaceModelBands.None)
+            {
+                string returnNumberTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: false);
+                using Dataset returnNumberDataset = Gdal.Open(returnNumberTilePath, Access.GA_ReadOnly);
+                SpatialReference crs = returnNumberDataset.GetSpatialRef();
+                for (int gdalBandIndex = 1; gdalBandIndex <= returnNumberDataset.RasterCount; ++gdalBandIndex)
+                {
+                    Band gdalBand = returnNumberDataset.GetRasterBand(gdalBandIndex);
+                    string bandName = gdalBand.GetDescription();
+                    switch (bandName)
+                    {
+                        case DigitalSurfaceModel.ReturnNumberBandName:
+                            if (bands.HasFlag(DigitalSufaceModelBands.ReturnNumberSurface))
+                            {
+                                if (this.ReturnNumberSurface == null)
+                                {
+                                    this.ReturnNumberSurface = new(returnNumberDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.ReturnNumberSurface.Read(returnNumberDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
+                        default:
+                            throw new NotSupportedException("Unhandled band '" + bandName + "' in source ID diagnostics tile '" + returnNumberTilePath + "'.");
+                    }
+                }
+            }
+
             if ((bands & DigitalSufaceModelBands.SourceIDSurface) != DigitalSufaceModelBands.None)
             {
                 string sourceIDtilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
@@ -499,6 +748,10 @@ namespace Mars.Clouds.Las
             Array.Fill(this.CanopyMaxima3.Data, this.CanopyMaxima3.NoDataValue);
             Array.Fill(this.CanopyHeight.Data, this.CanopyHeight.NoDataValue);
 
+            if (this.Subsurface != null)
+            {
+                Array.Fill(this.Subsurface.Data, this.Subsurface.NoDataValue);
+            }
             if (this.AerialMean != null)
             {
                 Array.Fill(this.AerialMean.Data, this.AerialMean.NoDataValue);
@@ -517,6 +770,10 @@ namespace Mars.Clouds.Las
                 Array.Fill(this.GroundPoints.Data, 0U);
             }
 
+            if (this.ReturnNumberSurface != null)
+            {
+                Array.Fill(this.ReturnNumberSurface.Data, this.ReturnNumberSurface.NoDataValue);
+            }
             if (this.SourceIDSurface != null)
             {
                 Array.Fill(this.SourceIDSurface.Data, this.SourceIDSurface.NoDataValue);
@@ -542,6 +799,10 @@ namespace Mars.Clouds.Las
             {
                 band = this.CanopyHeight;
             }
+            else if ((this.Subsurface != null) && String.Equals(this.Subsurface.Name, name, StringComparison.Ordinal))
+            {
+                band = this.Subsurface;
+            }
             else if ((this.AerialMean != null) && String.Equals(this.AerialMean.Name, name, StringComparison.Ordinal))
             {
                 band = this.AerialMean;
@@ -557,6 +818,10 @@ namespace Mars.Clouds.Las
             else if ((this.GroundPoints != null) && String.Equals(this.GroundPoints.Name, name, StringComparison.Ordinal))
             {
                 band = this.GroundPoints;
+            }
+            else if ((this.ReturnNumberSurface != null) && String.Equals(this.ReturnNumberSurface.Name, name, StringComparison.Ordinal))
+            {
+                band = this.ReturnNumberSurface;
             }
             else if ((this.SourceIDSurface != null) && String.Equals(this.SourceIDSurface.Name, name, StringComparison.Ordinal))
             {
@@ -583,20 +848,35 @@ namespace Mars.Clouds.Las
             this.FilePath = dsmPath;
 
             // diagnostic bands in z
-            // Bands are single precision floating point as that is the minimum supported size.
-            if ((this.AerialMean != null) && (this.GroundMean != null))
+            // Bands are single precision floating pointm sane as z values.
+            int zDiagnosticBands = (this.Subsurface != null ? 1 : 0) + (this.AerialMean != null ? 1 : 0) + (this.GroundMean != null ? 1 : 0);
+            if (zDiagnosticBands > 0)
             {
-                Debug.Assert(this.AerialMean.IsNoData(RasterBand.NoDataDefaultFloat) && this.GroundMean.IsNoData(RasterBand.NoDataDefaultFloat));
                 string zTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
 
-                using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, 2, DataType.GDT_Float32, compress);
-                this.AerialMean.Write(zDataset, 1);
-                this.GroundMean.Write(zDataset, 2);
-                Debug.Assert(zDataset.RasterCount == 2);
+                using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, zDiagnosticBands, DataType.GDT_Float32, compress);
+                int gdalBand = 1;
+                if (this.Subsurface != null)
+                {
+                    Debug.Assert(this.Subsurface.IsNoData(RasterBand.NoDataDefaultFloat));
+                    this.Subsurface.Write(zDataset, gdalBand);
+                    ++gdalBand;
+                }
+                if (this.AerialMean != null)
+                {
+                    Debug.Assert(this.AerialMean.IsNoData(RasterBand.NoDataDefaultFloat));
+                    this.AerialMean.Write(zDataset, gdalBand);
+                    ++gdalBand;
+                }
+                if (this.GroundMean != null)
+                {
+                    Debug.Assert(this.GroundMean.IsNoData(RasterBand.NoDataDefaultFloat));
+                    this.GroundMean.Write(zDataset, gdalBand);
+                }
             }
-            else if ((this.AerialMean != null) || (this.GroundMean != null))
+            else if ((this.Subsurface != null) || (this.AerialMean != null) || (this.GroundMean != null))
             {
-                throw new NotSupportedException("Mean elevation bands were not written as only one of the two layers is available.");
+                throw new NotSupportedException("Subsurface and mean elevation bands were not written as only one or two of the three layers is available.");
             }
 
             // diagnostic bands: point counts
@@ -617,9 +897,20 @@ namespace Mars.Clouds.Las
             {
                 throw new NotSupportedException("Point count bands were not written as only one of the two layers is available.");
             }
-            
+
+            // diagnostic bands: return number
+            // For now, write band even if return numbers aren't defined in the data source.
+            if (this.ReturnNumberSurface != null)
+            {
+                string returnNumberTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: true);
+
+                using Dataset returnNumberDataset = this.CreateGdalRasterAndSetFilePath(returnNumberTilePath, 1, DataType.GDT_Byte, compress);
+                this.ReturnNumberSurface.Write(returnNumberDataset, 1);
+                Debug.Assert(returnNumberDataset.RasterCount == 1);
+            }
+
             // diagnostic bands: source IDs
-            // For now, write bands even if the maximum source ID is zero.
+            // For now, write band even if the maximum source ID is zero.
             if (this.SourceIDSurface != null)
             {
                 string sourceIDtilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);

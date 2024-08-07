@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 
 namespace Mars.Clouds.Las
 {
@@ -220,11 +219,11 @@ namespace Mars.Clouds.Las
         {
             if (this.PointDataRecordFormat <= 5)
             {
-                return 0x07; // returns 0-8 for point types 0-5
+                return Constant.Las.ReturnNumberMask10; // return numbers 0-8 supported by point types 0-5
             }
             if (this.PointDataRecordFormat <= LasFile.MaxPointFormat)
             {
-                return 0x0f; // returns 0-15 for point types 6-10
+                return Constant.Las.ReturnNumberMask14; // returns numbers 0-15 supported by point types 6-10
             }
 
             throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".");

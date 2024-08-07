@@ -27,6 +27,8 @@ namespace Mars.Clouds
 
         public static class Las
         {
+            public const byte ReturnNumberMask10 = 0x07;
+            public const byte ReturnNumberMask14 = 0x0f;
             public const UInt16 VlrReservedHeaderValue = 0;
         }
 

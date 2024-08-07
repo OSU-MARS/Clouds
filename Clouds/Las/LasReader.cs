@@ -4,8 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using DocumentFormat.OpenXml.Vml;
 using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Las
@@ -153,9 +153,18 @@ namespace Mars.Clouds.Las
             return unbuffered ? (1.0F, 4.3F) : (1.2F, 7.1F);
         }
 
-        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToDsmBandwidth(bool unbuffered)
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToDsmBandwidth(DigitalSufaceModelBands dsmBands, bool unbuffered)
         {
             // SN850X on 5950X CPU lanes, aerial and ground means accumulated
+            // If needed, additional band combinations can be profiled.
+            if (dsmBands.HasFlag(DigitalSufaceModelBands.Subsurface))
+            {
+                // DigitalSufaceModelBands.Default | DigitalSufaceModelBands.Subsurface | DigitalSufaceModelBands.ReturnNumberSurface
+                // For now, assume slow enough buffered-unbuffered doesn't matter.
+                return (1.0F, 4.2F);
+            }
+
+            // DigitalSufaceModelBands.Default
             return unbuffered ? (1.77F, 4.80F) : (2.27F, 6.40F);
         }
 
@@ -350,21 +359,35 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
-        public void ReadPointsToDsm(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
+        public void ReadPointsToDsm(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, ref float[]? subsurfaceBuffer)
         {
             LasReader.ThrowOnUnsupportedPointFormat(openedTile.Header);
+            if ((dsmTile.AerialPoints == null) || (dsmTile.ReturnNumberSurface == null))
+            {
+                throw new ArgumentOutOfRangeException(nameof(dsmTile), "One or both of DSM's aerial point count or return number bands have not been created.");
+            }
+
+            bool dsmHasSubsurface = dsmTile.Subsurface != null;
+            int subsurfaceBufferLength = DigitalSurfaceModel.SubsurfaceBufferDepth * dsmTile.Cells;
+            if (dsmHasSubsurface && ((subsurfaceBuffer == null) || (subsurfaceBuffer.Length != subsurfaceBufferLength)))
+            {
+                subsurfaceBuffer = GC.AllocateUninitializedArray<float>(subsurfaceBufferLength);
+            }
+
             if (this.Unbuffered)
             {
-                this.ReadPointsToDsmUnbuffered(openedTile, dsmTile, ref pointReadBuffer);
+                this.ReadPointsToDsmUnbuffered(openedTile, dsmTile, ref pointReadBuffer, subsurfaceBuffer);
             }
             else
             {
-                this.ReadPointsToDsmBuffered(openedTile, dsmTile, ref pointReadBuffer);
+                this.ReadPointsToDsmBuffered(openedTile, dsmTile, ref pointReadBuffer, subsurfaceBuffer);
             }
         }
 
-        private void ReadPointsToDsmBuffered(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
+        private void ReadPointsToDsmBuffered(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
         {
+            Debug.Assert((dsmTile.AerialPoints != null) && (dsmTile.SourceIDSurface != null));
+
             LasHeader10 lasHeader = openedTile.Header;
             this.MoveToPoints(openedTile);
 
@@ -372,6 +395,7 @@ namespace Mars.Clouds.Las
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
+            int returnNumberMask = lasHeader.GetReturnNumberMask(); // not necessarily used
 
             LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmTile);
             float zOffset = (float)lasHeader.ZOffset;
@@ -380,14 +404,15 @@ namespace Mars.Clouds.Las
             int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
             if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
             {
-                pointReadBuffer = new byte[pointBufferLength];
+                pointReadBuffer = GC.AllocateUninitializedArray<byte>(pointBufferLength);
             }
 
-            Debug.Assert(dsmTile.SourceIDSurface != null);
             bool dsmHasAerialMean = dsmTile.AerialMean != null;
-            Debug.Assert(dsmTile.AerialPoints != null);
             bool dsmHasGroundMean = dsmTile.GroundMean != null;
+            bool dsmHasReturnNumber = dsmTile.ReturnNumberSurface != null;
+            bool dsmHasSubsurface = dsmTile.Subsurface != null;
             Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
+
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
                 UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
@@ -437,23 +462,25 @@ namespace Mars.Clouds.Las
                         // PointClassification.{ NeverClassified , Unclassified, LowVegetation, MediumVegetation, HighVegetation, Building,
                         //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
                         //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
-                        // PointClassification.Water is currently also treated as non-ground, which is debatable
+                        // PointClassification.Water is currently also treated as non-ground, which is debatable.
                         float dsmZ = dsmTile.Surface[cellIndex];
                         UInt32 aerialPoints = dsmTile.AerialPoints[cellIndex];
-                        if ((dsmZ < z) || (aerialPoints == 0))
+                        if ((aerialPoints == 0) || (dsmZ < z))
                         {
+                            // current point is either 1) the first aerial point read for this cell or 2) higher than the existing DSM
                             dsmTile.Surface[cellIndex] = z;
-                            if (pointFormat < 6)
+                            dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
+                            if (dsmHasReturnNumber)
                             {
-                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..20]);
-                            }
-                            else
-                            {
-                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..22]);
+                                dsmTile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
                             }
                         }
 
                         dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                        if (dsmHasSubsurface && (aerialPoints > 0)) // first aerial point always goes to DSM
+                        {
+                            dsmTile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
+                        }
                         if (dsmHasAerialMean)
                         {
                             if (aerialPoints == 0)
@@ -470,13 +497,15 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private unsafe void ReadPointsToDsmUnbuffered(LasTile lasTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer)
+        private unsafe void ReadPointsToDsmUnbuffered(LasTile lasTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
         {
+            Debug.Assert((dsmTile.AerialPoints != null) && (dsmTile.SourceIDSurface != null));
+
             LasHeader10 lasHeader = lasTile.Header;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
+            int returnNumberMask = lasHeader.GetReturnNumberMask(); // not necessarily used
 
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
@@ -485,10 +514,10 @@ namespace Mars.Clouds.Las
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
-            Debug.Assert(dsmTile.SourceIDSurface != null);
             bool dsmHasAerialMean = dsmTile.AerialMean != null;
-            Debug.Assert(dsmTile.AerialPoints != null);
             bool dsmHasGroundMean = dsmTile.GroundMean != null;
+            bool dsmHasReturnNumber = dsmTile.ReturnNumberSurface != null;
+            bool dsmHasSubsurface = dsmTile.Subsurface != null;
             Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
 
             if ((pointReadBuffer == null) || (pointReadBuffer.Length != LasReader.FloatingPointReadBufferSizeInBytes))
@@ -611,17 +640,18 @@ namespace Mars.Clouds.Las
                             if ((dsmZ < z) || (aerialPoints == 0))
                             {
                                 dsmTile.Surface[cellIndex] = z;
-                                if (pointFormat < 6)
+                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
+                                if (dsmHasReturnNumber)
                                 {
-                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[18..20]);
-                                }
-                                else
-                                {
-                                    dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[20..22]);
+                                    dsmTile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
                                 }
                             }
 
                             dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                            if (dsmHasSubsurface && (aerialPoints > 0)) // first aerial point always goes to DSM
+                            {
+                                dsmTile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
+                            }
                             if (dsmHasAerialMean)
                             {
                                 if (aerialPoints == 0)
@@ -893,9 +923,9 @@ namespace Mars.Clouds.Las
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
 
             LasToGridTransform lasToImageTransformXY = new(lasHeader, imageTile);
 
@@ -915,7 +945,7 @@ namespace Mars.Clouds.Las
                 {
                     ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
 
-                    byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
+                    int returnNumber = pointBytes[14] & returnNumberMask;
                     if (returnNumber > 2)
                     {
                         // third and subsequent returns not currently used
@@ -1004,10 +1034,10 @@ namespace Mars.Clouds.Las
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
             int pointRecordLength = lasHeader.PointDataRecordLength;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
 
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
 
             LasToGridTransform lasToImageTransformXY = new(lasHeader, imageTile);
 
@@ -1085,7 +1115,7 @@ namespace Mars.Clouds.Las
                             pointBytes = pointSpanBuffer;
                         }
 
-                        byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
+                        int returnNumber = pointBytes[14] & returnNumberMask;
                         if (returnNumber > 2)
                         {
                             // third and subsequent returns not currently used
@@ -1318,12 +1348,12 @@ namespace Mars.Clouds.Las
             // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
             byte pointFormat = lasHeader.PointDataRecordFormat;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
 
             LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
 
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
             Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
             for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
             {

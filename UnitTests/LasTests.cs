@@ -1,4 +1,3 @@
-using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
@@ -42,12 +41,13 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue((dtmRaster.Crs.IsSameGeogCS(lasTile.GetSpatialReference()) == 1) && SpatialReferenceExtensions.IsSameCrs(dtmRaster.Crs, lasTile.GetSpatialReference()));
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
-            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, dtmTile);
+            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, DigitalSufaceModelBands.Default | DigitalSufaceModelBands.Subsurface | DigitalSufaceModelBands.ReturnNumberSurface, dtmTile);
 
             using LasReader pointReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
             byte[]? pointReadBuffer = null;
-            pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer);
-            dsmTile.OnPointAdditionComplete(dtmTile);
+            float[]? subsurfaceBuffer = null;
+            pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer, ref subsurfaceBuffer);
+            dsmTile.OnPointAdditionComplete(dtmTile, 1.0F, subsurfaceBuffer);
             
             VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = [];
             dsmVirtualRaster.Add(dsmTile);
@@ -55,7 +55,7 @@ namespace Mars.Clouds.UnitTests
             VirtualRasterNeighborhood8<float> dsmNeighborhood = dsmVirtualRaster.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, bandName: "dsm");
             Binomial.Smooth3x3(dsmNeighborhood, dsmTile.CanopyMaxima3);
 
-            Assert.IsTrue((dsmTile.AerialPoints != null) && (dsmTile.AerialMean != null) && (dsmTile.GroundMean != null) && (dsmTile.GroundPoints != null) && (dsmTile.SourceIDSurface != null));
+            Assert.IsTrue((dsmTile.AerialPoints != null) && (dsmTile.Subsurface != null) && (dsmTile.AerialMean != null) && (dsmTile.GroundMean != null) && (dsmTile.GroundPoints != null) && (dsmTile.ReturnNumberSurface != null) && (dsmTile.SourceIDSurface != null));
             Assert.IsTrue((dsmTile.SizeX == dtmRaster.TileSizeInCellsX) && (dsmTile.SizeY == dtmRaster.TileSizeInCellsY));
 
             for (int cellIndex = 0; cellIndex < dsmTile.Cells; ++cellIndex)
@@ -68,26 +68,30 @@ namespace Mars.Clouds.UnitTests
                 float dsmZ = dsmTile.Surface[cellIndex];
                 float cmm3 = dsmTile.CanopyMaxima3[cellIndex];
                 float chmZ = dsmTile.CanopyHeight[cellIndex];
+                float subsurface = dsmTile.Subsurface[cellIndex];
                 float meanZ = dsmTile.AerialMean[cellIndex];
 
                 float dtmZ = dtmTile[cellIndex];
                 if (aerialPoints > 0)
                 {
                     Assert.IsTrue((dsmZ > 920.0F) && (dsmZ < 930.0F));
-                    Assert.IsTrue((cmm3 > 920.0F) && (cmm3 < 930.0F));
+                    Assert.IsTrue((cmm3 > 920.0F) && (cmm3 < 930.0F)); // if DSM is relatively low, CMM3 can be higher
                     Assert.IsTrue(chmZ == dsmZ - dtmZ);
                     Assert.IsTrue((dsmZ > meanZ) && (meanZ > dtmZ - 0.2F)); // 20 cm allowance for alignment margin, point error, and DTM error
+                    Assert.IsTrue((subsurface > dtmZ - 0.5F) && (subsurface < dsmZ));
                 }
                 else
                 {
                     Assert.IsTrue(Single.IsNaN(dsmZ));
                     Assert.IsTrue(Single.IsNaN(cmm3));
                     Assert.IsTrue(Single.IsNaN(chmZ));
+                    Assert.IsTrue(Single.IsNaN(subsurface));
                     Assert.IsTrue(Single.IsNaN(meanZ));
                 }
 
                 Assert.IsTrue(Single.IsNaN(dtmZ) || (dtmTile.Data[cellIndex] == dtmZ)); // DTM contains -9999 no datas which are converted to DSM no datas
                 Assert.IsTrue(Single.IsNaN(dsmTile.GroundMean[cellIndex])); // no points classified as ground
+                Assert.IsTrue(dsmTile.ReturnNumberSurface[cellIndex] == 0); // return numbers not set in point cloud
                 Assert.IsTrue(dsmTile.SourceIDSurface[cellIndex] == 0); // point source ID not set in point cloud
             }
         }

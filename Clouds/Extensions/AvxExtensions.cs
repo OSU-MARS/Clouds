@@ -52,6 +52,13 @@ namespace Mars.Clouds.Extensions
             return sum;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> BroadcastScalarToVector256(float value)
+        {
+            Vector128<float> value128 = Vector128.CreateScalarUnsafe(value);
+            return Avx2.BroadcastScalarToVector256(value128);
+        }
+
         public static unsafe void Convert(sbyte[] source, Int16[] destination)
         {
             if (source.Length != destination.Length)

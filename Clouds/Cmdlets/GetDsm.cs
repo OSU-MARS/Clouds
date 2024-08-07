@@ -30,6 +30,10 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string? DtmBand { get; set; }
 
+        [Parameter(HelpMessage = "Separation distance between DSM layer and subsurface layer. Default is no distance specified which leaves DSM subsurface extraction disabled. Specifying a gap distance enables the DSM's subsurface layer and subsurface buffer used to look for gaps.")]
+        [ValidateRange(0.0F, 300.0F)] // arbitrary upper bound
+        public float SubsurfaceGap { get; set; }
+
         public GetDsm()
         {
             this.dsmReadCreateWrite = null;
@@ -38,13 +42,14 @@ namespace Mars.Clouds.Cmdlets
             this.Dtm = String.Empty;
             this.DtmBand = null;
             // leave this.MaxThreads at default
+            this.SubsurfaceGap = Single.NaN;
         }
 
         protected override void ProcessRecord()
         {
             if (Fma.IsSupported == false)
             {
-                throw new NotSupportedException("Generation of a canopy maxima model requires FMA instructions.");
+                throw new NotSupportedException("Generation of a canopy maxima model requires FMA instructions (and DSM subsurface generation uses AVX).");
             }
 
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
@@ -60,6 +65,11 @@ namespace Mars.Clouds.Cmdlets
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
             this.dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
+            DigitalSufaceModelBands dsmBands = DigitalSufaceModelBands.Default;
+            if (Single.IsNaN(this.SubsurfaceGap))
+            {
+                dsmBands |= DigitalSufaceModelBands.Subsurface;
+            }
 
             // spin up point cloud read and tile worker threads
             // For small sets of tiles, runtime is dominated by DSM creation latency after tiles are read into memory (streaming read
@@ -67,7 +77,7 @@ namespace Mars.Clouds.Cmdlets
             // the primary component of runtime. Smaller sets therefore benefit from having up to one worker thread per tile and, up to
             // the point cloud density, greater initial list capacities. For larger sets of tiles, worker requirements set by tile read
             // speed.
-            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDsmBandwidth(this.Unbuffered);
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDsmBandwidth(dsmBands, this.Unbuffered);
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
 
             int preferredCompletionThreadsAsymptotic = Int32.Min(this.MaxThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
@@ -83,6 +93,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 RasterBand<float>? dtmTile = null;
                 byte[]? pointReadBuffer = null;
+                float[]? dsmSubsurfaceBuffer = null;
                 while (this.dsmReadCreateWrite.TileWritesInitiated < lasGrid.NonNullCells)
                 {
                     // create canopy maxima models and write as many tiles as are available for completion
@@ -187,7 +198,7 @@ namespace Mars.Clouds.Cmdlets
                             string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
                             if (dsmTile == null)
                             {
-                                dsmTile = new(dsmTilePath, lasTile, dtmTile);
+                                dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile);
                             }
                             else
                             {
@@ -200,12 +211,12 @@ namespace Mars.Clouds.Cmdlets
 
                             // create DSM for this tile
                             using LasReader pointReader = lasTile.CreatePointReader(this.Unbuffered);
-                            pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer);
+                            pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer, ref dsmSubsurfaceBuffer);
                             readSemaphore.Release(); // exit semaphore as DTM and .las file have both been read
 
                             this.dsmReadCreateWrite.IncrementTilesReadThreadSafe();
 
-                            dsmTile.OnPointAdditionComplete(dtmTile);
+                            dsmTile.OnPointAdditionComplete(dtmTile, this.SubsurfaceGap, dsmSubsurfaceBuffer);
                             lock (this.dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
                             {
                                 // (int dsmTileIndexX, int dsmTileIndexY) = this.dsmReadCreateWrite.Dsm.Add(dsmTileToAdd); // sometimes useful to get tile's xy position in grid when debugging

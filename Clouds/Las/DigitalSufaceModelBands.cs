@@ -13,19 +13,23 @@ namespace Mars.Clouds.Las
         CanopyHeight = 0x004,
 
         // diagnostic bands in z
-        AerialMean = 0x008,
-        GroundMean = 0x010,
+        Subsurface = 0x008,
+        AerialMean = 0x010,
+        GroundMean = 0x020,
 
         // diagnostic bands: point counts
-        AerialPoints = 0x020,
-        GroundPoints = 0x040,
+        AerialPoints = 0x040,
+        GroundPoints = 0x080,
 
         // diagnostic bands: source IDs
-        SourceIDSurface = 0x080,
+        ReturnNumberSurface = 0x100,
+        SourceIDSurface = 0x200,
 
         // band groups
         Required = Surface | CanopyMaxima3 | CanopyHeight,
-        DiagnosticZ = AerialMean | GroundMean,
-        PointCounts = AerialPoints | GroundPoints
+        DiagnosticZ = Subsurface | AerialMean | GroundMean,
+        PointCounts = AerialPoints | GroundPoints,
+
+        Default = Surface | CanopyMaxima3 | CanopyHeight | AerialMean | GroundMean | PointCounts | SourceIDSurface
     }
 }
