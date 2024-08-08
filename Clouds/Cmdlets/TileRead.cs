@@ -7,14 +7,10 @@ namespace Mars.Clouds.Cmdlets
         private int tileReadIndex;
         private int tilesRead;
 
-        public CancellationTokenSource CancellationTokenSource { get; private init; }
-
         public TileRead()
         {
             this.tileReadIndex = -1;
             this.tilesRead = 0;
-
-            this.CancellationTokenSource = new();
         }
 
         public int TileReadIndex

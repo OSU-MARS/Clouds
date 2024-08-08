@@ -17,6 +17,8 @@ namespace Mars.Clouds.Las
         private const string DiagnosticDirectorySourceID = "sourceID";
         private const string DiagnosticDirectoryZ = "z";
 
+        public const string DiagnosticDirectorySlopeAspect = "slopeAspect";
+
         public const string AerialPointsBandName = "nAerial";
         public const string CanopyHeightBandName = "chm";
         public const string CanopyMaximaBandName = "cmm3";

@@ -45,7 +45,7 @@ namespace Mars.Clouds.Cmdlets
         {
             this.Classification = String.Empty;
             this.ClassificationBandName = null;
-            this.ClassNames = [ "conifer", "nonForest", "hardwood", "unknown" ];
+            this.ClassNames = [ "bare", "bare shadow", "brown tree", "conifer", "conifer shadow", "conifer deep shadow", "grey tree", "hardwood", "hardwood shadow", "hardwood deep shadow" ];
             this.Merge = "treetops" + Constant.File.GeoPackageExtension;
             this.Treetops = [];
         }

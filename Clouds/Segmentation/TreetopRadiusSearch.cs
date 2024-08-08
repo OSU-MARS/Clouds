@@ -4,27 +4,19 @@ using System;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopRadiusSearch : TreetopSearch<TreetopTileSearchState>
+    internal class TreetopRadiusSearch : TreetopSearch
     {
-        public bool SearchChm { get; set; }
+        public bool SearchInHeight { get; set; }
 
-        public TreetopRadiusSearch(string? dsmBandName, string? dtmBandName)
-            : base(dsmBandName, dtmBandName)
+        public TreetopRadiusSearch(string? surfaceBandName)
+            : base(surfaceBandName)
         {
-            this.SearchChm = false;
+            this.SearchInHeight = false;
         }
 
-        protected override TreetopTileSearchState CreateSearchState(string _, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
+        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float surfaceZ, float dtmZ, TreetopSearchState searchState)
         {
-            return new(dsmNeighborhood, dtmNeighborhood)
-            {
-                MinimumCandidateHeight = this.MinimumTreetopHeight
-            };
-        }
-
-        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TreetopTileSearchState searchState)
-        {
-            float heightInCrsUnits = dsmZ - dtmElevation;
+            float heightInCrsUnits = surfaceZ - dtmZ;
             float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
             // float searchRadiusInM = 8.59F / (1.0F + MathF.Exp((58.72F - heightInM) / 19.42F)); // logistic regression at 0.025 quantile against boostrap crown radii estimates
             // float searchRadiusInM = 6.0F / (1.0F + MathF.Exp((49.0F - heightInM) / 18.5F)); // manual retune based on segmentation
@@ -32,24 +24,25 @@ namespace Mars.Clouds.Segmentation
             float searchRadiusInCrsUnits = searchRadiusInM / searchState.CrsLinearUnits;
 
             // check if point is local maxima
-            float candidateZ = this.SearchChm ? heightInCrsUnits : dsmZ;
-            bool dsmCellInSimilarElevationGroup = false;
+            float candidateZ = this.SearchInHeight ? heightInCrsUnits : surfaceZ;
+            bool cellInSimilarElevationGroup = false;
             bool higherCellFound = false;
             bool newEqualHeightPatchFound = false;
-            int ySearchRadiusInCells = Math.Max((int)(searchRadiusInCrsUnits / searchState.DsmCellHeight + 0.5F), 1);
+            VirtualRasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
+            int ySearchRadiusInCells = Math.Max((int)(searchRadiusInCrsUnits / searchState.CellHeight + 0.5F), 1);
             int localMaximaRadiusInCells = ySearchRadiusInCells;
             for (int searchYoffset = 0; searchYoffset <= ySearchRadiusInCells; ++searchYoffset)
             {
                 for (int searchYsign = (searchYoffset != 0 ? -1 : 1); searchYsign <= 1; searchYsign += 2)
                 {
-                    int searchYindex = dsmYindex + searchYsign * searchYoffset;
+                    int searchIndexY = indexY + searchYsign * searchYoffset;
                     // constrain column bounds to circular search based on row offset
-                    float searchYoffsetInCrsUnits = searchYoffset * searchState.DsmCellHeight;
+                    float searchYoffsetInCrsUnits = searchYoffset * searchState.CellHeight;
                     int maxXoffsetInCells = 0;
                     if (MathF.Abs(searchYoffsetInCrsUnits) < searchRadiusInCrsUnits) // avoid NaN from Sqrt()
                     {
                         float xSearchDistanceInCrsUnits = MathF.Sqrt(searchRadiusInCrsUnits * searchRadiusInCrsUnits - searchYoffsetInCrsUnits * searchYoffsetInCrsUnits);
-                        maxXoffsetInCells = (int)(xSearchDistanceInCrsUnits / searchState.DsmCellWidth + 0.5F);
+                        maxXoffsetInCells = (int)(xSearchDistanceInCrsUnits / searchState.CellWidth + 0.5F);
                     }
                     if ((maxXoffsetInCells < 1) && (Math.Abs(searchYoffset) < 2))
                     {
@@ -60,20 +53,10 @@ namespace Mars.Clouds.Segmentation
 
                     for (int searchXoffset = -maxXoffsetInCells; searchXoffset <= maxXoffsetInCells; ++searchXoffset)
                     {
-                        int searchXindex = dsmXindex + searchXoffset;
-                        if (searchState.DsmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dsmSearchZ) == false)
+                        int searchIndexX = indexX + searchXoffset;
+                        if (surfaceNeighborhood.TryGetValue(searchIndexX, searchIndexY, out float searchZ) == false)
                         {
                             continue;
-                        }
-
-                        float searchZ = dsmSearchZ;
-                        if (this.SearchChm)
-                        {
-                            if (searchState.DtmNeighborhood.TryGetValue(searchXindex, searchYindex, out float dtmZ) == false)
-                            {
-                                continue;
-                            }
-                            searchZ -= dtmZ;
                         }
 
                         if (searchZ > candidateZ) // check of cell against itself when searchRowOffset = searchColumnOffset = 0 deemed not worth testing for but would need to be addressed if > is changed to >=
@@ -93,8 +76,8 @@ namespace Mars.Clouds.Segmentation
                             // around the DSM cell where the patch is discovered. Since the patch is created only on the first call to
                             // OnEqualHeightPatch() |= is therefore used with newEqualHeightPatchFound to avoid potentially creating both
                             // a patch and a treetop (or possibly multiple treetops, though that's unlikely).
-                            dsmCellInSimilarElevationGroup = true;
-                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmXindex, dsmYindex, candidateZ, searchXindex, searchYindex, ySearchRadiusInCells);
+                            cellInSimilarElevationGroup = true;
+                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(indexX, indexY, candidateZ, searchIndexX, searchIndexY, ySearchRadiusInCells);
                         }
                     }
 
@@ -115,7 +98,7 @@ namespace Mars.Clouds.Segmentation
             {
                 return (false, localMaximaRadiusInCells);
             }
-            else if (dsmCellInSimilarElevationGroup)
+            else if (cellInSimilarElevationGroup)
             {
                 if (newEqualHeightPatchFound)
                 {

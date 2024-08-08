@@ -39,6 +39,7 @@ manipulating point clouds, working with virtual rasters, and characterizing driv
 - `Get-ScanMetrics`: similar to `Get-GridMetrics` but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
+- `Get-DsmSlopeAspect`: get slope and aspect of a digital surface, canopy maxima, canopy height model
 - `Register-Cloud`: set .las files' origin, coordinate system, and source ID
 - `Convert-CloudCrs`: reproject .las files to a new coordinate system, adding a vertical coordinate system if one is not present
 - `Remove-Points`: remove high noise, low noise, and withheld points from a point cloud

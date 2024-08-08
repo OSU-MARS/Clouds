@@ -134,7 +134,7 @@ namespace Mars.Clouds.Cmdlets
                             }
                         }
 
-                        if (this.Stopping || this.dsmReadCreateWrite.CancellationTokenSource.IsCancellationRequested)
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             return;
                         }
@@ -143,8 +143,8 @@ namespace Mars.Clouds.Cmdlets
                     // if all available tiles are completed and tiles remain to be read, read another tile and create its DSM
                     if (this.dsmReadCreateWrite.TileReadIndex < lasGrid.Cells)
                     {
-                        readSemaphore.Wait(this.dsmReadCreateWrite.CancellationTokenSource.Token);
-                        if (this.Stopping || this.dsmReadCreateWrite.CancellationTokenSource.IsCancellationRequested)
+                        readSemaphore.Wait(this.CancellationTokenSource.Token);
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             // task is cancelled so point in looking for a tile to read
                             // Also not valid to continue if the read semaphore wasn't entered due to cancellation.
@@ -173,7 +173,7 @@ namespace Mars.Clouds.Cmdlets
 
                             // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
                             // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
-                            if ((this.dsmReadCreateWrite.Las.NonNullCells == 1) && (this.dsmReadCreateWrite.Dsm.TileCount == 0))
+                            if ((this.dsmReadCreateWrite.Las.NonNullCells == 1) && (this.dsmReadCreateWrite.Dsm.NonNullTileCount == 0))
                             {
                                 this.dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
                             }
@@ -234,7 +234,7 @@ namespace Mars.Clouds.Cmdlets
                         }
                     }
                 }
-            }, this.dsmReadCreateWrite.CancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
             TimedProgressRecord progress = new(cmdletName, this.dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
@@ -259,12 +259,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose(this.dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (this.dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.ToElapsedString() + ": " + this.dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (this.dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (this.dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (this.dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.dsmReadCreateWrite?.CancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, DigitalSurfaceModel>
@@ -315,7 +309,7 @@ namespace Mars.Clouds.Cmdlets
             public override string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
             {
                 string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
-                                this.Dsm.TileCount + (this.Dsm.TileCount == 1 ? " DSM created, " : " DSMs created, ") +
+                                this.Dsm.NonNullTileCount + (this.Dsm.NonNullTileCount == 1 ? " DSM created, " : " DSMs created, ") +
                                 this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (noWrite ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;

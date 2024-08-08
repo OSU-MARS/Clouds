@@ -1,18 +1,17 @@
 ﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using System;
 using System.Collections.Generic;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopTileSearchState : IDisposable
+    internal class TreetopSearchState
     {
         public float CrsLinearUnits { get; private init; }
-        public RasterBand<float> Dsm { get; private init; }
-        public float DsmCellHeight { get; private init; }
-        public float DsmCellWidth { get; private init; }
-        public VirtualRasterNeighborhood8<float> DsmNeighborhood { get; private init; }
-        public RasterBand<float> Dtm { get; private init; }
-        public VirtualRasterNeighborhood8<float> DtmNeighborhood { get; private init; }
+        public DigitalSurfaceModel Dsm { get; private init; }
+        public float CellHeight { get; private init; }
+        public float CellWidth { get; private init; }
+        public VirtualRasterNeighborhood8<float> SurfaceNeighborhood { get; private init; }
 
         public float MinimumCandidateHeight { get; set; }
         public int NextTreeID { get; set; }
@@ -21,21 +20,19 @@ namespace Mars.Clouds.Segmentation
         public SimilarElevationGroup<float>? MostRecentEqualHeightPatch { get; set; }
         public List<SimilarElevationGroup<float>> TreetopEqualHeightPatches { get; private init; }
 
-        public TreetopTileSearchState(VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
+        public TreetopSearchState(DigitalSurfaceModel dsmTile, VirtualRasterNeighborhood8<float> dsmNeighborhood)
         {
-            this.Dsm = dsmNeighborhood.Center;
+            this.Dsm = dsmTile;
 
             this.CrsLinearUnits = (float)this.Dsm.Crs.GetLinearUnits(); // 1.0 if CRS uses meters, 0.3048 if CRS is in feet
-            this.DsmCellHeight = MathF.Abs((float)this.Dsm.Transform.CellHeight); // ensure positive cell height values
-            this.DsmCellWidth = (float)this.Dsm.Transform.CellWidth;
-            this.DsmNeighborhood = dsmNeighborhood;
-            this.Dtm = dtmNeighborhood.Center;
-            this.DtmNeighborhood = dtmNeighborhood;
+            this.CellHeight = MathF.Abs((float)this.Dsm.Transform.CellHeight); // ensure positive cell height values
+            this.CellWidth = (float)this.Dsm.Transform.CellWidth;
+            this.SurfaceNeighborhood = dsmNeighborhood;
 
             this.MinimumCandidateHeight = Single.NaN;
             this.NextTreeID = 1;
 
-            this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsLinearUnits * this.DsmCellHeight));
+            this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsLinearUnits * this.CellHeight));
             this.MostRecentEqualHeightPatch = null;
             this.TreetopEqualHeightPatches = [];
         }
@@ -50,24 +47,6 @@ namespace Mars.Clouds.Segmentation
             SimilarElevationGroup<float> treetop = this.MostRecentEqualHeightPatch;
             treetop.ID = this.NextTreeID++;
             this.TreetopEqualHeightPatches.Add(treetop);
-        }
-
-        public void Dispose()
-        {
-            this.Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Do nothing by default as there's nothing to dispose at the base class level.
-        /// </summary>
-        /// <remarks>
-        /// Disposability is necessary to derived classes which stream diagnostics data (e.g. <see cref="TreetopRingSearchState">) as,
-        /// if they're not explicitly disposed when tile processing finishes, Dispose() may never be called. In such situations pending
-        /// transactions on layers won't commit, leaving .gpkg or other files in an invalid state.
-        /// </remarks>
-        protected virtual void Dispose(bool disposing)
-        {
         }
 
         public bool OnEqualHeightPatch(int dsmXindex, int dsmYindex, float candidateZ, int searchXindex, int searchYindex, int radiusInCells)
@@ -98,7 +77,7 @@ namespace Mars.Clouds.Segmentation
                     }
                     else if (candidatePatch.Contains(dsmXindex, dsmYindex))
                     {
-                        this.TryGetDtmValueNoDataNan(searchXindex, searchYindex, out float dtmSearchZ);
+                        this.TryGetCanopyHeight(searchXindex, searchYindex, out float dtmSearchZ);
 
                         this.MostRecentEqualHeightPatch = candidatePatch;
                         this.MostRecentEqualHeightPatch.Add(searchXindex, searchYindex, dtmSearchZ);
@@ -107,13 +86,8 @@ namespace Mars.Clouds.Segmentation
                 }
                 if (this.MostRecentEqualHeightPatch == null)
                 {
-                    float dtmElevation = this.Dtm[dsmXindex, dsmYindex];
-                    if (this.Dtm.IsNoData(dtmElevation))
-                    {
-                        dtmElevation = Single.NaN;
-                    }
-
-                    this.TryGetDtmValueNoDataNan(searchXindex, searchYindex, out float dtmSearchZ);
+                    float dtmElevation = candidateZ = this.Dsm.CanopyHeight[dsmXindex, dsmYindex];
+                    this.TryGetCanopyHeight(searchXindex, searchYindex, out float dtmSearchZ);
                     this.MostRecentEqualHeightPatch = new(candidateZ, dsmYindex, dsmXindex, dtmElevation, searchYindex, searchXindex, dtmSearchZ, radiusInCells);
 
                     newEqualHeightPatchFound = true;
@@ -123,7 +97,7 @@ namespace Mars.Clouds.Segmentation
             {
                 if (this.MostRecentEqualHeightPatch.Contains(dsmXindex, dsmYindex) == false)
                 {
-                    this.TryGetDtmValueNoDataNan(dsmXindex, dsmYindex, out float dtmSearchZ);
+                    this.TryGetCanopyHeight(dsmXindex, dsmYindex, out float dtmSearchZ);
                     this.MostRecentEqualHeightPatch.Add(dsmXindex, dsmYindex, dtmSearchZ);
                 }
             }
@@ -131,11 +105,11 @@ namespace Mars.Clouds.Segmentation
             return newEqualHeightPatchFound;
         }
 
-        private bool TryGetDtmValueNoDataNan(int searchXindex, int searchYindex, out float dtmSearchZ)
+        private bool TryGetCanopyHeight(int searchXindex, int searchYindex, out float chmZ)
         {
-            if (this.DtmNeighborhood.TryGetValue(searchXindex, searchYindex, out dtmSearchZ) == false)
+            if (this.Dsm.CanopyHeight.TryGetValue(searchXindex, searchYindex, out chmZ) == false)
             {
-                dtmSearchZ = Single.NaN;
+                chmZ = Single.NaN;
             }
 
             return true;

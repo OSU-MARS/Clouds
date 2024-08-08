@@ -158,7 +158,7 @@ namespace Mars.Clouds.Cmdlets
                     int ungriddedTileIndexInVrt;
                     lock (vrt)
                     {
-                        ungriddedTileIndexInVrt = vrt.TileCount;
+                        ungriddedTileIndexInVrt = vrt.NonNullTileCount;
                         vrt.Add(tile);
 
                         ++tileMetadataReadsCompleted;
@@ -233,7 +233,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.VirtualRasterSizeInTilesX, vrt.VirtualRasterSizeInTilesY);
                     List<RasterBandStatistics>?[] tileBandStatisticsByUngriddedTileIndexInVrt = tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex];
-                    Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.TileCount);
+                    Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.NonNullTileCount);
 
                     for (int ungriddedTileIndex = 0; ungriddedTileIndex < tileBandStatisticsByUngriddedTileIndexInVrt.Length; ++ungriddedTileIndex)
                     {
@@ -399,7 +399,7 @@ namespace Mars.Clouds.Cmdlets
                 int tiles = 0;
                 for (int vrtIndex = 0; vrtIndex < this.Vrts.Length; ++vrtIndex)
                 {
-                    tiles += this.Vrts[vrtIndex].TileCount;
+                    tiles += this.Vrts[vrtIndex].NonNullTileCount;
                 }
 
                 return tiles;

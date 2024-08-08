@@ -61,7 +61,7 @@ namespace Mars.Clouds.Vrt
 
         public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>?>? tileBandStatistics) where TTile : Raster
         {
-            if ((vrt.TileCount == 0) || (vrtBandNames.Count == 0))
+            if ((vrt.NonNullTileCount == 0) || (vrtBandNames.Count == 0))
             {
                 // nothing to do
                 // Debatable whether requesting bands be appended from a VirtualRaster<T> without any tiles is an error.
@@ -74,10 +74,10 @@ namespace Mars.Clouds.Vrt
                 string vrtBandName = vrtBandNames[vrtBandIndex];
                 int tilesWithBand = vrt.TileCountByBand[vrtBandIndex];
                 int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[vrtBandIndex];
-                Debug.Assert((tilesWithBand <= vrt.TileCount) && (tilesWithNoDataValue <= tilesWithBand));
+                Debug.Assert((tilesWithBand <= vrt.NonNullTileCount) && (tilesWithNoDataValue <= tilesWithBand));
                 if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != tilesWithBand))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.TileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
+                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.NonNullTileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
                 }
 
                 // create band
@@ -158,8 +158,8 @@ namespace Mars.Clouds.Vrt
 
                 if (tileBandStatistics != null)
                 {
-                    Debug.Assert(tilesWithStatisticsForVrtBand <= vrt.TileCount);
-                    vrtBandStatistics.IsApproximate = tilesWithStatisticsForVrtBand < vrt.TileCount;
+                    Debug.Assert(tilesWithStatisticsForVrtBand <= vrt.NonNullTileCount);
+                    vrtBandStatistics.IsApproximate = tilesWithStatisticsForVrtBand < vrt.NonNullTileCount;
                     vrtBandStatistics.OnAdditionComplete();
                     Debug.Assert(vrtBandStatistics.CellsSampled > 0);
 

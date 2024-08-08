@@ -83,7 +83,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract IEnumerable<RasterBand> GetBands();
 
-        protected static string GetDiagnosticFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
+        public static string GetDiagnosticFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
         {
             string? directoryPath = Path.GetDirectoryName(primaryFilePath);
             if (directoryPath == null)

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Mars.Clouds.GdalExtensions
@@ -465,6 +466,7 @@ namespace Mars.Clouds.GdalExtensions
             return false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsNoData(TBand value)
         {
             if (this.HasNoDataValue)
@@ -701,6 +703,13 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return this.IsNoData(maximumValue) == false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryGetValue(int indexX, int indexY, out TBand value)
+        {
+            value = this[indexX, indexY];
+            return this.IsNoData(value) == false;
         }
 
         public override bool TryTakeOwnershipOfDataBuffer(Array? untypedBuffer)

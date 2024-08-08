@@ -17,7 +17,7 @@ namespace Mars.Clouds.GdalExtensions
     {
         private SpatialReference? crs;
 
-        public int TileCount { get; protected set; }
+        public int NonNullTileCount { get; protected set; }
         public double TileCellSizeX { get; protected set; }
         public double TileCellSizeY { get; protected set; }
         public int TileSizeInCellsX { get; protected set; }
@@ -32,7 +32,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             this.crs = null;
 
-            this.TileCount = 0;
+            this.NonNullTileCount = 0;
             this.TileCellSizeX = Double.NaN;
             this.TileCellSizeY = Double.NaN;
             this.TileCountByBand = [];
@@ -238,7 +238,7 @@ namespace Mars.Clouds.GdalExtensions
                 this.ungriddedTiles.Add(tile);
             }
 
-            ++this.TileCount;
+            ++this.NonNullTileCount;
             return (tileIndexX, tileIndexY);
         }
 
@@ -248,7 +248,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 throw new InvalidOperationException("Grid is already built."); // debatable if one time call needs to be enforced
             }
-            if (this.TileCount == 0)
+            if (this.NonNullTileCount == 0)
             {
                 throw new InvalidOperationException("No tiles have been added to the virtual raster.");
             }

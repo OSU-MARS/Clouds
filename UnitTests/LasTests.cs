@@ -37,7 +37,7 @@ namespace Mars.Clouds.UnitTests
             LasTile lasTile = this.ReadLasTile();
             (double lasTileCentroidX, double lasTileCentroidY) = lasTile.GridExtent.GetCentroid();
             VirtualRaster<Raster<float>> dtmRaster = this.ReadDtm();
-            Assert.IsTrue((dtmRaster.TileCount == 1) && (dtmRaster.Crs.IsVertical() == 0));
+            Assert.IsTrue((dtmRaster.NonNullTileCount == 1) && (dtmRaster.Crs.IsVertical() == 0));
             Assert.IsTrue((dtmRaster.Crs.IsSameGeogCS(lasTile.GetSpatialReference()) == 1) && SpatialReferenceExtensions.IsSameCrs(dtmRaster.Crs, lasTile.GetSpatialReference()));
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
