@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Extensions;
-using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.GdalExtensions;
 using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
@@ -16,6 +15,8 @@ namespace Mars.Clouds.Las
         private const string DiagnosticDirectoryReturnNumber = "returnNumber";
         private const string DiagnosticDirectorySourceID = "sourceID";
         private const string DiagnosticDirectoryZ = "z";
+
+        public const string DiagnosticDirectorySlopeAspect = "slopeAspect";
 
         public const string AerialPointsBandName = "nAerial";
         public const string CanopyHeightBandName = "chm";
@@ -50,7 +51,7 @@ namespace Mars.Clouds.Las
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSufaceModelBands bands, RasterBand<float> dtmTile)
+        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSufaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
             : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
         {
             if ((bands & DigitalSufaceModelBands.Required) != DigitalSufaceModelBands.Required)
@@ -70,9 +71,9 @@ namespace Mars.Clouds.Las
 
             this.FilePath = dsmFilePath;
 
-            this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
-            this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
-            this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+            this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
 
             this.Subsurface = null;
             this.AerialMean = null;
@@ -84,31 +85,31 @@ namespace Mars.Clouds.Las
 
             if (bands.HasFlag(DigitalSufaceModelBands.Subsurface))
             {
-                this.Subsurface = new(this, DigitalSurfaceModel.SubsurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+                this.Subsurface = new(this, DigitalSurfaceModel.SubsurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
             if (bands.HasFlag(DigitalSufaceModelBands.AerialMean))
             {
-                this.AerialMean = new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+                this.AerialMean = new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
             if (bands.HasFlag(DigitalSufaceModelBands.GroundMean))
             {
-                this.GroundMean = new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData);
+                this.GroundMean = new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
             if (bands.HasFlag(DigitalSufaceModelBands.AerialPoints))
             {
-                this.AerialPoints = new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+                this.AerialPoints = new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
             }
             if (bands.HasFlag(DigitalSufaceModelBands.GroundPoints))
             {
-                this.GroundPoints = new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default); // leave at default of zero, lacks no data value as count of zero is valid
+                this.GroundPoints = new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
             }
             if (bands.HasFlag(DigitalSufaceModelBands.ReturnNumberSurface))
             {
-                this.ReturnNumberSurface = new(this, DigitalSurfaceModel.ReturnNumberBandName, 0, RasterBandInitialValue.Default); // leave at default of zero, which is defined as no data in LAS specification
+                this.ReturnNumberSurface = new(this, DigitalSurfaceModel.ReturnNumberBandName, 0, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, which is defined as no data in LAS specification
             }
             if (bands.HasFlag(DigitalSufaceModelBands.SourceIDSurface))
             {
-                this.SourceIDSurface = new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
+                this.SourceIDSurface = new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData, dataBufferPool); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
             }
         }
 
@@ -468,7 +469,7 @@ namespace Mars.Clouds.Las
         /// For now, does not modify bands whose flags are not set. They will be left as null if never loaded or with previous data if
         /// previously loaded.
         /// </remarks>
-        public void Read(DigitalSufaceModelBands bands, ObjectPool<DigitalSurfaceModel> tilePool)
+        public void Read(DigitalSufaceModelBands bands, RasterBandPool dataBufferPool)
         {
             if ((bands & DigitalSufaceModelBands.Required) != DigitalSufaceModelBands.Required)
             {
@@ -479,53 +480,19 @@ namespace Mars.Clouds.Las
             // If a previously used tile has been returned into the object pool, capture its required band data arrays and any
             // unpopulated diagnostic bands. Not very useful if tile sizes depart from the virtual raster convention of all being
             // identical size.
-            if (tilePool.TryGetThreadSafe(out DigitalSurfaceModel? unusedTile))
-            {
-                this.Surface.TakeOwnershipOfDataArray(unusedTile.Surface);
-                this.CanopyMaxima3.TakeOwnershipOfDataArray(unusedTile.CanopyMaxima3);
-                this.CanopyHeight.TakeOwnershipOfDataArray(unusedTile.CanopyHeight);
+            this.Surface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.CanopyMaxima3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.CanopyHeight.TryTakeOwnershipOfDataBuffer(dataBufferPool);
 
-                if ((this.Subsurface == null) && (unusedTile.Subsurface != null))
-                {
-                    this.Subsurface = unusedTile.Subsurface;
-                    unusedTile.Subsurface = null;
-                }
-                if ((this.AerialMean == null) && (unusedTile.AerialMean != null))
-                {
-                    this.AerialMean = unusedTile.AerialMean;
-                    unusedTile.AerialMean = null;
-                }
-                if ((this.GroundMean == null) && (unusedTile.GroundMean != null))
-                {
-                    this.GroundMean = unusedTile.GroundMean;
-                    unusedTile.GroundMean = null;
-                }
+            this.Subsurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.AerialMean?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.GroundMean?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
 
-                if ((this.AerialPoints == null) && (unusedTile.AerialPoints != null))
-                {
-                    this.AerialPoints = unusedTile.AerialPoints;
-                    unusedTile.AerialPoints = null;
-                }
-                if ((this.GroundPoints == null) && (unusedTile.GroundPoints != null))
-                {
-                    this.GroundPoints = unusedTile.GroundPoints;
-                    unusedTile.GroundPoints = null;
-                }
+            this.AerialPoints?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.GroundPoints?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
 
-                if ((this.ReturnNumberSurface == null) && (unusedTile.ReturnNumberSurface != null))
-                {
-                    this.ReturnNumberSurface = unusedTile.ReturnNumberSurface;
-                    unusedTile.SourceIDSurface = null;
-                }
-                if ((this.SourceIDSurface == null) && (unusedTile.SourceIDSurface != null))
-                {
-                    this.SourceIDSurface = unusedTile.SourceIDSurface;
-                    unusedTile.SourceIDSurface = null;
-                }
-
-                // rest of unused tile is discarded
-                // Raster and raster band parts should be well under 85 kB and thus on the GC's small object heaps.
-            }
+            this.ReturnNumberSurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.SourceIDSurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
 
             using Dataset dsmDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
             Debug.Assert((this.SizeX == dsmDataset.RasterXSize) && (this.SizeY == dsmDataset.RasterYSize) && SpatialReferenceExtensions.IsSameCrs(this.Crs, dsmDataset.GetSpatialRef()));
@@ -730,12 +697,18 @@ namespace Mars.Clouds.Las
             SpatialReference lasFileCrs = lasFile.GetSpatialReference();
             if (SpatialReferenceExtensions.IsSameCrs(this.Crs, lasFileCrs) == false)
             {
+                // for now, be tolerant of .las files missing vertical CRSes when testing sameness but maintain vertical CRS requirement for adoption
                 if (lasFileCrs.IsCompound() == 0)
                 {
                     throw new ArgumentOutOfRangeException(nameof(lasFile), filePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
                 }
-                this.Crs = lasFileCrs;
+                this.SetCrs(lasFileCrs);
             }
+
+            Debug.Assert(Object.ReferenceEquals(this.Transform, this.Surface.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyMaxima3.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyHeight.Transform) &&
+                         ((this.Subsurface == null) || Object.ReferenceEquals(this.Transform, this.Subsurface!.Transform)) && ((this.AerialMean == null) || Object.ReferenceEquals(this.Transform, this.AerialMean!.Transform)) && ((this.GroundMean == null) || Object.ReferenceEquals(this.Transform, this.GroundMean!.Transform)) &&
+                         ((this.AerialPoints == null) || Object.ReferenceEquals(this.Transform, this.AerialPoints!.Transform)) && ((this.GroundPoints == null) || Object.ReferenceEquals(this.Transform, this!.GroundPoints.Transform)) && 
+                         ((this.ReturnNumberSurface == null) || Object.ReferenceEquals(this.Transform, this.ReturnNumberSurface!.Transform)) && ((this.SourceIDSurface == null) || Object.ReferenceEquals(this.Transform, this.SourceIDSurface!.Transform)));
             this.Transform.Copy(newExtents.Transform);
 
             // inherited from Raster
@@ -783,6 +756,62 @@ namespace Mars.Clouds.Las
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
         {
             throw new NotImplementedException(); // TODO when needed
+        }
+
+        public override void ReturnBands(RasterBandPool dataBufferPool)
+        {
+            this.Surface.ReturnData(dataBufferPool);
+            this.CanopyMaxima3.ReturnData(dataBufferPool);
+            this.CanopyHeight.ReturnData(dataBufferPool);
+
+            this.Subsurface?.ReturnData(dataBufferPool);
+            this.AerialMean?.ReturnData(dataBufferPool);
+            this.GroundMean?.ReturnData(dataBufferPool);
+
+            this.AerialPoints?.ReturnData(dataBufferPool);
+            this.GroundPoints?.ReturnData(dataBufferPool);
+
+            this.ReturnNumberSurface?.ReturnData(dataBufferPool);
+            this.SourceIDSurface?.ReturnData(dataBufferPool);
+        }
+
+        private void SetCrs(SpatialReference crs)
+        {
+            this.Crs = crs;
+            this.Surface.Crs = crs;
+            this.CanopyMaxima3.Crs = crs;
+            this.CanopyHeight.Crs = crs;
+
+            if (this.Subsurface != null)
+            {
+                this.Subsurface.Crs = crs;
+            }
+            if (this.AerialMean != null)
+            {
+                this.AerialMean.Crs = crs;
+            }
+            if (this.GroundMean != null)
+            {
+                this.GroundMean.Crs = crs;
+            }
+
+            if (this.AerialPoints != null)
+            {
+                this.AerialPoints.Crs = crs;
+            }
+            if (this.GroundPoints != null)
+            {
+                this.GroundPoints.Crs = crs;
+            }
+
+            if (this.ReturnNumberSurface != null)
+            {
+                this.ReturnNumberSurface.Crs = crs;
+            }
+            if (this.SourceIDSurface != null)
+            {
+                this.SourceIDSurface.Crs = crs;
+            }
         }
 
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)

@@ -362,9 +362,9 @@ namespace Mars.Clouds.Las
         public void ReadPointsToDsm(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, ref float[]? subsurfaceBuffer)
         {
             LasReader.ThrowOnUnsupportedPointFormat(openedTile.Header);
-            if ((dsmTile.AerialPoints == null) || (dsmTile.ReturnNumberSurface == null))
+            if (dsmTile.AerialPoints == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmTile), "One or both of DSM's aerial point count or return number bands have not been created.");
+                throw new ArgumentOutOfRangeException(nameof(dsmTile), "One or both of DSM's aerial point count band has not been created.");
             }
 
             bool dsmHasSubsurface = dsmTile.Subsurface != null;

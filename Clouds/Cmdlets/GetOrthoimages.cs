@@ -66,8 +66,8 @@ namespace Mars.Clouds.Cmdlets
             {
                 ImageRaster<UInt64>? imageTile = null;
                 byte[]? pointReadBuffer = null;
-                readSemaphore.Wait(this.imageReadWrite.CancellationTokenSource.Token);
-                if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                readSemaphore.Wait(this.CancellationTokenSource.Token);
+                if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                 {
                     // task is cancelled so no point in looking for a tile to read
                     // Also not valid to continue if the read semaphore wasn't entered due to cancellation.
@@ -89,14 +89,14 @@ namespace Mars.Clouds.Cmdlets
                     readSemaphore.Release();
                     this.imageReadWrite.IncrementTilesReadThreadSafe();
 
-                    if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return; // if cmdlet's been stopped with ctrl+c the read semaphore may already be disposed
                     }
 
                     // calculate means and set no data values
                     imageTile.OnPointAdditionComplete();
-                    if (this.Stopping || this.imageReadWrite.CancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return; // no point in writing tile
                     }
@@ -117,14 +117,14 @@ namespace Mars.Clouds.Cmdlets
 
                     // reacquire read semaphore for next tile
                     // Unnecessary on last loop iteration but no good way to identify if this is the last iteration.
-                    readSemaphore.Wait(this.imageReadWrite.CancellationTokenSource.Token);
+                    readSemaphore.Wait(this.CancellationTokenSource.Token);
                 }
 
                 // ensure read semaphore is released
                 // Reads have been initiated on all tiles at this point but it's probable there's one or more threads blocked in Wait() which
                 // must acquire the semaphore to exit.
                 readSemaphore.Release();
-            }, this.imageReadWrite.CancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
             TimedProgressRecord progress = new(cmdletName, this.imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
@@ -140,12 +140,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Found brightnesses of " + cellsWritten.ToString("n0") + " pixels in " + this.imageReadWrite.TilesRead + (this.imageReadWrite.TilesRead == 1 ? " point cloud tile in " : " point cloud tiles in ") + progress.Stopwatch.ToElapsedString() + ": " + (this.imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.imageReadWrite?.CancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private (int tileSizeX, int tileSizeY) SetCellSize(LasTileGrid lasGrid)

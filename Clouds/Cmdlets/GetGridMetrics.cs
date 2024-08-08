@@ -72,7 +72,7 @@ namespace Mars.Clouds.Cmdlets
             const string cmdletName = "Get-GridMetrics";
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
 
-            VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm, readData: true);
+            VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm, readData: true, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
                 throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
@@ -88,11 +88,11 @@ namespace Mars.Clouds.Cmdlets
             Task[] gridMetricsTasks = new Task[2]; // not currently thread safe so limit ot single thread, default to one calculate thread per read thread
             for (int readThread = 0; readThread < readThreads; ++readThread)
             {
-                gridMetricsTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, gridMetrics, metricsTileRead), metricsTileRead.CancellationTokenSource.Token);
+                gridMetricsTasks[readThread] = Task.Run(() => this.ReadLasTiles(lasGrid, gridMetrics, metricsTileRead), this.CancellationTokenSource.Token);
             }
             for (int calculateThread = readThreads; calculateThread < gridMetricsTasks.Length; ++calculateThread)
             {
-                gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsTileRead), metricsTileRead.CancellationTokenSource.Token);
+                gridMetricsTasks[calculateThread] = Task.Run(() => this.WriteTiles(metricsRaster, metricsTileRead), this.CancellationTokenSource.Token);
             }
 
             TimedProgressRecord gridMetricsProgress = new(cmdletName, "Calculating metrics: " + metricsTileRead.RasterCellsCompleted.ToString("#,#,0") + " of " + metricsTileRead.RasterCells.ToString("#,0") + " cells (" + metricsTileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles)...");
@@ -106,7 +106,7 @@ namespace Mars.Clouds.Cmdlets
                     Task task = gridMetricsTasks[taskIndex];
                     if (task.IsFaulted)
                     {
-                        metricsTileRead.CancellationTokenSource.Cancel();
+                        this.CancellationTokenSource.Cancel();
                         throw task.Exception;
                     }
                 }
@@ -144,7 +144,7 @@ namespace Mars.Clouds.Cmdlets
                         // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
                         // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
                         // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                        if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             break;
                         }
@@ -160,7 +160,7 @@ namespace Mars.Clouds.Cmdlets
                         //this.WriteVerbose("Gridded " + gigabytesRead.ToString("0.00") + " GB with " + pointsRead.ToString("#,0") + " points into " + abaGridCellsWithPoints + " grid cells in " + elapsedSeconds.ToString("0.000") + " s: " + (pointsRead / (1E6 * elapsedSeconds)).ToString("0.00") + " Mpoints/s, " + (megabytesRead / elapsedSeconds).ToString("0.0") + " MB/s.");
                     }
 
-                    if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
@@ -201,16 +201,16 @@ namespace Mars.Clouds.Cmdlets
                     }
                     catch (Exception exception)
                     {
-                        throw new TaskCanceledException("Error calculating metrics for metrics grid cell at position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, tileRead.CancellationTokenSource.Token);
+                        throw new TaskCanceledException("Error calculating metrics for metrics grid cell at position (" + gridCell.XIndex + ", " + gridCell.YIndex + ").", exception, this.CancellationTokenSource.Token);
                     }
 
-                    if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
                 }
 
-                if (this.Stopping || tileRead.CancellationTokenSource.IsCancellationRequested)
+                if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                 {
                     break;
                 }

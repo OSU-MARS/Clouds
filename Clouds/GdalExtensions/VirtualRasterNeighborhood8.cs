@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
 {
@@ -33,6 +34,7 @@ namespace Mars.Clouds.GdalExtensions
             return (TBand.Zero, 0);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGetValue(int xIndex, int yIndex, [NotNullWhen(true)] out TBand? value)
         {
             value = default;

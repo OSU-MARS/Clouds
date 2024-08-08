@@ -9,7 +9,7 @@ namespace Mars.Clouds.Vrt
     {
         public bool Approximate { get; private set; }
         public int BucketCount { get; private set; }
-        public int[] BucketCounts { get; private set; }
+        public UInt32[] BucketCounts { get; private set; }
         public double Maximum { get; private set; }
         public double Minimum { get; private set; }
         public bool IncludeOutOfRange { get; private set; }
@@ -27,11 +27,24 @@ namespace Mars.Clouds.Vrt
         public HistogramItem(RasterBandStatistics statistics)
         {
             this.Approximate = statistics.IsApproximate;
-            this.BucketCount = 1;
-            this.BucketCounts = [ (int)Int64.Min(Int32.MaxValue, statistics.CellsSampled - statistics.NoDataCells) ];
-            this.Maximum = statistics.Maximum;
-            this.Minimum = statistics.Minimum;
-            this.IncludeOutOfRange = false;
+            if (statistics.HasHistogram == false)
+            {
+                // band statistics lack histogram data: only a single bin histogram can be created
+                this.BucketCount = 1;
+                this.BucketCounts = [ (UInt32)Int64.Min(Int32.MaxValue, statistics.CellsSampled - statistics.NoDataCells) ];
+                this.Maximum = statistics.Maximum;
+                this.Minimum = statistics.Minimum;
+                this.IncludeOutOfRange = false;
+            }
+            else
+            {
+                this.BucketCount = statistics.Histogram.Length;
+                this.BucketCounts = new UInt32[statistics.Histogram.Length];
+                Array.Copy(statistics.Histogram, this.BucketCounts, statistics.Histogram.Length);
+                this.Maximum = statistics.HistogramMaximum;
+                this.Minimum = statistics.HistogramMinimum;
+                this.IncludeOutOfRange = statistics.HistogramIncludesOutOfRange;
+            }
         }
 
         protected override void ReadStartElement(XmlReader reader)
@@ -62,7 +75,7 @@ namespace Mars.Clouds.Vrt
                     this.Approximate = reader.ReadElementContentAsBoolean();
                     break;
                 case "HistCounts":
-                    this.BucketCounts = reader.ReadElementContentAsPipeIntArray();
+                    this.BucketCounts = reader.ReadElementContentAsPipeUIntArray();
                     break;
                 default:
                     throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");

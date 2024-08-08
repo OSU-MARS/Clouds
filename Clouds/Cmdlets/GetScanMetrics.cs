@@ -49,7 +49,7 @@ namespace Mars.Clouds.Cmdlets
                         // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
                         // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
                         // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                        if (this.Stopping || this.tileRead.CancellationTokenSource.IsCancellationRequested)
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             break;
                         }
@@ -57,12 +57,12 @@ namespace Mars.Clouds.Cmdlets
                         this.tileRead.IncrementTilesReadThreadSafe();
                     }
 
-                    if (this.Stopping || this.tileRead.CancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         break;
                     }
                 }
-            }, this.tileRead.CancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...");
             this.WriteProgress(scanMetricsProgress);
@@ -79,12 +79,6 @@ namespace Mars.Clouds.Cmdlets
             scanMetricsProgress.Stopwatch.Stop();
             this.WriteVerbose("Calculated metrics for " + tileRead.TilesRead + " tiles in " + scanMetricsProgress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.tileRead?.CancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

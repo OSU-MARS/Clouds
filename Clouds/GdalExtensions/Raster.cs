@@ -1,4 +1,6 @@
-﻿using OSGeo.GDAL;
+﻿using DocumentFormat.OpenXml.InkML;
+using Mars.Clouds.DiskSpd;
+using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -83,7 +85,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract IEnumerable<RasterBand> GetBands();
 
-        protected static string GetDiagnosticFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
+        public static string GetDiagnosticFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
         {
             string? directoryPath = Path.GetDirectoryName(primaryFilePath);
             if (directoryPath == null)
@@ -166,6 +168,8 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public abstract void Reset(string filePath, Dataset rasterDataset, bool readData);
+
+        public abstract void ReturnBands(RasterBandPool dataBufferPool);
 
         public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
 
@@ -416,6 +420,14 @@ namespace Mars.Clouds.GdalExtensions
         //    }
         //    return bandsWithNoData > 0;
         //}
+
+        public override void ReturnBands(RasterBandPool dataBufferPool)
+        {
+            for (int index = 0; index < this.Bands.Length; ++index)
+            {
+                this.Bands[index].ReturnData(dataBufferPool);
+            }
+        }
 
         public override void Write(string rasterPath, bool compress)
         {

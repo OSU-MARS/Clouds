@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Mars.Clouds.GdalExtensions
@@ -92,6 +93,26 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract bool IsNoData(int xIndex, int yIndex);
 
+        public void Read(Dataset rasterDataset)
+        {
+            this.Read(rasterDataset, rasterDataset.GetSpatialRef());
+        }
+
+        public void Read(Dataset rasterDataset, SpatialReference crs)
+        {
+            // update CRS and transform
+            this.Crs = crs;
+            this.Transform.SetTransform(rasterDataset);
+            // update data and no data
+            this.ReadDataInSameCrsAndTransform(rasterDataset);
+        }
+
+        public void Read(string rasterPath)
+        {
+            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
+            this.Read(rasterDataset);
+        }
+
         public abstract void ReadDataInSameCrsAndTransform(Dataset rasterDataset);
 
         protected static void ReadDataAssumingSameCrsTransformSizeAndNoData<TBand>(Band gdalBand, DataType bufferDataType, TBand[] buffer) where TBand : INumber<TBand>
@@ -137,6 +158,8 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public abstract Array ReleaseData();
+
+        public abstract void ReturnData(RasterBandPool dataBufferPool);
 
         //  require derived classes to override as this.NoDataIsNaN can't set when data type is not known
         public abstract void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData);
@@ -217,7 +240,7 @@ namespace Mars.Clouds.GdalExtensions
         public TBand[] Data { get; private set; }
         public TBand NoDataValue { get; private set; }
 
-        // band is loaded from file on disk
+        // band is loaded from a GDAL dataset
         public RasterBand(Dataset rasterDataset, Band gdalBand, bool readData)
             : base(rasterDataset, gdalBand)
         {
@@ -247,29 +270,60 @@ namespace Mars.Clouds.GdalExtensions
 
         // band is created in memory
         public RasterBand(Raster raster, string name, RasterBandInitialValue initialValue)
-            : this(raster, name, RasterBand<TBand>.GetDefaultNoDataValue(), initialValue)
+            : this(raster, name, initialValue, null)
+        {
+        }
+
+        public RasterBand(Raster raster, string name, RasterBandInitialValue initialValue, RasterBandPool? dataBufferPool)
+            : this(raster, name, RasterBand<TBand>.GetDefaultNoDataValue(), initialValue, dataBufferPool)
         {
             // revert no data status but leave default no data value in place in case HasNoDataValue is later set to true
             this.HasNoDataValue = false;
         }
 
         public RasterBand(Raster raster, string name, TBand noDataValue, RasterBandInitialValue initialValue)
+            : this(raster, name, noDataValue, initialValue, null)
+        {
+        }
+
+        public RasterBand(Raster raster, string name, TBand noDataValue, RasterBandInitialValue initialValue, RasterBandPool? dataBufferPool)
             : base(raster, name)
         {
-            switch (initialValue)
+            if ((dataBufferPool != null) && this.TryTakeOwnershipOfDataBuffer(dataBufferPool))
             {
-                case RasterBandInitialValue.Default:
-                    this.Data = new TBand[this.Cells];
-                    break;
-                case RasterBandInitialValue.NoData:
-                    this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
-                    Array.Fill(this.Data, noDataValue);
-                    break;
-                case RasterBandInitialValue.Unintialized:
-                    this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
-                    break;
-                default:
-                    throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+                switch (initialValue)
+                {
+                    case RasterBandInitialValue.Default:
+                        Array.Fill(this.Data, default);
+                        break;
+                    case RasterBandInitialValue.NoData:
+                        Array.Fill(this.Data, noDataValue);
+                        break;
+                    case RasterBandInitialValue.Unintialized:
+                        // nothing to do
+                        break;
+                    default:
+                        throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+                }
+
+            }
+            else
+            {
+                switch (initialValue)
+                {
+                    case RasterBandInitialValue.Default:
+                        this.Data = new TBand[this.Cells];
+                        break;
+                    case RasterBandInitialValue.NoData:
+                        this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
+                        Array.Fill(this.Data, noDataValue);
+                        break;
+                    case RasterBandInitialValue.Unintialized:
+                        this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
+                        break;
+                    default:
+                        throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+                }
             }
 
             this.HasNoDataValue = true;
@@ -420,21 +474,52 @@ namespace Mars.Clouds.GdalExtensions
 
         public override RasterBandStatistics GetStatistics()
         {
-            return Type.GetTypeCode(typeof(TBand)) switch
+            switch (Type.GetTypeCode(typeof(TBand)))
             {
-                TypeCode.Byte => new(this.Data as byte[], this.HasNoDataValue, Byte.CreateChecked(this.NoDataValue)),
-                TypeCode.Double => new(this.Data as double[], this.HasNoDataValue, Double.CreateChecked(this.NoDataValue)),
-                TypeCode.Int16 => new(this.Data as Int16[], this.HasNoDataValue, Int16.CreateChecked(this.NoDataValue)),
-                TypeCode.Int32 => new(this.Data as Int32[], this.HasNoDataValue, Int32.CreateChecked(this.NoDataValue)),
-                TypeCode.Int64 => new(this.Data as Int64[], this.HasNoDataValue, Int64.CreateChecked(this.NoDataValue)),
-                TypeCode.SByte => new(this.Data as sbyte[], this.HasNoDataValue, SByte.CreateChecked(this.NoDataValue)),
-                TypeCode.Single => new(this.Data as float[], this.HasNoDataValue, Single.CreateChecked(this.NoDataValue)),
-                TypeCode.UInt16 => new(this.Data as UInt16[], this.HasNoDataValue, UInt16.CreateChecked(this.NoDataValue)),
-                TypeCode.UInt32 => new(this.Data as UInt32[], this.HasNoDataValue, UInt32.CreateChecked(this.NoDataValue)),
-                TypeCode.UInt64 => new(this.Data as UInt64[], this.HasNoDataValue, UInt64.CreateChecked(this.NoDataValue)),
+                case TypeCode.Byte:
+                    byte[]? byteData = this.Data as byte[];
+                    Debug.Assert(byteData != null);
+                    return new(byteData, this.HasNoDataValue, Byte.CreateChecked(this.NoDataValue));
+                case TypeCode.Double:
+                    double[]? doubleData = this.Data as double[];
+                    Debug.Assert(doubleData != null);
+                    return new(doubleData, this.HasNoDataValue, Double.CreateChecked(this.NoDataValue));
+                case TypeCode.Int16:
+                    Int16[]? int16data = this.Data as Int16[];
+                    Debug.Assert(int16data != null);
+                    return new(int16data, this.HasNoDataValue, Int16.CreateChecked(this.NoDataValue));
+                case TypeCode.Int32:
+                    Int32[]? int32data = this.Data as Int32[];
+                    Debug.Assert(int32data != null);
+                    return new(int32data, this.HasNoDataValue, Int32.CreateChecked(this.NoDataValue));
+                case TypeCode.Int64:
+                    Int64[]? int64data = this.Data as Int64[];
+                    Debug.Assert(int64data != null);
+                    return new(int64data, this.HasNoDataValue, Int64.CreateChecked(this.NoDataValue));
+                case TypeCode.SByte:
+                    sbyte[]? sbyteData = this.Data as sbyte[];
+                    Debug.Assert(sbyteData != null);
+                    return new(sbyteData, this.HasNoDataValue, SByte.CreateChecked(this.NoDataValue));
+                case TypeCode.Single:
+                    float[]? floatData = this.Data as float[];
+                    Debug.Assert(floatData != null);
+                    return new(floatData, this.HasNoDataValue, Single.CreateChecked(this.NoDataValue));
+                case TypeCode.UInt16:
+                    UInt16[]? uint16data = this.Data as UInt16[];
+                    Debug.Assert(uint16data != null);
+                    return new(uint16data, this.HasNoDataValue, UInt16.CreateChecked(this.NoDataValue));
+                case TypeCode.UInt32:
+                    UInt32[]? uint32data = this.Data as UInt32[];
+                    Debug.Assert(uint32data != null);
+                    return new(uint32data, this.HasNoDataValue, UInt32.CreateChecked(this.NoDataValue));
+                case TypeCode.UInt64:
+                    UInt64[]? uint64data = this.Data as UInt64[];
+                    Debug.Assert(uint64data != null);
+                    return new(uint64data, this.HasNoDataValue, UInt64.CreateChecked(this.NoDataValue));
                 // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently supported
-                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
-            };
+                default:
+                    throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".");
+            }
         }
 
         public (TBand value, byte mask) GetValueMaskZero(int xIndex, int yIndex)
@@ -465,6 +550,7 @@ namespace Mars.Clouds.GdalExtensions
             return false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsNoData(TBand value)
         {
             if (this.HasNoDataValue)
@@ -483,20 +569,6 @@ namespace Mars.Clouds.GdalExtensions
             return false;
         }
 
-        public void Read(Dataset rasterDataset)
-        {
-            this.Read(rasterDataset, rasterDataset.GetSpatialRef());
-        }
-
-        public void Read(Dataset rasterDataset, SpatialReference crs)
-        {
-            // update CRS and transform
-            this.Crs = crs;
-            this.Transform.SetTransform(rasterDataset);
-            // update data and no data
-            this.ReadDataInSameCrsAndTransform(rasterDataset);
-        }
-
         public void Read(Dataset rasterDataset, SpatialReference crs, Band gdalBand)
         {
             this.Crs = crs;
@@ -507,12 +579,6 @@ namespace Mars.Clouds.GdalExtensions
 
             DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
             this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, thisDataType); // update data
-        }
-
-        public void Read(string rasterPath)
-        {
-            using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-            this.Read(rasterDataset);
         }
 
         public static RasterBand<TBand> Read(string rasterPath, string? bandName)
@@ -635,6 +701,16 @@ namespace Mars.Clouds.GdalExtensions
             return buffer;
         }
 
+        public override void ReturnData(RasterBandPool dataBufferPool)
+        {
+            if (this.Data.Length > 0)
+            {
+                dataBufferPool.Return(this.GetGdalDataType(), this.Data);
+                this.Data = [];
+            }
+            // otherwise no data to return
+        }
+
         public override void Reset(SpatialReference crs, GridGeoTransform transform, Band gdalBand, bool readData)
         {
             this.Crs = crs;
@@ -672,12 +748,6 @@ namespace Mars.Clouds.GdalExtensions
             this.NoDataValue = noDataValue;
         }
 
-        public void TakeOwnershipOfDataArray(RasterBand<TBand> other)
-        {
-            this.Data = other.Data;
-            other.Data = [];
-        }
-
         public bool TryGetMaximumValue(out TBand maximumValue)
         {
             maximumValue = TBand.MinValue;
@@ -703,12 +773,127 @@ namespace Mars.Clouds.GdalExtensions
             return this.IsNoData(maximumValue) == false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryGetValue(int indexX, int indexY, out TBand value)
+        {
+            value = this[indexX, indexY];
+            return this.IsNoData(value) == false;
+        }
+
         public override bool TryTakeOwnershipOfDataBuffer(Array? untypedBuffer)
         {
             if ((this.HasData == false) && (untypedBuffer is TBand[] buffer) && (buffer.Length == this.Cells))
             {
                 this.Data = buffer;
                 return true;
+            }
+
+            return false;
+        }
+
+        [MemberNotNullWhen(true, nameof(RasterBand<TBand>.Data))] 
+        public bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool)
+        {
+            if ((this.Data != null) && (this.Data.Length > 0)) // called from constructor so this.Data may be null
+            {
+                return false;
+            }
+
+            DataType gdalType = this.GetGdalDataType();
+            switch (gdalType)
+            {
+                case DataType.GDT_Byte:
+                    if (pool.BytePool.TryGet(out byte[]? byteBuffer))
+                    {
+                        TBand[]? retypedBuffer = byteBuffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Float32:
+                    if (pool.FloatPool.TryGet(out float[]? floatBuffer))
+                    {
+                        TBand[]? retypedBuffer = floatBuffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Float64:
+                    if (pool.DoublePool.TryGet(out double[]? doubleBuffer))
+                    {
+                        TBand[]? retypedBuffer = doubleBuffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Int8:
+                    if (pool.Int8Pool.TryGet(out sbyte[]? int8buffer))
+                    {
+                        TBand[]? retypedBuffer = int8buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Int16:
+                    if (pool.Int16Pool.TryGet(out Int16[]? int16buffer))
+                    {
+                        TBand[]? retypedBuffer = int16buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Int32:
+                    if (pool.Int32Pool.TryGet(out Int32[]? int32buffer))
+                    {
+                        TBand[]? retypedBuffer = int32buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_Int64:
+                    if (pool.Int64Pool.TryGet(out Int64[]? int64buffer))
+                    {
+                        TBand[]? retypedBuffer = int64buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_UInt16:
+                    if (pool.UInt16Pool.TryGet(out UInt16[]? UInt16buffer))
+                    {
+                        TBand[]? retypedBuffer = UInt16buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_UInt32:
+                    if (pool.UInt32Pool.TryGet(out UInt32[]? UInt32buffer))
+                    {
+                        TBand[]? retypedBuffer = UInt32buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                case DataType.GDT_UInt64:
+                    if (pool.UInt64Pool.TryGet(out UInt64[]? UInt64buffer))
+                    {
+                        TBand[]? retypedBuffer = UInt64buffer as TBand[];
+                        Debug.Assert(retypedBuffer != null);
+                        this.Data = retypedBuffer;
+                        return true;
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled data type " + gdalType + ".");
             }
 
             return false;

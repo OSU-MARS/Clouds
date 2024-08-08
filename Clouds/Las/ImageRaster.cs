@@ -274,6 +274,19 @@ namespace Mars.Clouds.Las
             throw new NotImplementedException(); // TODO when needed
         }
 
+        public override void ReturnBands(RasterBandPool dataBufferPool)
+        {
+            this.Red.ReturnData(dataBufferPool);
+            this.Green.ReturnData(dataBufferPool);
+            this.Blue.ReturnData(dataBufferPool);
+            this.NearInfrared?.ReturnData(dataBufferPool);
+            this.IntensityFirstReturn?.ReturnData(dataBufferPool);
+            this.IntensitySecondReturn?.ReturnData(dataBufferPool);
+            this.ScanAngleMeanAbsolute?.ReturnData(dataBufferPool);
+            this.FirstReturns?.ReturnData(dataBufferPool);
+            this.SecondReturns?.ReturnData(dataBufferPool);
+        }
+
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
             if ((name == null) || String.Equals(name, this.Red.Name, StringComparison.Ordinal))

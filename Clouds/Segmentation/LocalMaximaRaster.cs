@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.InkML;
-using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.GdalExtensions;
 using OSGeo.GDAL;
 using System;
 using System.Collections.Generic;
@@ -65,6 +64,13 @@ namespace Mars.Clouds.Segmentation
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
         {
             throw new NotImplementedException(); // TODO when needed
+        }
+
+        public override void ReturnBands(RasterBandPool dataBufferPool)
+        {
+            this.DsmMaxima.ReturnData(dataBufferPool);
+            this.CmmMaxima.ReturnData(dataBufferPool);
+            this.ChmMaxima.ReturnData(dataBufferPool);
         }
 
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)

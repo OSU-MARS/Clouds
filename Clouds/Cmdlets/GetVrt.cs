@@ -158,7 +158,7 @@ namespace Mars.Clouds.Cmdlets
                     int ungriddedTileIndexInVrt;
                     lock (vrt)
                     {
-                        ungriddedTileIndexInVrt = vrt.TileCount;
+                        ungriddedTileIndexInVrt = vrt.NonNullTileCount;
                         vrt.Add(tile);
 
                         ++tileMetadataReadsCompleted;
@@ -228,12 +228,12 @@ namespace Mars.Clouds.Cmdlets
                     }
                 }
 
-                GridNullable<List<RasterBandStatistics>?>? vrtStats = null;
+                GridNullable<List<RasterBandStatistics>>? vrtStats = null;
                 if (this.MinSamplingFraction > 0.0F)
                 {
                     vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.VirtualRasterSizeInTilesX, vrt.VirtualRasterSizeInTilesY);
                     List<RasterBandStatistics>?[] tileBandStatisticsByUngriddedTileIndexInVrt = tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex];
-                    Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.TileCount);
+                    Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.NonNullTileCount);
 
                     for (int ungriddedTileIndex = 0; ungriddedTileIndex < tileBandStatisticsByUngriddedTileIndexInVrt.Length; ++ungriddedTileIndex)
                     {
@@ -258,7 +258,7 @@ namespace Mars.Clouds.Cmdlets
             TileStatisticsTable statsTable = new();
             for (int vrtIndex = 0; vrtIndex < vrtBandsAndStats.Vrts.Length; ++vrtIndex)
             {
-                GridNullable<List<RasterBandStatistics>?>? statsGridForVrt = vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex];
+                GridNullable<List<RasterBandStatistics>>? statsGridForVrt = vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex];
                 if (statsGridForVrt == null)
                 {
                     continue;
@@ -331,8 +331,8 @@ namespace Mars.Clouds.Cmdlets
             VrtDataset? vrtDataset = null;
             for (int vrtIndex = 0; vrtIndex < vrts.Length; ++vrtIndex)
             {
-                // filter virtual raster bands if 
-                VirtualRaster<Raster> vrt = vrtBandsAndStats.Vrts[vrtIndex];
+                // filter virtual raster if bands are restricted
+                VirtualRaster<Raster> vrt = vrts[vrtIndex];
                 List<string> virtualRasterBandNames = vrt.BandNames;
                 if (this.Bands.Count > 0)
                 {
@@ -345,10 +345,21 @@ namespace Mars.Clouds.Cmdlets
                             virtualRasterBandNames.Add(vrtBandName);
                         }
                     }
+                    if (virtualRasterBandNames.Count == 0)
+                    {
+                        continue; // no bands to write to .vrt from this virtual raster
+                    }
                 }
 
-                vrtDataset ??= vrts[0].CreateDataset();
-                vrtDataset.AppendBands(vrtDatasetDirectory, vrts[vrtIndex], virtualRasterBandNames, vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex]);
+                GridNullable<List<RasterBandStatistics>>? vrtBandStatisticsByTile = vrtBandsAndStats.TileBandStatisticsByVrtIndex[vrtIndex];
+                if (vrtDataset == null)
+                {
+                    vrtDataset = vrt.CreateDataset(vrtDatasetDirectory, virtualRasterBandNames, vrtBandStatisticsByTile);
+                }
+                else
+                {
+                    vrtDataset.AppendBands(vrtDatasetDirectory, vrt, virtualRasterBandNames, vrtBandStatisticsByTile);
+                }
             }
 
             if (vrtDataset != null)
@@ -384,13 +395,13 @@ namespace Mars.Clouds.Cmdlets
 
         private class VirtualRasterBandsAndStatistics
         {
-            public GridNullable<List<RasterBandStatistics>?>?[] TileBandStatisticsByVrtIndex { get; private init; }
+            public GridNullable<List<RasterBandStatistics>>?[] TileBandStatisticsByVrtIndex { get; private init; }
             public TimeSpan VrtAssemblyTime { get; set; }
             public VirtualRaster<Raster>[] Vrts { get; private init; }
 
             public VirtualRasterBandsAndStatistics(int capacity)
             {
-                this.TileBandStatisticsByVrtIndex = new GridNullable<List<RasterBandStatistics>?>?[capacity];
+                this.TileBandStatisticsByVrtIndex = new GridNullable<List<RasterBandStatistics>>?[capacity];
                 this.Vrts = new VirtualRaster<Raster>[capacity];
             }
 
@@ -399,7 +410,7 @@ namespace Mars.Clouds.Cmdlets
                 int tiles = 0;
                 for (int vrtIndex = 0; vrtIndex < this.Vrts.Length; ++vrtIndex)
                 {
-                    tiles += this.Vrts[vrtIndex].TileCount;
+                    tiles += this.Vrts[vrtIndex].NonNullTileCount;
                 }
 
                 return tiles;

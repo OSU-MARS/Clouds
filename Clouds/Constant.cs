@@ -38,9 +38,12 @@ namespace Mars.Clouds
             public const byte BlendA0B123 = 0b00001110; // blendps, vpblendd
             public const int Circular32Up1 = (0x3 << 0) | (0x0 << 2) | (0x1 << 4) | (0x2 << 6); // pshufd, shufps
             public const int Circular32Up2 = (0x2 << 0) | (0x3 << 2) | (0x0 << 4) | (0x1 << 6); // pshufd, shufps
-            public const int Circular32Up3 = (0x1 << 6) | (0x2 << 0) | (0x3 << 2) | (0x0 << 4); // pshufd, shufps
+            //public const int Circular32Up3 = (0x1 << 0) | (0x2 << 2) | (0x3 << 4) | (0x0 << 6); // pshufd, shufps
+            public const int Copy32OneToZero = (0x1 << 0) | (0x1 << 2) | (0x2 << 4) | (0x3 << 6); // vpermilps
+            public const int Copy32TwoToZero = (0x2 << 0) | (0x1 << 2) | (0x2 << 4) | (0x3 << 6); // vpermilps
+            public const int Copy32ThreeToZero = (0x3 << 0) | (0x1 << 2) | (0x2 << 4) | (0x3 << 6); // vpermilps
             //public const int Circular64Up1 = (0x1 << 0) | (0x0 << 1); // shufpd
-            public const byte ExtractUpper64 = 0b00000001; // pextrq
+            //public const byte ExtractUpper64 = 0x1; // pextrq
         }
     }
 }

@@ -7,7 +7,7 @@ namespace Mars.Clouds.GdalExtensions
 {
     public class Grid
     {
-        public SpatialReference Crs { get; protected set; }
+        public SpatialReference Crs { get; set; }
         public GridGeoTransform Transform { get; protected set; }
         public int SizeX { get; protected set; } // cells
         public int SizeY { get; protected set; } // cells
@@ -174,6 +174,59 @@ namespace Mars.Clouds.GdalExtensions
             return xIndex + yIndex * this.SizeX;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public (int xIndex, int yIndex) ToGridIndices(double x, double y)
+        {
+            (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);
+            int xIndex = (int)xIndexFractional;
+            int yIndex = (int)yIndexFractional;
+
+            if (xIndexFractional < 0.0)
+            {
+                --xIndex; // integer truncation truncates towards zero
+            }
+            else if ((xIndex == this.SizeX) && (x == this.Transform.OriginX + this.Transform.CellWidth * this.SizeX))
+            {
+                // TODO: support rotated rasters
+                xIndex -= 1; // if x lies exactly on grid edge, consider point part of the grid
+            }
+
+            if (yIndexFractional < 0.0)
+            {
+                --yIndex; // integer truncation truncates towards zero
+            }
+            else if (yIndex == this.SizeY)
+            {
+                // similarly, if y lies exactly on grid edge consider point part of the grid
+                // TODO: support rotated rasters
+                if (this.Transform.CellHeight < 0.0)
+                {
+                    if (y == this.Transform.OriginY + this.Transform.CellHeight * this.SizeX)
+                    {
+                        yIndex -= 1;
+                    }
+                }
+                else
+                {
+                    if (y == this.Transform.OriginY)
+                    {
+                        yIndex -= 1;
+                    }
+                }
+            }
+
+            return (xIndex, yIndex);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public (int xIndex, int yIndex) ToGridIndices(int tileIndex)
+        {
+            Debug.Assert(tileIndex >= 0);
+            int yIndex = tileIndex / this.SizeX;
+            int xIndex = tileIndex - this.SizeY * yIndex;
+            return (xIndex, yIndex);
+        }
+
         // needs testing with nonzero row and column rotations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToInteriorGridIndices(double x, double y)
@@ -235,50 +288,6 @@ namespace Mars.Clouds.GdalExtensions
                 yIndex -= 1;
             }
             // xIndex ∈ [ 0, this.XSize -1 ] falls through
-
-            return (xIndex, yIndex);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public (int xIndex, int yIndex) ToGridIndices(double x, double y)
-        {
-            (double xIndexFractional, double yIndexFractional) = this.Transform.ToFractionalIndices(x, y);
-            int xIndex = (int)xIndexFractional;
-            int yIndex = (int)yIndexFractional;
-
-            if (xIndexFractional < 0.0)
-            {
-                --xIndex; // integer truncation truncates towards zero
-            }
-            else if ((xIndex == this.SizeX) && (x == this.Transform.OriginX + this.Transform.CellWidth * this.SizeX))
-            {
-                // TODO: support rotated rasters
-                xIndex -= 1; // if x lies exactly on grid edge, consider point part of the grid
-            }
-
-            if (yIndexFractional < 0.0)
-            {
-                --yIndex; // integer truncation truncates towards zero
-            }
-            else if (yIndex == this.SizeY)
-            {
-                // similarly, if y lies exactly on grid edge consider point part of the grid
-                // TODO: support rotated rasters
-                if (this.Transform.CellHeight < 0.0)
-                {
-                    if (y == this.Transform.OriginY + this.Transform.CellHeight * this.SizeX)
-                    {
-                        yIndex -= 1;
-                    }
-                }
-                else
-                {
-                    if (y == this.Transform.OriginY)
-                    {
-                        yIndex -= 1;
-                    }
-                }
-            }
 
             return (xIndex, yIndex);
         }

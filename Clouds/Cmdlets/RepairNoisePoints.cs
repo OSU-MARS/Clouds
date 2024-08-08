@@ -10,6 +10,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsDiagnostic.Repair, "NoisePoints")]
     public class RepairNoisePoints : LasTilesCmdlet
     {
+        private readonly CancellationTokenSource cancellationTokenSource;
         private RepairNoiseReadWrite? tileChecks;
 
         [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles.")]
@@ -30,6 +31,7 @@ namespace Mars.Clouds.Cmdlets
 
         public RepairNoisePoints()
         {
+            this.cancellationTokenSource = new();
             this.tileChecks = null;
 
             this.Dtm = String.Empty;
@@ -54,7 +56,7 @@ namespace Mars.Clouds.Cmdlets
                 // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
                 // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
                 // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                if (this.Stopping || tileChecks.CancellationTokenSource.IsCancellationRequested)
+                if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                 {
                     break;
                 }
@@ -97,7 +99,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks checkTasks = new(checkThreads, () =>
             {
                 this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, this.tileChecks);
-            }, this.tileChecks.CancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, this.tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + this.tileChecks.PointsReclassified + (this.tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
             this.WriteProgress(progress);
@@ -115,7 +117,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.tileChecks?.CancellationTokenSource.Cancel();
+            this.CancellationTokenSource.Cancel();
             base.StopProcessing();
         }
 

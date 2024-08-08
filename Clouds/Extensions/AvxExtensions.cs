@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -7,6 +8,47 @@ namespace Mars.Clouds.Extensions
 {
     internal static class AvxExtensions
     {
+        /// <summary>
+        /// Element by element addition of <paramref name="vector"/> to <paramref name="sum"/>.
+        /// </summary>
+        public unsafe static void Accumulate(Int32[] vector, Int32[] sum)
+        {
+            Debug.Assert(vector.Length == sum.Length);
+
+            // see https://devblogs.microsoft.com/dotnet/hardware-intrinsics-in-net-core/ for basic profiling
+            // Unrolled for potentially 2 * (64 bytes/cycle read + 32 bytes/cycle store) = 128 + 64 bytes/cycle.
+            // Zen 3 and 4 cores: 3 256 bit integer loads + 2 stores/cycle = 96 + 64 bytes/cycle
+            // Zen 5 cores: 2 512 bit loads + 2 256 bit stores/cycle = 128 + 64 bytes/cycle
+            const int stride = 256 / 32;
+            const int loopStride = 2 * stride;
+            int vectorEndIndexAvx = loopStride * (vector.Length / loopStride);
+            fixed (Int32* vectorStart = &vector[0])
+            fixed (Int32* sumStart = &sum[0])
+            {
+                Int32* sumAddress = sumStart;
+                Int32* vectorEndAvx = vectorStart + vectorEndIndexAvx;
+                for (Int32* vectorAddress = vectorStart; vectorAddress < vectorEndAvx; sumAddress += stride, vectorAddress += stride)
+                {
+                    Vector256<Int32> sum256lower = Avx2.LoadVector256(sumAddress);
+                    Vector256<Int32> value256lower = Avx2.LoadVector256(vectorAddress);
+                    sum256lower = Avx2.Add(value256lower, sum256lower);
+                    Avx2.Store(sumAddress, sum256lower);
+
+                    sumAddress += stride;
+                    vectorAddress += stride;
+
+                    Vector256<Int32> sum256upper = Avx2.LoadVector256(sumAddress);
+                    Vector256<Int32> value256upper = Avx2.LoadVector256(vectorAddress);
+                    sum256upper = Avx2.Add(value256upper, sum256upper);
+                    Avx2.Store(sumAddress, sum256upper);
+                }
+            }
+            for (int scalarIndex = vectorEndIndexAvx; scalarIndex < vector.Length; ++scalarIndex)
+            {
+                sum[scalarIndex] += vector[scalarIndex];
+            }
+        }
+
         /// <summary>
         /// Expand 16 bit signed values to 64 bit signed and accumulate.
         /// </summary>
@@ -58,6 +100,13 @@ namespace Mars.Clouds.Extensions
             Vector128<float> value128 = Vector128.CreateScalarUnsafe(value);
             return Avx2.BroadcastScalarToVector256(value128);
         }
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector256<int> BroadcastScalarToVector256(int value)
+        //{
+        //    Vector128<int> value128 = Vector128.CreateScalarUnsafe(value);
+        //    return Avx2.BroadcastScalarToVector256(value128);
+        //}
 
         public static unsafe void Convert(sbyte[] source, Int16[] destination)
         {
@@ -524,6 +573,80 @@ namespace Mars.Clouds.Extensions
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
             {
                 destination[scalarIndex] = source[scalarIndex];
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void HistogramIncrement(int[] histogram, Vector256<int> histogramIndex256)
+        {
+            // can potentially use gather but only if multiple increments on the same index are detected
+            // scatter is in AVX-512
+            Vector128<int> histogramIndexLower128 = histogramIndex256.GetLower();
+            int histogramIndex0 = histogramIndexLower128.ToScalar();
+            ++histogram[histogramIndex0];
+            int histogramIndex1 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32OneToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex1];
+            int histogramIndex2 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32TwoToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex2];
+            int histogramIndex3 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32ThreeToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex3];
+
+            Vector128<int> histogramIndexUpper128 = histogramIndex256.GetUpper();
+            int histogramIndex4 = histogramIndexUpper128.ToScalar();
+            ++histogram[histogramIndex4];
+            int histogramIndex5 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32OneToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex5];
+            int histogramIndex6 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32TwoToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex6];
+            int histogramIndex7 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32ThreeToZero).AsInt32().ToScalar();
+            ++histogram[histogramIndex7];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void HistogramIncrement(int[] histogram, Vector256<int> histogramIndex256, int mask)
+        {
+            Vector128<int> histogramIndexLower128 = histogramIndex256.GetLower();
+            if ((mask & 0x01) == 0x00) // mask is set if value is no data
+            {
+                int histogramIndex0 = histogramIndexLower128.ToScalar();
+                ++histogram[histogramIndex0];
+            }
+            if ((mask & 0x02) == 0x00)
+            {
+                int histogramIndex1 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32OneToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex1];
+            }
+            if ((mask & 0x04) == 0x00)
+            {
+                int histogramIndex2 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32TwoToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex2];
+            }
+            if ((mask & 0x08) == 0x00)
+            {
+                int histogramIndex3 = Avx.Permute(histogramIndexLower128.AsSingle(), Constant.Simd128.Copy32ThreeToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex3];
+            }
+
+            Vector128<int> histogramIndexUpper128 = histogramIndex256.GetUpper();
+            if ((mask & 0x10) == 0x00)
+            {
+                int histogramIndex4 = histogramIndexUpper128.ToScalar();
+                ++histogram[histogramIndex4];
+            }
+            if ((mask & 0x20) == 0x00)
+            {
+                int histogramIndex5 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32OneToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex5];
+            }
+            if ((mask & 0x40) == 0x00)
+            {
+                int histogramIndex6 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32TwoToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex6];
+            }
+            if ((mask & 0x80) == 0x00)
+            {
+                int histogramIndex7 = Avx.Permute(histogramIndexUpper128.AsSingle(), Constant.Simd128.Copy32ThreeToZero).AsInt32().ToScalar();
+                ++histogram[histogramIndex7];
             }
         }
 
@@ -1060,6 +1183,15 @@ namespace Mars.Clouds.Extensions
                 }
             }
         }
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector256<int> Not(Vector256<int> mask)
+        //{
+        //    // use integer compare to produce -1 and set all bits for xor to flip
+        //    // Float compare behaves correctly when mask values are zero but, since all bits set is NaN, CompareEqual() and CompareOrdered() return zero
+        //    // rather than an integer -1 to set all bits.
+        //    return Avx2.Xor(mask, Avx2.CompareEqual(mask, mask));
+        //}
 
         public static unsafe void Pack(Int32[] source, sbyte[] destination, bool noDataIsSaturatingFromAbove)
         {

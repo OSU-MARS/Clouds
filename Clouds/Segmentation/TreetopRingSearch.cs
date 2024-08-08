@@ -1,31 +1,17 @@
 ﻿using Mars.Clouds.GdalExtensions;
 using System;
 using System.Diagnostics;
-using System.IO;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopRingSearch(string? dsmBandName, string? dtmBandName) : TreetopSearch<TreetopRingSearchState>(dsmBandName, dtmBandName)
+    internal class TreetopRingSearch(string? dsmBandName) : TreetopSearch(dsmBandName)
     {
-        protected override TreetopRingSearchState CreateSearchState(string tileName, VirtualRasterNeighborhood8<float> dsmNeighborhood, VirtualRasterNeighborhood8<float> dtmNeighborhood)
+        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float dtmZ, TreetopSearchState searchState)
         {
-            string? ringDiagnosticsFilePath = null;
-            if (String.IsNullOrWhiteSpace(this.DiagnosticsPath) == false)
-            {
-                ringDiagnosticsFilePath = Path.Combine(this.DiagnosticsPath, tileName + Constant.File.GeoPackageExtension);
-            }
-            return new TreetopRingSearchState(dsmNeighborhood, dtmNeighborhood, ringDiagnosticsFilePath)
-            {
-                MinimumCandidateHeight = this.MinimumTreetopHeight
-            };
-        }
+            Debug.Assert(searchState.CellHeight == searchState.CellWidth, "Rectangular DSM cells are not currently supported.");
 
-        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int dsmXindex, int dsmYindex, float dsmZ, float dtmElevation, TreetopRingSearchState searchState)
-        {
-            Debug.Assert(searchState.DsmCellHeight == searchState.DsmCellWidth, "Rectangular DSM cells are not currently supported.");
-
-            double dsmCellSizeInCrsUnits = searchState.DsmCellHeight;
-            float heightInCrsUnits = dsmZ - dtmElevation;
+            double dsmCellSizeInCrsUnits = searchState.CellHeight;
+            float heightInCrsUnits = dsmZ - dtmZ;
             float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
             float searchRadiusInCrsUnits = Single.Min(0.045F * heightInM + 0.5F, 4.0F) / searchState.CrsLinearUnits; // max 4 m radius
 
@@ -40,6 +26,7 @@ namespace Mars.Clouds.Segmentation
             Span<float> maxRingHeight = stackalloc float[maxRingIndex];
             Span<float> minRingHeight = stackalloc float[maxRingIndex];
             int maxRingIndexEvaluated = -1;
+            VirtualRasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
             for (int ringIndex = 0; ringIndex < maxRingIndex; ++ringIndex)
             {
                 Ring ring = Ring.Rings[ringIndex];
@@ -48,9 +35,9 @@ namespace Mars.Clouds.Segmentation
                 float ringMaximumZ = Single.MinValue;
                 for (int cellIndex = 0; cellIndex < ring.Count; ++cellIndex)
                 {
-                    int searchXindex = dsmXindex + ring.XIndices[cellIndex];
-                    int searchYindex = dsmYindex + ring.YIndices[cellIndex];
-                    if (searchState.DsmNeighborhood.TryGetValue(searchXindex, searchYindex, out float searchZ) == false)
+                    int searchXindex = indexX + ring.XIndices[cellIndex];
+                    int searchYindex = indexY + ring.YIndices[cellIndex];
+                    if (surfaceNeighborhood.TryGetValue(searchXindex, searchYindex, out float searchZ) == false)
                     {
                         continue;
                     }
@@ -72,7 +59,7 @@ namespace Mars.Clouds.Segmentation
                             // has had a 2.7 m spacing.
                             // Problem: can produce a false or incorrectly placed treetop if not all cells in the patch are local maxima.
                             dsmCellInSimilarElevationGroup = true;
-                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(dsmXindex, dsmYindex, dsmZ, searchXindex, searchYindex, maxRingIndex);
+                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(indexX, indexY, dsmZ, searchXindex, searchYindex, maxRingIndex);
                         }
                     }
 
@@ -128,13 +115,6 @@ namespace Mars.Clouds.Segmentation
             Debug.Assert((Single.IsNaN(netProminence) == false) && (netProminence > -100000.0F) && (netProminence < 10000.0F));
 
             float netProminenceNormalized = netProminence / heightInCrsUnits;
-            if ((searchState.RingDiagnostics != null) && (maxRingIndexEvaluated >= minRingIndexToLog))
-            {
-                (double x, double y) = searchState.Dsm.Transform.GetCellCenter(dsmXindex, dsmYindex);
-                double localMaximaRadiusInCrsUnits = dsmCellSizeInCrsUnits * localMaximaRadiusInCells;
-                searchState.RingDiagnostics.Add(searchState.NextTreeID, x, y, dtmElevation, dsmZ, dsmCellInSimilarElevationGroup, localMaximaRadiusInCrsUnits, netProminenceNormalized, maxRingIndexEvaluated, maxRingHeight, minRingHeight);
-            }
-
             if (higherCellWithinInnerRings || (netProminenceNormalized <= 0.02F))
             {
                 return (false, -1);

@@ -1,8 +1,9 @@
-﻿using OSGeo.OSR;
+﻿using Mars.Clouds.Extensions;
+using OSGeo.OSR;
 
 namespace Mars.Clouds.GdalExtensions
 {
-    public class GridNullable<TCell> : Grid where TCell : class? // can't derive from Grid<TCell> due to C# requiring different nullability in class constraint
+    public class GridNullable<TCell> : Grid where TCell : class // can't derive from Grid<TCell> due to C# requiring different nullability in class constraint
     {
         protected TCell?[] Data { get; private init; }
 
@@ -18,7 +19,12 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public GridNullable(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
-            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
+            : this(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
+        {
+        }
+
+        public GridNullable(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells, bool cloneCrsAndTransform)
+            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform)
         {
             this.Data = new TCell?[this.Cells];
         }

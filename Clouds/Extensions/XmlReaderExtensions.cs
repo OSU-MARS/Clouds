@@ -169,13 +169,13 @@ namespace Mars.Clouds.Extensions
             return elementValue;
         }
 
-        public static int[] ReadElementContentAsPipeIntArray(this XmlReader reader)
+        public static UInt32[] ReadElementContentAsPipeUIntArray(this XmlReader reader)
         {
             string[] elementAsStringArray = reader.ReadElementContentAsString().Split('|');
-            int[] elementValue = new int[elementAsStringArray.Length];
+            UInt32[] elementValue = new UInt32[elementAsStringArray.Length];
             for (int index = 0; index < elementAsStringArray.Length; ++index)
             {
-                if (Int32.TryParse(elementAsStringArray[index], out int value) == false)
+                if (UInt32.TryParse(elementAsStringArray[index], out UInt32 value) == false)
                 {
                     throw new XmlException(reader.Name + " contains non-integer value '" + elementAsStringArray[index] + "'.");
                 }

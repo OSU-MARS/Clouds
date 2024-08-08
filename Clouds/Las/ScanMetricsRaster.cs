@@ -120,6 +120,21 @@ namespace Mars.Clouds.Las
             throw new NotImplementedException(); // TODO when needed
         }
 
+        public override void ReturnBands(RasterBandPool dataBufferPool)
+        {
+            this.AcceptedPoints.ReturnData(dataBufferPool);
+            this.EdgeOfFlightLine.ReturnData(dataBufferPool);
+            this.GpstimeMin.ReturnData(dataBufferPool);
+            this.GpstimeMean.ReturnData(dataBufferPool);
+            this.GpstimeMax.ReturnData(dataBufferPool);
+            this.NoiseOrWithheld.ReturnData(dataBufferPool);
+            this.Overlap.ReturnData(dataBufferPool);
+            this.ScanAngleMeanAbsolute.ReturnData(dataBufferPool);
+            this.ScanAngleMin.ReturnData(dataBufferPool);
+            this.ScanAngleMax.ReturnData(dataBufferPool);
+            this.ScanDirectionMean.ReturnData(dataBufferPool);
+        }
+
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
             if ((name == null) || (String.Equals(name, this.AcceptedPoints.Name, StringComparison.Ordinal)))

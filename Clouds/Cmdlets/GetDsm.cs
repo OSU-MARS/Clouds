@@ -16,8 +16,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Dsm")]
     public class GetDsm : LasTilesToTilesCmdlet
     {
-        private DsmReadCreateWrite? dsmReadCreateWrite;
-
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "Path to write DSM to as a GeoTIFF or path to a directory to write DSM tiles to. The DSM's cell sizes and positions will be the same as the DTM's.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
@@ -36,8 +34,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetDsm()
         {
-            this.dsmReadCreateWrite = null;
-
             this.Dsm = String.Empty;
             this.Dtm = String.Empty;
             this.DtmBand = null;
@@ -64,7 +60,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
-            this.dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
+            DsmReadCreateWrite dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
             DigitalSufaceModelBands dsmBands = DigitalSufaceModelBands.Default;
             if (Single.IsNaN(this.SubsurfaceGap))
             {
@@ -94,7 +90,7 @@ namespace Mars.Clouds.Cmdlets
                 RasterBand<float>? dtmTile = null;
                 byte[]? pointReadBuffer = null;
                 float[]? dsmSubsurfaceBuffer = null;
-                while (this.dsmReadCreateWrite.TileWritesInitiated < lasGrid.NonNullCells)
+                while (dsmReadCreateWrite.TileWritesInitiated < lasGrid.NonNullCells)
                 {
                     // create canopy maxima models and write as many tiles as are available for completion
                     // An emphasis on completion minimizes total memory footporint by keeping as few tiles in DDR as is practical.
@@ -104,20 +100,24 @@ namespace Mars.Clouds.Cmdlets
                         DigitalSurfaceModel? dsmTileToCmmAndWrite = null;
                         int tileWriteIndexX = -1;
                         int tileWriteIndexY = -1;
-                        lock (this.dsmReadCreateWrite.Dsm)
+                        lock (dsmReadCreateWrite)
                         {
-                            if (this.dsmReadCreateWrite.TryGetNextTileWriteIndex(out tileWriteIndexX, out tileWriteIndexY, out dsmTileToCmmAndWrite))
+                            if (dsmReadCreateWrite.TryGetNextTileToWrite(out tileWriteIndexX, out tileWriteIndexY, out dsmTileToCmmAndWrite))
                             {
-                                ++this.dsmReadCreateWrite.TileWritesInitiated;
+                                ++dsmReadCreateWrite.TileWritesInitiated;
                             }
                             else
                             {
+                                if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
+                                {
+                                    return;
+                                }
                                 noTilesAvailableForWrite = true;
                             }
                         }
                         if (dsmTileToCmmAndWrite != null)
                         {
-                            VirtualRasterNeighborhood8<float> tileNeighborhood = this.dsmReadCreateWrite.Dsm.GetNeighborhood8<float>(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite.Surface.Name);
+                            VirtualRasterNeighborhood8<float> tileNeighborhood = dsmReadCreateWrite.Dsm.GetNeighborhood8<float>(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite.Surface.Name);
                             Debug.Assert(Object.ReferenceEquals(dsmTileToCmmAndWrite.Surface, tileNeighborhood.Center));
                             Binomial.Smooth3x3(tileNeighborhood, dsmTileToCmmAndWrite.CanopyMaxima3);
 
@@ -125,26 +125,26 @@ namespace Mars.Clouds.Cmdlets
                             {
                                 dsmTileToCmmAndWrite.Write(dsmTileToCmmAndWrite.FilePath, this.CompressRasters);
                             }
-                            lock (this.dsmReadCreateWrite.Dsm)
+                            lock (dsmReadCreateWrite)
                             {
                                 // mark tile as written even when NoWrite is set so that virtual raster completion's updated and the tile's returned to the object pool
                                 // Since OnTileWritten() returns completed tiles to the DSM object pool the lock taken here must be on the
                                 // same object as when tiles are requested from the pool.
-                                this.dsmReadCreateWrite.OnTileWritten(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite);
+                                dsmReadCreateWrite.OnTileWritten(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite);
                             }
                         }
 
-                        if (this.Stopping || this.dsmReadCreateWrite.CancellationTokenSource.IsCancellationRequested)
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             return;
                         }
                     }
 
                     // if all available tiles are completed and tiles remain to be read, read another tile and create its DSM
-                    if (this.dsmReadCreateWrite.TileReadIndex < lasGrid.Cells)
+                    if (dsmReadCreateWrite.TileReadIndex < lasGrid.Cells)
                     {
-                        readSemaphore.Wait(this.dsmReadCreateWrite.CancellationTokenSource.Token);
-                        if (this.Stopping || this.dsmReadCreateWrite.CancellationTokenSource.IsCancellationRequested)
+                        readSemaphore.Wait(this.CancellationTokenSource.Token);
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             // task is cancelled so point in looking for a tile to read
                             // Also not valid to continue if the read semaphore wasn't entered due to cancellation.
@@ -152,7 +152,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         LasTile? lasTile = null;
-                        for (int tileReadIndex = this.dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileReadIndex < lasGrid.Cells; tileReadIndex = this.dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
+                        for (int tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileReadIndex < lasGrid.Cells; tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
                         {
                             lasTile = lasGrid[tileReadIndex];
                             if (lasTile == null)
@@ -173,37 +173,18 @@ namespace Mars.Clouds.Cmdlets
 
                             // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
                             // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
-                            if ((this.dsmReadCreateWrite.Las.NonNullCells == 1) && (this.dsmReadCreateWrite.Dsm.TileCount == 0))
+                            if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.NonNullTileCount == 0))
                             {
-                                this.dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
+                                dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
                             }
 
-                            // pull DSM tile from object cache or create a new tile if needed
+                            // create new DSM tile
                             // Not ideal to call DigitalSurfaceModel..ctor() from within the read semaphore but initial creation is not usefully
                             // possible until the DTM has been read and Reset() of an object pooled DTM tile is inexpensive compared to the .las
                             // read cost.
-                            DigitalSurfaceModel? dsmTile = null;
-                            if (this.dsmReadCreateWrite.TilePool.Count > 0)
-                            {
-                                lock (this.dsmReadCreateWrite.Dsm)
-                                {
-                                    // must lock on the same object as the call to OnTileWritten() written above
-                                    // If the locks aren't congruent then enqueue/dequeue race conditions can result in multiple threads using the
-                                    // same DigitalSurfaceModel instance concurrently.
-                                    // No obvious value in checking the pool count again as TryGet() also does that.
-                                    this.dsmReadCreateWrite.TilePool.TryGet(out dsmTile);
-                                }
-                            }
-
                             string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
-                            if (dsmTile == null)
-                            {
-                                dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile);
-                            }
-                            else
-                            {
-                                dsmTile.Reset(dsmTilePath, lasTile, dtmTile); // update to new path and clear all bands
-                            }
+                            DigitalSurfaceModel dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile, dsmReadCreateWrite.RasterBandPool);
+
                             // assertions for fully tiled cases
                             // Unlikely to hold for untiled cases, such as UAV flights or handheld scans.
                             Debug.Assert(SpatialReferenceExtensions.IsSameCrs(dsmTile.Crs, dtmTile.Crs) && dsmTile.IsSameExtentAndSpatialResolution(dtmTile));
@@ -214,13 +195,12 @@ namespace Mars.Clouds.Cmdlets
                             pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer, ref dsmSubsurfaceBuffer);
                             readSemaphore.Release(); // exit semaphore as DTM and .las file have both been read
 
-                            this.dsmReadCreateWrite.IncrementTilesReadThreadSafe();
-
                             dsmTile.OnPointAdditionComplete(dtmTile, this.SubsurfaceGap, dsmSubsurfaceBuffer);
-                            lock (this.dsmReadCreateWrite.Dsm) // all DSM create and write operations lock on DSM virtual raster
+                            lock (dsmReadCreateWrite) // all DSM create and write operations lock on DSM virtual raster
                             {
-                                // (int dsmTileIndexX, int dsmTileIndexY) = this.dsmReadCreateWrite.Dsm.Add(dsmTileToAdd); // sometimes useful to get tile's xy position in grid when debugging
-                                this.dsmReadCreateWrite.Dsm.Add(dsmTile);
+                                (int dsmTileIndexX, int dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTile);
+                                dsmReadCreateWrite.OnTileRead(dsmTileIndexX, dsmTileIndexY);
+                                dsmReadCreateWrite.OnTileCreated(dsmTileIndexX, dsmTileIndexY);
                             }
 
                             // a tile has been read and its DSM created so exit creation loop to check for completable tiles
@@ -234,16 +214,16 @@ namespace Mars.Clouds.Cmdlets
                         }
                     }
                 }
-            }, this.dsmReadCreateWrite.CancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, this.dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
             this.WriteProgress(progress);
             while (dsmTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = this.dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count);
-                progress.Update(this.dsmReadCreateWrite.TilesWritten, lasGrid.NonNullCells);
+                progress.StatusDescription = dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count);
+                progress.Update(dsmReadCreateWrite.TilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
 
@@ -257,14 +237,8 @@ namespace Mars.Clouds.Cmdlets
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose(this.dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (this.dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.ToElapsedString() + ": " + this.dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (this.dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (this.dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (this.dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
+            this.WriteVerbose(dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.ToElapsedString() + ": " + dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.dsmReadCreateWrite?.CancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, DigitalSurfaceModel>
@@ -276,7 +250,6 @@ namespace Mars.Clouds.Cmdlets
             public LasTileGrid Las { get; private init; }
 
             public float MeanPointsPerTile { get; private init; }
-            public int TileWritesInitiated { get; set; }
             public UInt64 TotalNumberOfPoints { get; private init; }
             public float TotalPointDataInGB { get; private init; }
 
@@ -294,7 +267,7 @@ namespace Mars.Clouds.Cmdlets
                 this.Dsm = dsm;
                 this.DtmPathIsDirectory = dtmPathIsDirectory;
                 this.Las = lasGrid;
-                this.TileWritesInitiated = 0;
+                this.TileCreationDoesNotRequirePreviousRow = true;
 
                 this.TotalNumberOfPoints = 0;
                 long totalTileSizeInBytes = 0;
@@ -315,7 +288,7 @@ namespace Mars.Clouds.Cmdlets
             public override string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
             {
                 string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
-                                this.Dsm.TileCount + (this.Dsm.TileCount == 1 ? " DSM created, " : " DSMs created, ") +
+                                this.Dsm.NonNullTileCount + (this.Dsm.NonNullTileCount == 1 ? " DSM created, " : " DSMs created, ") +
                                 this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (noWrite ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;

@@ -10,12 +10,17 @@ namespace Mars.Clouds.GdalExtensions
         private double sum;
         private double sumOfSquares;
 
-        public long CellsSampled { get; set; }
+        public long CellsSampled { get; private set; }
         public bool IsApproximate { get; set; }
-        public long NoDataCells { get; set; }
-        public double Maximum { get; set; }
+        public long NoDataCells { get; private set; }
+        public int[] Histogram { get; private set; } // SIMD compatibility permits individual value counts up to max C# array size of 2³¹ elements
+        public double HistogramBinWidth { get; private set; }
+        public bool HistogramIncludesOutOfRange { get; private set; }
+        public double HistogramMaximum { get; private set; }
+        public double HistogramMinimum { get; private set; }
+        public double Maximum { get; private set; }
         public double Mean { get; private set; }
-        public double Minimum { get; set; }
+        public double Minimum { get; private set; }
         public double StandardDeviation { get; private set; }
 
         public RasterBandStatistics()
@@ -26,16 +31,19 @@ namespace Mars.Clouds.GdalExtensions
             this.CellsSampled = 0;
             this.IsApproximate = false;
             this.NoDataCells = 0;
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
             this.Maximum = Double.MinValue;
             this.Mean = Double.NaN;
             this.Minimum = Double.MaxValue;
             this.StandardDeviation = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(double[]? bandData, bool hasNoData, double noDataValue)
+        public unsafe RasterBandStatistics(double[] bandData, bool hasNoData, double noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             Vector256<double> maximum256 = Vector256.Create(Double.MinValue);
             Vector256<double> minimum256 = Vector256.Create(Double.MaxValue);
             Vector256<double> sum256 = Vector256<double>.Zero;
@@ -84,7 +92,7 @@ namespace Mars.Clouds.GdalExtensions
             for (int cellIndex = endIndexAvx; cellIndex < bandData.Length; ++cellIndex)
             {
                 double value = bandData[cellIndex];
-                if (hasNoData && (noDataIsNaN && Double.IsNaN(value)) || (value == noDataValue))
+                if (hasNoData && ((noDataIsNaN && Double.IsNaN(value)) || (value == noDataValue)))
                 {
                     ++this.NoDataCells;
                 }
@@ -113,12 +121,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(float[]? bandData, bool hasNoData, float noDataValue)
+        public unsafe RasterBandStatistics(float[] bandData, bool hasNoData, float noDataValue, float histogramMinimumBinEdge = Single.NaN, float histogramMaximumBinEdge = Single.NaN, float histogramBinWidth = Single.NaN)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             // sums are accumulated with doubles as a minor tradeoff of speed for accuracy
             Vector256<float> maximum256 = Vector256.Create(Single.MinValue);
             Vector256<float> minimum256 = Vector256.Create(Single.MaxValue);
@@ -126,6 +139,36 @@ namespace Mars.Clouds.GdalExtensions
             Vector256<double> sumOfSquares256 = Vector256<double>.Zero;
             Vector256<float> noData256 = Vector256.Create(noDataValue);
             bool noDataIsNaN = Single.IsNaN(noDataValue);
+
+            bool hasHistogram = Single.IsNaN(histogramBinWidth) == false;
+            if (hasHistogram)
+            {
+                if (histogramBinWidth <= 0.0F)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(histogramBinWidth), "Histogram bin width " + histogramBinWidth + " is zero or negative.");
+                }
+                if (histogramMinimumBinEdge >= histogramMaximumBinEdge)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(histogramMaximumBinEdge), "Minimum histogram bin edge " + histogramMinimumBinEdge + " is less than or equal to the maximum " + histogramMaximumBinEdge + ".");
+                }
+
+                int histogramBins = (int)((histogramMaximumBinEdge - histogramMinimumBinEdge) / histogramBinWidth + 0.5F);
+                if (histogramBins > 1000 * 1000) // sanity upper bound, QGIS readily uses 250k buckets
+                {
+                    throw new NotSupportedException(histogramBins + " bins is an unexpectedly large histogram.");
+                }
+                this.Histogram = new int[histogramBins]; // leave at default of zero
+            }
+            else
+            {
+                this.Histogram = [];
+            }
+            this.HistogramBinWidth = histogramBinWidth;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = histogramMaximumBinEdge;
+            this.HistogramMinimum = histogramMinimumBinEdge;
+            Vector256<float> histogramBinWidth256 = Vector256.Create(histogramBinWidth); // need to initialize, even if unused
+            Vector256<float> histogramMininum256 = Vector256.Create(histogramMinimumBinEdge);
 
             const int stride = 256 / 32; // read 8 floats
             int endIndexAvx = stride * (bandData.Length / stride);
@@ -143,6 +186,12 @@ namespace Mars.Clouds.GdalExtensions
                         data = Avx.BlendVariable(data, Vector256<float>.Zero, noDataMask);
 
                         int noDataFlags = Avx.MoveMask(noDataMask);
+                        if (hasHistogram)
+                        {
+                            Vector256<int> histogramIndex256 = Avx.ConvertToVector256Int32(Avx.Floor(Avx.Divide(Avx.Subtract(data, histogramMininum256), histogramBinWidth256)));
+                            AvxExtensions.HistogramIncrement(this.Histogram, histogramIndex256, noDataFlags);
+                        }
+
                         while (noDataFlags != 0)
                         {
                             ++this.NoDataCells;
@@ -153,6 +202,12 @@ namespace Mars.Clouds.GdalExtensions
                     {
                         maximum256 = Avx.Max(data, maximum256);
                         minimum256 = Avx.Min(data, minimum256);
+
+                        if (hasHistogram)
+                        {
+                            Vector256<int> histogramIndex256 = Avx.ConvertToVector256Int32(Avx.Floor(Avx.Divide(Avx.Subtract(data, histogramMininum256), histogramBinWidth256)));
+                            AvxExtensions.HistogramIncrement(this.Histogram, histogramIndex256);
+                        }
                     }
 
                     Vector256<double> lowerData = Avx.ConvertToVector256Double(data.GetLower());
@@ -173,7 +228,7 @@ namespace Mars.Clouds.GdalExtensions
             for (int cellIndex = endIndexAvx; cellIndex < bandData.Length; ++cellIndex)
             {
                 float value = bandData[cellIndex];
-                if (hasNoData && (noDataIsNaN && Single.IsNaN(value)) || (value == noDataValue))
+                if (hasNoData && ((noDataIsNaN && Single.IsNaN(value)) || (value == noDataValue)))
                 {
                     ++this.NoDataCells;
                 }
@@ -190,6 +245,12 @@ namespace Mars.Clouds.GdalExtensions
 
                     this.sum += value;
                     this.sumOfSquares += value * value;
+
+                    if (hasHistogram)
+                    {
+                        int histogramIndex = (int)((value - histogramMinimumBinEdge) / histogramBinWidth + 0.5F);
+                        ++this.Histogram[histogramIndex];
+                    }
                 }
             }
 
@@ -204,10 +265,8 @@ namespace Mars.Clouds.GdalExtensions
             this.SetMeanAndStandardDeviation(cellsWithData);
         }
 
-        public unsafe RasterBandStatistics(sbyte[]? bandData, bool hasNoData, sbyte noDataValue)
+        public unsafe RasterBandStatistics(sbyte[] bandData, bool hasNoData, sbyte noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             Vector256<sbyte> maximum256 = Vector256.Create(SByte.MinValue);
             Vector256<sbyte> minimum256 = Vector256.Create(SByte.MaxValue);
             Vector256<Int64> sum256int64 = Vector256<Int64>.Zero;
@@ -320,12 +379,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(Int16[]? bandData, bool hasNoData, Int16 noDataValue)
+        public unsafe RasterBandStatistics(Int16[] bandData, bool hasNoData, Int16 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             Vector256<Int16> maximum256 = Vector256.Create(Int16.MinValue);
             Vector256<Int16> minimum256 = Vector256.Create(Int16.MaxValue);
             Vector256<Int64> sum256int64 = Vector256<Int64>.Zero;
@@ -432,12 +496,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(Int32[]? bandData, bool hasNoData, Int32 noDataValue)
+        public unsafe RasterBandStatistics(Int32[] bandData, bool hasNoData, Int32 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             // sums are accumulated as 64 bit
             // 64 bit accumulator does not need clearing. 2^31 32 bit sums fit in a 64 bit value and C#'s maximum array length is 2^31
             // elements. Since 256 bit SIMD is used, each element of the accumulator receives at most 2^29 additions and the horizontal
@@ -526,12 +595,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(Int64[]? bandData, bool hasNoData, Int64 noDataValue)
+        public unsafe RasterBandStatistics(Int64[] bandData, bool hasNoData, Int64 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             // sums are accumulated as doubles as any 64 bit integer addition could overflow
             Vector256<Int64> maximum256 = Vector256.Create(Int64.MinValue);
             Vector256<Int64> minimum256 = Vector256.Create(Int64.MaxValue);
@@ -611,12 +685,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(byte[]? bandData, bool hasNoData, byte noDataValue)
+        public unsafe RasterBandStatistics(byte[] bandData, bool hasNoData, byte noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             Vector256<byte> maximum256 = Vector256.Create(Byte.MinValue);
             Vector256<byte> minimum256 = Vector256.Create(Byte.MaxValue);
             Vector256<Int64> sum256int64 = Vector256<Int64>.Zero;
@@ -727,12 +806,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(UInt16[]? bandData, bool hasNoData, UInt16 noDataValue)
+        public unsafe RasterBandStatistics(UInt16[] bandData, bool hasNoData, UInt16 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             Vector256<UInt16> maximum256 = Vector256.Create(UInt16.MinValue);
             Vector256<UInt16> minimum256 = Vector256.Create(UInt16.MaxValue);
             Vector256<Int64> sum256int64 = Vector256<Int64>.Zero;
@@ -843,12 +927,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(UInt32[]? bandData, bool hasNoData, UInt32 noDataValue)
+        public unsafe RasterBandStatistics(UInt32[] bandData, bool hasNoData, UInt32 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             // sums are accumulated as 64 bit
             // 64 bit accumulator does not need clearing. 2^31 32 bit sums fit in a 64 bit value and C#'s maximum array length is 2^31
             // elements. Since 256 bit SIMD is used, each element of the accumulator receives at most 2^29 additions and the horizontal
@@ -940,12 +1029,17 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
         }
 
-        public unsafe RasterBandStatistics(UInt64[]? bandData, bool hasNoData, UInt64 noDataValue)
+        public unsafe RasterBandStatistics(UInt64[] bandData, bool hasNoData, UInt64 noDataValue)
         {
-            ArgumentNullException.ThrowIfNull(bandData);
-
             // mostly scalar due to lack of AVX2 epu64 support (added in AVX-512VL)
             UInt64 maximum = UInt64.MinValue;
             UInt64 minimum = UInt64.MaxValue;
@@ -1083,6 +1177,18 @@ namespace Mars.Clouds.GdalExtensions
                 this.Maximum = (double)maximum;
             }
             this.SetMeanAndStandardDeviation(cellsWithData);
+
+            // histogram is empty as it was not specified
+            this.Histogram = [];
+            this.HistogramBinWidth = Double.NaN;
+            this.HistogramIncludesOutOfRange = false;
+            this.HistogramMaximum = Double.NaN;
+            this.HistogramMinimum = Double.NaN;
+        }
+
+        public bool HasHistogram
+        {
+            get { return this.Histogram.Length > 0; }
         }
 
         public void Add(RasterBandStatistics other)
@@ -1109,6 +1215,28 @@ namespace Mars.Clouds.GdalExtensions
             // invalidate any exsting mean and standard deviation until OnAdditionComplete() is called
             this.Mean = Double.NaN;
             this.StandardDeviation = Double.NaN;
+
+            if (this.HasHistogram)
+            {
+                // accumulate histogram counts
+                // This can easily be relaxed to support merging of aligned histograms. Resampling of unalinged histograms is more difficult.
+                if ((this.HistogramBinWidth != other.HistogramBinWidth) || (this.HistogramMinimum != other.HistogramMinimum) || (this.HistogramMaximum != other.HistogramMaximum) || (this.Histogram.Length != other.Histogram.Length))
+                {
+                    throw new NotSupportedException("Histograms are mismatched. Bin width of " + this.HistogramBinWidth + " versus " + other.HistogramBinWidth + ", minumum " + this.HistogramMinimum + " versus " + other.HistogramMinimum + ", maximum " + this.HistogramMaximum + " versus " + other.HistogramMaximum + ", and " + this.Histogram.Length + " versus " + other.Histogram.Length + " bins.");
+                }
+
+                AvxExtensions.Accumulate(other.Histogram, this.Histogram);
+                this.HistogramIncludesOutOfRange |= other.HistogramIncludesOutOfRange;
+            }
+            else
+            {
+                this.Histogram = new int[other.Histogram.Length];
+                Array.Copy(other.Histogram, this.Histogram, other.Histogram.Length);
+                this.HistogramBinWidth = other.HistogramBinWidth;
+                this.HistogramIncludesOutOfRange = other.HistogramIncludesOutOfRange;
+                this.HistogramMaximum = other.HistogramMaximum;
+                this.HistogramMinimum = other.HistogramMinimum;
+            }
         }
 
         public double GetDataFraction()

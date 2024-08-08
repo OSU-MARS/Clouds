@@ -39,6 +39,7 @@ manipulating point clouds, working with virtual rasters, and characterizing driv
 - `Get-ScanMetrics`: similar to `Get-GridMetrics` but reports on data acquisition (scan angle and direction, noise and withheld points, flags)
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
+- `Get-DsmSlopeAspect`: get slope and aspect of a digital surface, canopy maxima, canopy height model
 - `Register-Cloud`: set .las files' origin, coordinate system, and source ID
 - `Convert-CloudCrs`: reproject .las files to a new coordinate system, adding a vertical coordinate system if one is not present
 - `Remove-Points`: remove high noise, low noise, and withheld points from a point cloud
@@ -209,10 +210,11 @@ A few other performance details are notable.
   thread count fully utilizing an NVMe drive. The greater the throughput per thread, the more likely it is the optimum is a difficult to implement
   fractional number of threads.
 - IO througput above roughly 1 GB/s tend to be stressful to .NET memory management. Best practices are used for object pooling and large object
-  heap offloading but it can take longer for the garbage collector to work through tens of gigabytes of first generation, second generation, and
-  large objects than it does to run a cmdlet. Cmdlets may therefore request a second generation collection and compaction of the managed heap
-  just before they exit. Windows reports process memory consumption based on heap extent so, prior to compaction, Clouds cmdlets may appear to
-  be using substantially more memory than they actually are.
+  heap offloading (in general, data is pooled but metadata such as .las headers and raster band structure is not) but it can take longer for the 
+  garbage collector to work through tens of gigabytes of first generation, second generation, and large objects than it does to run a cmdlet. 
+  Cmdlets may therefore request a second generation collection and compaction of the managed heap just before they exit. Windows reports process 
+  memory consumption based on heap extent so, prior to compaction, Clouds cmdlets may appear to be using substantially more memory than they actually 
+  are.
 - Windows does not appear to have a documented, programmatic, non-administrative mechanism for determining the RAID level of arrays created with
   Disk Management (dynamic disks). As a result, Clouds assumes dynamic disks are RAID0 (striped) volumes with read speeds slow enough a single 
   read thread can fully utilize the array. For RAID1 (mirrored volumes) or RAID5 (parity), setting `-ReadThreads` to the number of data copies 

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
+using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -54,7 +55,7 @@ namespace Mars.Clouds.Cmdlets
             return Path.Combine(directoryPath, tileName + Constant.File.GeoTiffExtension);
         }
 
-        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData) where TTile : Raster, IRasterSerializable<TTile>
+        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData, CancellationTokenSource cancellationTokenSource) where TTile : Raster, IRasterSerializable<TTile>
         {
             Debug.Assert(this.MaxThreads > 0);
 
@@ -63,7 +64,7 @@ namespace Mars.Clouds.Cmdlets
             List<string> tilePaths = GdalCmdlet.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
             if (tilePaths.Count == 1)
             {
-                // synchronous read for single tiles
+                // synchronous read for single tile
                 TTile tile = TTile.Read(tilePaths[0], readData);
                 vrt.Add(tile);
             }
@@ -85,12 +86,12 @@ namespace Mars.Clouds.Cmdlets
                             ++tileRead.TilesRead;
                         }
                     }
-                }, tileRead.CancellationTokenSource);
+                }, cancellationTokenSource);
 
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = "Read " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
+                    progress.StatusDescription = (readData ? "Read " : "Read metadata of ") + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
                     progress.Update(tileRead.TilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }

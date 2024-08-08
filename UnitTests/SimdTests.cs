@@ -1,7 +1,10 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Numerics;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace Mars.Clouds.UnitTests
 {
@@ -104,6 +107,89 @@ namespace Mars.Clouds.UnitTests
                 Assert.IsTrue(destinationUInt16toUInt64[unsignedIndex] == unsignedIndex);
                 Assert.IsTrue(destinationUInt32toUInt64[unsignedIndex] == unsignedIndex);
             }
+        }
+
+        [TestMethod]
+        public void LowLevelAvx()
+        {
+            int[] value1 = [ 907, 671, 63, 876, 21, 399, 212, 203, 367, 474, 734, 400, 889, 536, 737, 806, 943, 563, 934, 346, 440, 143, 586, 14, 905, 263, 921, 131, 5, 278, 788, 615, 133, 773, 698, 186, 86, 462, 336 ];
+            int[] value2 = [ 264, 367,  41, 877, 478, 398, 945, 536, 933, 812, 168, 607, 162, 474, 306, 662, 680, 868, 984, 977, 292, 950, 763, 528,  58,  96, 293, 775, 623, 297, 615, 9, 911, 295, 386, 923, 797, 25, 1006 ];
+            int[] sum = new int[value1.Length];
+            int[] expectedSum = [ 1171, 1038, 104, 1753, 499, 797, 1157, 739, 1300, 1286, 902, 1007, 1051, 1010, 1043, 1468, 1623, 1431, 1918, 1323, 732, 1093, 1349, 542, 963, 359, 1214, 906, 628, 575, 1403, 624, 1044, 1068, 1084, 1109, 883, 487, 1342 ];
+            AvxExtensions.Accumulate(value1, sum);
+            AvxExtensions.Accumulate(value2, sum);
+            for (int index = 0; index < expectedSum.Length; ++index)
+            {
+                Assert.IsTrue(sum[index] == expectedSum[index]);
+            }
+
+            Vector256<Int64> sum256x16 = AvxExtensions.Accumulate(Vector256.Create(19, 5, 10, 16, 10, 32, 12, 1, 18, 15, 13, 6, 27, 15, 28, 0),
+                                                                  Vector256.Create(21, 24, 8, 6, 28, 10, 0, 30, 23, 10, 17, 32, 16, 16, 10, 1),
+                                                                  Vector256.Create(0, 1, 2, 3));
+            Vector256<Int64> sum256x32i = AvxExtensions.Accumulate(Vector256.Create(193, -743, 218, -155, 614, -698, -985, -757),
+                                                                   Vector256.Create(0, -1000, -233, 603));
+            Vector256<Int64> sum256x32u = AvxExtensions.Accumulate(Vector256.Create(766U, 407U, 13U, 637U, 412U, 1015U, 445U, 953U),
+                                                                   Vector256.Create(0, 1, 2, 3));
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(sum256x16, Vector256.Create(162, 128, 100, 95)).AsDouble()) == 0xf);
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(sum256x32i, Vector256.Create(807, -2441, -1000, -309)).AsDouble()) == 0xf);
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(sum256x32u, Vector256.Create(1178U, 1423U, 460U, 1593U)).AsDouble()) == 0xf);
+
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(AvxExtensions.BroadcastScalarToVector256(1.0F), Vector256.Create(1.0F)).AsSingle()) == 0xff);
+
+            // AvxExtensions.Convert() methods are covered by convert test case
+
+            int[] counts = new int[8];
+            Vector256<int> indices = Vector256.Create(6, 1, 1, 5, 1, 2, 6, 0);
+            AvxExtensions.HistogramIncrement(counts, indices);
+            Assert.IsTrue((counts[0] == 1) && (counts[1] == 3) && (counts[2] == 1) && (counts[3] == 0) && (counts[4] == 0) && (counts[5] == 1) && (counts[6] == 2) && (counts[7] == 0));
+            AvxExtensions.HistogramIncrement(counts, indices, 0xff); // should do nothing as all values are masked
+            Assert.IsTrue((counts[0] == 1) && (counts[1] == 3) && (counts[2] == 1) && (counts[3] == 0) && (counts[4] == 0) && (counts[5] == 1) && (counts[6] == 2) && (counts[7] == 0));
+            AvxExtensions.HistogramIncrement(counts, indices, 0x11);
+            Assert.IsTrue((counts[0] == 2) && (counts[1] == 5) && (counts[2] == 2) && (counts[3] == 0) && (counts[4] == 0) && (counts[5] == 2) && (counts[6] == 3) && (counts[7] == 0));
+
+            Assert.IsTrue(AvxExtensions.HorizontalAdd(Vector256<long>.Zero) == 0.0);
+            Assert.IsTrue(AvxExtensions.HorizontalAdd(Vector256<double>.Zero) == 0.0);
+
+            Assert.IsTrue(250 == AvxExtensions.HorizontalMax(Vector256.Create(27, 93, 136, 216, 129, 111, 131, 93, 68, 204, 23, 188, 98, 222, 110, 0, 217, 163, 250, 171, 80, 166, 65, 104, 43, 236, 36, 142, 201, 125, 162, 21)));
+            Assert.IsTrue(239 == AvxExtensions.HorizontalMax(Vector256.Create(75, 41, 12, 141, 96, 152, 146, 111, 164, 125, 40, 111, 35, 183, 102, 207, 219, 204, 119, 182, 28, 47, 190, 90, 194, 202, 129, 198, 239, 129, 147, 5)));
+            Assert.IsTrue(0.8202393 == AvxExtensions.HorizontalMax(Vector256.Create(0.6155281, 0.8202393, 0.1816277, 0.2263380)));
+            Assert.IsTrue(0.99499304F == AvxExtensions.HorizontalMax(Vector256.Create(0.35105008F, 0.88424787F, 0.99499304F, 0.12649337F, 0.09582475F, 0.76505798F, 0.38806603F, 0.14224096F)));
+            Assert.IsTrue(1488176320 == AvxExtensions.HorizontalMax(Vector256.Create(1137001349, -1734706585, 488997395, -1522569557, 282868905, 1488176320, -979376197, 487640939)));
+            Assert.IsTrue(6961037776494002176 == AvxExtensions.HorizontalMax(Vector256.Create(6961037776494002176, -2807752170164715520, -7264150532153933824, 3115508476961357824)));
+            Assert.IsTrue(115 == AvxExtensions.HorizontalMax(Vector256.Create(-39, 110, 36, 52, 115, -24, -37, 59, 15, -97, 41, -77, -42, -78, -39, -26, -108, 48, -51, -40, -124, -25, 12, -17, -27, 34, -115, 34, 46, 69, 85, 36)));
+            Assert.IsTrue(28358 == AvxExtensions.HorizontalMax(Vector256.Create(8564, -8939, -8372, -29526, -31296, -20642, -5361, 3664, 28358, -15199, 25302, 13767, 27643, 12139, -21693, -4486)));
+            Assert.IsTrue(3211430211 == AvxExtensions.HorizontalMax(Vector256.Create(2824859115, 414977336, 3211430211, 1848492662, 1429597508, 211753572, 524785824, 1683439179)));
+            Assert.IsTrue(15886905855480692736 == AvxExtensions.HorizontalMax(Vector256.Create(15886905855480692736, 359316646155780096, 5489323075960832000, 8407799966872895488)));
+
+            Assert.IsTrue(0 == AvxExtensions.HorizontalMin(Vector256.Create(27, 93, 136, 216, 129, 111, 131, 93, 68, 204, 23, 188, 98, 222, 110, 0, 217, 163, 250, 171, 80, 166, 65, 104, 43, 236, 36, 142, 201, 125, 162, 21)));
+            Assert.IsTrue(5 == AvxExtensions.HorizontalMin(Vector256.Create(75, 41, 12, 141, 96, 152, 146, 111, 164, 125, 40, 111, 35, 183, 102, 207, 219, 204, 119, 182, 28, 47, 190, 90, 194, 202, 129, 198, 239, 129, 147, 5)));
+            Assert.IsTrue(0.1816277 == AvxExtensions.HorizontalMin(Vector256.Create(0.6155281, 0.8202393, 0.1816277, 0.2263380)));
+            Assert.IsTrue(0.09582475F == AvxExtensions.HorizontalMin(Vector256.Create(0.35105008F, 0.88424787F, 0.99499304F, 0.12649337F, 0.09582475F, 0.76505798F, 0.38806603F, 0.14224096F)));
+            Assert.IsTrue(-1734706585 == AvxExtensions.HorizontalMin(Vector256.Create(1137001349, -1734706585, 488997395, -1522569557, 282868905, 1488176320, -979376197, 487640939)));
+            Assert.IsTrue(-7264150532153933824 == AvxExtensions.HorizontalMin(Vector256.Create(6961037776494002176, -2807752170164715520, -7264150532153933824, 3115508476961357824)));
+            Assert.IsTrue(-124 == AvxExtensions.HorizontalMin(Vector256.Create(-39, 110, 36, 52, 115, -24, -37, 59, 15, -97, 41, -77, -42, -78, -39, -26, -108, 48, -51, -40, -124, -25, 12, -17, -27, 34, -115, 34, 46, 69, 85, 36)));
+            Assert.IsTrue(-31296 == AvxExtensions.HorizontalMin(Vector256.Create(8564, -8939, -8372, -29526, -31296, -20642, -5361, 3664, 28358, -15199, 25302, 13767, 27643, 12139, -21693, -4486)));
+            Assert.IsTrue(211753572 == AvxExtensions.HorizontalMin(Vector256.Create(2824859115, 414977336, 3211430211, 1848492662, 1429597508, 211753572, 524785824, 1683439179)));
+            Assert.IsTrue(359316646155780096 == AvxExtensions.HorizontalMin(Vector256.Create(15886905855480692736, 359316646155780096, 5489323075960832000, 8407799966872895488)));
+
+            //Vector256<int> allBitsSet256x32 = AvxExtensions.Not(Vector256<int>.Zero);
+            //Vector256<int> zero256x32 = AvxExtensions.Not(allBitsSet256x32);
+            //Vector256<int> pattern256x32 = Vector256.Create(0, -1, 0, -1, 0, -1, 0, -1);
+            //Vector256<int> invert256x32 = AvxExtensions.Not(pattern256x32);
+            //Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(zero256x32, Vector256<int>.Zero).AsSingle()) == 0xff);
+            //Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(invert256x32, Vector256.Create(-1, 0, -1, 0, -1, 0, -1, 0)).AsSingle()) == 0xff);
+
+            // AvxExtensions.Pack() methods are covered by pack test case
+
+            Vector128<float> shuffleFloat = AvxExtensions.ShuffleInAndUp(4.0F, Vector128.Create(3.0F, 2.0F, 1.0F, 0.0F));
+            Vector128<byte> shuffleByte = AvxExtensions.ShuffleInAndUp(18, 17, 16, Vector128.Create((byte)15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0));
+            Assert.IsTrue(Avx.MoveMask(Avx.CompareEqual(shuffleFloat, Vector128.Create(4.0F, 3.0F, 2.0F, 1.0F))) == 0xf);
+            Assert.IsTrue(Avx.MoveMask(Avx.CompareEqual(shuffleByte, Vector128.Create((byte)18, 17, 16, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4))) == 0xffff);
+
+            Vector256<float> uintToFloat1 = AvxExtensions.ToFloat(Vector256.Create(3108057864U, 679060522U, 3632749772U, 108494550U, 2729892648U, 1756166596U, 2396313832U, 905862642U));
+            Vector256<float> uintToFloat2 = AvxExtensions.ToFloat(Vector256.Create(211016U, 127744U, 59032U, 207852U, 249130U, 48918U, 7886U, 129865U));
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(uintToFloat1, Vector256.Create(3108057864.0F, 679060522.0F, 3632749772.0F, 108494550.0F, 2729892648.0F, 1756166596.0F, 2396313832.0F, 905862642.0F))) == 0xff);
+            Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(uintToFloat2, Vector256.Create(211016.0F, 127744.0F, 59032.0F, 207852.0F, 249130.0F, 48918.0F, 7886.0F, 129865.0F))) == 0xff);
         }
 
         [TestMethod]

@@ -59,9 +59,9 @@ namespace Mars.Clouds.Vrt
             this.ReadXml(reader);
         }
 
-        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>?>? tileBandStatistics) where TTile : Raster
+        public void AppendBands<TTile>(string vrtDatasetDirectory, VirtualRaster<TTile> vrt, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>>? tileBandStatisticsByIndex) where TTile : Raster
         {
-            if ((vrt.TileCount == 0) || (vrtBandNames.Count == 0))
+            if ((vrt.NonNullTileCount == 0) || (vrtBandNames.Count == 0))
             {
                 // nothing to do
                 // Debatable whether requesting bands be appended from a VirtualRaster<T> without any tiles is an error.
@@ -74,10 +74,10 @@ namespace Mars.Clouds.Vrt
                 string vrtBandName = vrtBandNames[vrtBandIndex];
                 int tilesWithBand = vrt.TileCountByBand[vrtBandIndex];
                 int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[vrtBandIndex];
-                Debug.Assert((tilesWithBand <= vrt.TileCount) && (tilesWithNoDataValue <= tilesWithBand));
+                Debug.Assert((tilesWithBand <= vrt.NonNullTileCount) && (tilesWithNoDataValue <= tilesWithBand));
                 if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != tilesWithBand))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.TileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
+                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.NonNullTileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
                 }
 
                 // create band
@@ -107,7 +107,7 @@ namespace Mars.Clouds.Vrt
                         TTile? tile = vrt[tileIndexX, tileIndexY];
                         if (tile == null)
                         {
-                            Debug.Assert((tileBandStatistics == null) || (tileBandStatistics[tileIndexX, tileIndexY] == null));
+                            Debug.Assert((tileBandStatisticsByIndex == null) || (tileBandStatisticsByIndex[tileIndexX, tileIndexY] == null));
                             continue;
                         }
 
@@ -143,12 +143,12 @@ namespace Mars.Clouds.Vrt
                         band.Sources.Add(tileSource);
 
                         // statistics
-                        if (tileBandStatistics != null)
+                        if (tileBandStatisticsByIndex != null)
                         {
-                            List<RasterBandStatistics>? statisticsForTile = tileBandStatistics[tileIndexX, tileIndexY];
-                            if (statisticsForTile != null)
+                            List<RasterBandStatistics>? bandStatisticsForTile = tileBandStatisticsByIndex[tileIndexX, tileIndexY];
+                            if (bandStatisticsForTile != null)
                             {
-                                RasterBandStatistics tileStatisticsForBand = statisticsForTile[tileBandIndex];
+                                RasterBandStatistics tileStatisticsForBand = bandStatisticsForTile[tileBandIndex];
                                 vrtBandStatistics.Add(tileStatisticsForBand);
                                 ++tilesWithStatisticsForVrtBand;
                             }
@@ -156,22 +156,39 @@ namespace Mars.Clouds.Vrt
                     }
                 }
 
-                if (tileBandStatistics != null)
+                if (tileBandStatisticsByIndex != null)
                 {
-                    Debug.Assert(tilesWithStatisticsForVrtBand <= vrt.TileCount);
-                    vrtBandStatistics.IsApproximate = tilesWithStatisticsForVrtBand < vrt.TileCount;
+                    Debug.Assert(tilesWithStatisticsForVrtBand <= vrt.NonNullTileCount);
+                    vrtBandStatistics.IsApproximate = tilesWithStatisticsForVrtBand < vrt.NonNullTileCount;
                     vrtBandStatistics.OnAdditionComplete();
                     Debug.Assert(vrtBandStatistics.CellsSampled > 0);
 
-                    // add band statistics to metadata
+                    // add band statistics and, if available, histogram to metadata
                     band.Metadata.Add(vrtBandStatistics);
-
-                    // define crude histogram from band statistics
                     band.Histograms.Add(new(vrtBandStatistics));
                 }
 
                 this.Bands.Add(band);
             }
+        }
+
+        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string subdirectory, string vrtFileName)
+        {
+            string vrtBaseDirectoryPath = basePath;
+            if (basePathIsDirectory == false)
+            {
+                string? directoryPath = Path.GetDirectoryName(basePath);
+                if (directoryPath == null)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(basePath), ".vrt base path'" + basePath + "' does not contain a directory.");
+                }
+
+                vrtBaseDirectoryPath = directoryPath;
+            }
+
+            string vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            string vrtFilePath = Path.Combine(vrtDatasetDirectoryPath, vrtFileName);
+            return (vrtFilePath, vrtDatasetDirectoryPath);
         }
 
         protected override void ReadStartElement(XmlReader reader)

@@ -2,8 +2,8 @@
 {
     public enum TreetopDetectionMethod
     {
-        DsmRadius = 0,
         ChmRadius,
+        DsmRadius,
         DsmRing
     }
 }

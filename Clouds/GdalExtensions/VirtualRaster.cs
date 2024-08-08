@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Extensions;
-using Mars.Clouds.Las;
+﻿using Mars.Clouds.Las;
 using Mars.Clouds.Vrt;
 using OSGeo.GDAL;
 using OSGeo.OSR;
@@ -17,7 +16,7 @@ namespace Mars.Clouds.GdalExtensions
     {
         private SpatialReference? crs;
 
-        public int TileCount { get; protected set; }
+        public int NonNullTileCount { get; protected set; }
         public double TileCellSizeX { get; protected set; }
         public double TileCellSizeY { get; protected set; }
         public int TileSizeInCellsX { get; protected set; }
@@ -32,7 +31,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             this.crs = null;
 
-            this.TileCount = 0;
+            this.NonNullTileCount = 0;
             this.TileCellSizeX = Double.NaN;
             this.TileCellSizeY = Double.NaN;
             this.TileCountByBand = [];
@@ -41,6 +40,21 @@ namespace Mars.Clouds.GdalExtensions
             this.TilesWithNoDataValuesByBand = [];
             this.VirtualRasterSizeInTilesX = -1;
             this.VirtualRasterSizeInTilesY = -1;
+        }
+
+        protected VirtualRaster(VirtualRaster other)
+        {
+            this.crs = other.Crs.Clone();
+
+            this.NonNullTileCount = 0;
+            this.TileCellSizeX = other.TileCellSizeX;
+            this.TileCellSizeY = other.TileCellSizeY;
+            this.TileCountByBand = [];
+            this.TileSizeInCellsX = other.TileSizeInCellsX;
+            this.TileSizeInCellsY = other.TileSizeInCellsY;
+            this.TilesWithNoDataValuesByBand = [];
+            this.VirtualRasterSizeInTilesX = other.VirtualRasterSizeInTilesX;
+            this.VirtualRasterSizeInTilesY = other.VirtualRasterSizeInTilesY;
         }
 
         public SpatialReference Crs
@@ -66,42 +80,52 @@ namespace Mars.Clouds.GdalExtensions
 
     public class VirtualRaster<TTile> : VirtualRaster, IEnumerable<TTile> where TTile : Raster
     {
-        private GridNullable<TTile?>? tileGrid;
         private readonly List<TTile> ungriddedTiles;
 
         public List<DataType> BandDataTypes { get; private set; }
         public List<string> BandNames { get; private set; }
         public List<List<double>> NoDataValuesByBand { get; private set; }
+        public GridNullable<TTile>? TileGrid { get; private set; }
 
         public VirtualRaster()
             : base()
         {
-            this.tileGrid = null;
             this.ungriddedTiles = [];
 
             this.BandDataTypes = [];
             this.BandNames = [];
             this.NoDataValuesByBand = [];
+            this.TileGrid = null;
         }
 
         public VirtualRaster(LasTileGrid lasGrid)
             : this()
         {
-            this.tileGrid = new(lasGrid);
-
             this.Crs = lasGrid.Crs.Clone();
+            this.TileGrid = new(lasGrid);
 
             // no DTM information available, so no cell size information yet
             this.VirtualRasterSizeInTilesX = lasGrid.SizeX;
             this.VirtualRasterSizeInTilesY = lasGrid.SizeY;
         }
 
+        protected VirtualRaster(VirtualRaster other)
+            : base(other)
+        {
+            this.ungriddedTiles = [];
+
+            this.BandDataTypes = [];
+            this.BandNames = [];
+            this.NoDataValuesByBand = [];
+            this.TileGrid = null;
+        }
+
         public TTile? this[int cellIndex]
         {
             get 
             {
-                Debug.Assert(this.tileGrid != null);
-                return this.tileGrid[cellIndex]; 
+                Debug.Assert(this.TileGrid != null);
+                return this.TileGrid[cellIndex]; 
             }
         }
 
@@ -109,8 +133,8 @@ namespace Mars.Clouds.GdalExtensions
         {
             get 
             {
-                Debug.Assert(this.tileGrid != null);
-                return this.tileGrid[xIndex, yIndex]; 
+                Debug.Assert(this.TileGrid != null);
+                return this.TileGrid[xIndex, yIndex]; 
             }
         }
 
@@ -118,14 +142,14 @@ namespace Mars.Clouds.GdalExtensions
         {
             get 
             {
-                Debug.Assert(this.tileGrid != null);
-                return this.tileGrid.Transform; 
+                Debug.Assert(this.TileGrid != null);
+                return this.TileGrid.Transform; 
             }
         }
 
         public (int tileIndexX, int tileIndexY) Add(TTile tile)
         {
-            if ((this.tileGrid == null) && (this.ungriddedTiles.Count == 0))
+            if ((this.TileGrid == null) && (this.ungriddedTiles.Count == 0))
             {
                 // if no CRS information was specified at construction, latch CRS of first tile added
                 Debug.Assert(this.HasCrs == false);
@@ -144,41 +168,53 @@ namespace Mars.Clouds.GdalExtensions
                 {
                     this.BandDataTypes.Add(tileBand.GetGdalDataType());
                     this.BandNames.Add(tileBand.Name); // should names be checked for uniqueness or numbers inserted if null or empty?
-                    List<double> noDataValues = [];
-                    this.NoDataValuesByBand.Add(noDataValues);
-                    this.TileCountByBand.Add(1);
-                    this.TilesWithNoDataValuesByBand.Add(tileBand.HasNoDataValue ? 1 : 0);
                     if (tileBand.HasNoDataValue)
                     {
-                        noDataValues.Add(tileBand.GetNoDataValueAsDouble());
+                        this.NoDataValuesByBand.Add([ tileBand.GetNoDataValueAsDouble() ]);
+                        this.TilesWithNoDataValuesByBand.Add(1);
                     }
+                    else
+                    {
+                        this.NoDataValuesByBand.Add([]);
+                        this.TilesWithNoDataValuesByBand.Add(0);
+                    }
+                    this.TileCountByBand.Add(1);
                 }
             }
             else
             {
                 foreach (RasterBand tileBand in tile.GetBands())
                 {
+                    DataType tileBandDataType = tileBand.GetGdalDataType();
+
                     int vrtBandIndex = this.BandNames.IndexOf(tileBand.Name);
                     if (vrtBandIndex < 0)
                     {
-                        // TODO: insert new band name into virtual raster's bands
-                        throw new NotSupportedException("Tile '" + tile.FilePath + "' contains band '" + tileBand.Name + "', which has not been latched into in the virtual raster's list of band names.");
-                    }
+                        Debug.Assert((this.BandDataTypes.Count == this.BandNames.Count) && (this.BandNames.Count == this.NoDataValuesByBand.Count) && (this.BandNames.Count == this.TileCountByBand.Count) && (this.BandNames.Count == this.TilesWithNoDataValuesByBand.Count));
+                        vrtBandIndex = this.BandDataTypes.Count;
 
-                    DataType thisBandDataType = this.BandDataTypes[vrtBandIndex];
-                    DataType tileBandDataType = tileBand.GetGdalDataType();
-                    if (thisBandDataType != tileBandDataType)
+                        this.BandDataTypes.Add(tileBandDataType);
+                        this.BandNames.Add(tileBand.Name);
+                        this.NoDataValuesByBand.Add(tileBand.HasNoDataValue ? [] : [tileBand.GetNoDataValueAsDouble()]);
+                        this.TileCountByBand.Add(0); // incremented below
+                        this.TilesWithNoDataValuesByBand.Add(0); // incremented below
+                    }
+                    else
                     {
-                        if (DataTypeExtensions.IsExactlyExpandable(thisBandDataType, tileBandDataType))
+                        DataType thisBandDataType = this.BandDataTypes[vrtBandIndex];
+                        if (thisBandDataType != tileBandDataType)
                         {
-                            // widen band data type to accommodate new tile
-                            this.BandDataTypes[vrtBandIndex] = tileBandDataType;
-                        }
-                        else if (DataTypeExtensions.IsExactlyExpandable(tileBandDataType, thisBandDataType) == false)
-                        {
-                            // tile's data type is widenable to current band type
-                            // Subsequent widening of the virtual raster's band type remains compatible with the band type.
-                            throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have incompatible data types for band '" + this.BandNames[vrtBandIndex] + "' (index " + vrtBandIndex + "). Current type is " + thisBandDataType + " while tile has type " + tileBandDataType + "'.");
+                            if (DataTypeExtensions.IsExactlyExpandable(thisBandDataType, tileBandDataType))
+                            {
+                                // widen band data type to accommodate new tile
+                                this.BandDataTypes[vrtBandIndex] = tileBandDataType;
+                            }
+                            else if (DataTypeExtensions.IsExactlyExpandable(tileBandDataType, thisBandDataType) == false)
+                            {
+                                // tile's data type is widenable to current band type
+                                // Subsequent widening of the virtual raster's band type remains compatible with the band type.
+                                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have incompatible data types for band '" + this.BandNames[vrtBandIndex] + "' (index " + vrtBandIndex + "). Current type is " + thisBandDataType + " while tile has type " + tileBandDataType + "'.");
+                            }
                         }
                     }
 
@@ -229,7 +265,7 @@ namespace Mars.Clouds.GdalExtensions
 
             int tileIndexX = -1;
             int tileIndexY = -1;
-            if (this.tileGrid != null)
+            if (this.TileGrid != null)
             {
                 (tileIndexX, tileIndexY) = this.PlaceTileInGrid(tile);
             }
@@ -238,17 +274,28 @@ namespace Mars.Clouds.GdalExtensions
                 this.ungriddedTiles.Add(tile);
             }
 
-            ++this.TileCount;
+            ++this.NonNullTileCount;
             return (tileIndexX, tileIndexY);
+        }
+
+        public VirtualRaster<TTileCopy> CreateEmptyCopy<TTileCopy>() where TTileCopy : Raster
+        {
+            VirtualRaster<TTileCopy> emptyCopy = new(this);
+            if (this.TileGrid != null)
+            {
+                emptyCopy.TileGrid = new(emptyCopy.Crs, new(this.TileGrid.Transform), emptyCopy.VirtualRasterSizeInTilesX, emptyCopy.VirtualRasterSizeInTilesY, cloneCrsAndTransform: false);
+            }
+
+            return emptyCopy;
         }
 
         public (int[] tileIndexX, int[] tileIndexY) CreateTileGrid()
         {
-            if (this.tileGrid != null)
+            if (this.TileGrid != null)
             {
                 throw new InvalidOperationException("Grid is already built."); // debatable if one time call needs to be enforced
             }
-            if (this.TileCount == 0)
+            if (this.NonNullTileCount == 0)
             {
                 throw new InvalidOperationException("No tiles have been added to the virtual raster.");
             }
@@ -287,9 +334,8 @@ namespace Mars.Clouds.GdalExtensions
             this.VirtualRasterSizeInTilesX = (int)Double.Round((maximumOriginX - minimumOriginX) / tileSizeInTileUnitsX) + 1;
             this.VirtualRasterSizeInTilesY = (int)Double.Round((minimumOriginY - maximumOriginY) / tileSizeInTileUnitsY) + 1;
 
-            GridGeoTransform tileTransform = new(minimumOriginX, maximumOriginY, tileSizeInTileUnitsX, tileSizeInTileUnitsY);
-            
-            this.tileGrid = new(this.Crs, tileTransform, this.VirtualRasterSizeInTilesX, this.VirtualRasterSizeInTilesY);
+            GridGeoTransform tileTransform = new(minimumOriginX, maximumOriginY, tileSizeInTileUnitsX, tileSizeInTileUnitsY);            
+            this.TileGrid = new(this.Crs, tileTransform, this.VirtualRasterSizeInTilesX, this.VirtualRasterSizeInTilesY, cloneCrsAndTransform: false);
 
             int[] tileIndexX = new int[this.ungriddedTiles.Count];
             int[] tileIndexY = new int[this.ungriddedTiles.Count];
@@ -302,9 +348,14 @@ namespace Mars.Clouds.GdalExtensions
             return (tileIndexX, tileIndexY);
         }
 
-        public VrtDataset CreateDataset()
+        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
         {
-            Debug.Assert(this.tileGrid != null);
+            return this.CreateDataset(vrtDatasetDirectoryPath, this.BandNames, tileBandStatistics);
+        }
+
+        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
+        {
+            Debug.Assert(this.TileGrid != null);
 
             VrtDataset vrtDataset = new()
             {
@@ -314,9 +365,10 @@ namespace Mars.Clouds.GdalExtensions
             vrtDataset.Srs.DataAxisToSrsAxisMapping = this.Crs.IsVertical() == 1 ? [ 1, 2, 3 ] : [ 1, 2 ];
             vrtDataset.Srs.WktGeogcsOrProj = this.Crs.GetWkt();
 
-            vrtDataset.GeoTransform.Copy(this.tileGrid.Transform); // copies tile x and y size as cell size
+            vrtDataset.GeoTransform.Copy(this.TileGrid.Transform); // copies tile x and y size as cell size
             vrtDataset.GeoTransform.SetCellSize(this.TileCellSizeX, this.TileCellSizeY);
 
+            vrtDataset.AppendBands(vrtDatasetDirectoryPath, this, vrtBandNames, tileBandStatistics);
             return vrtDataset;
         }
 
@@ -327,9 +379,9 @@ namespace Mars.Clouds.GdalExtensions
 
         public string GetExtentString()
         {
-            if (this.tileGrid != null)
+            if (this.TileGrid != null)
             {
-                return this.tileGrid.GetExtentString();
+                return this.TileGrid.GetExtentString();
             }
 
             return "unknown (virtual raster tile grid has not yet been built)";
@@ -337,9 +389,9 @@ namespace Mars.Clouds.GdalExtensions
 
         public VirtualRasterNeighborhood8<TBand> GetNeighborhood8<TBand>(int tileGridIndexX, int tileGridIndexY, string? bandName) where TBand : IMinMaxValue<TBand>, INumber<TBand>
         {
-            Debug.Assert(this.tileGrid != null);
+            Debug.Assert(this.TileGrid != null);
 
-            TTile? center = this.tileGrid[tileGridIndexX, tileGridIndexY];
+            TTile? center = this.TileGrid[tileGridIndexX, tileGridIndexY];
             if (center == null)
             {
                 throw new NotSupportedException("No tile is loaded at index (" + tileGridIndexX + ", " + tileGridIndexY + ").");
@@ -355,14 +407,14 @@ namespace Mars.Clouds.GdalExtensions
             TTile? northwest = null;
             if (northIndex >= 0)
             {
-                north = this.tileGrid[tileGridIndexX, northIndex];
+                north = this.TileGrid[tileGridIndexX, northIndex];
                 if (eastIndex < this.VirtualRasterSizeInTilesX)
                 {
-                    northeast = this.tileGrid[eastIndex, northIndex];
+                    northeast = this.TileGrid[eastIndex, northIndex];
                 }
                 if (westIndex >= 0)
                 {
-                    northwest = this.tileGrid[westIndex, northIndex];
+                    northwest = this.TileGrid[westIndex, northIndex];
                 }
             }
 
@@ -371,27 +423,27 @@ namespace Mars.Clouds.GdalExtensions
             TTile? southwest = null;
             if (southIndex < this.VirtualRasterSizeInTilesY)
             {
-                south = this.tileGrid[tileGridIndexX, southIndex];
+                south = this.TileGrid[tileGridIndexX, southIndex];
                 if (eastIndex < this.VirtualRasterSizeInTilesX)
                 {
-                    southeast = this.tileGrid[eastIndex, southIndex];
+                    southeast = this.TileGrid[eastIndex, southIndex];
                 }
                 if (westIndex >= 0)
                 {
-                    southwest = this.tileGrid[westIndex, southIndex];
+                    southwest = this.TileGrid[westIndex, southIndex];
                 }
             }
 
             TTile? east = null;
             if (eastIndex < this.VirtualRasterSizeInTilesX)
             {
-                east = this.tileGrid[eastIndex, tileGridIndexY];
+                east = this.TileGrid[eastIndex, tileGridIndexY];
             }
 
             TTile? west = null;
             if (westIndex >= 0)
             {
-                west = this.tileGrid[westIndex, tileGridIndexY];
+                west = this.TileGrid[westIndex, tileGridIndexY];
             }
 
             return new VirtualRasterNeighborhood8<TBand>((RasterBand<TBand>)center.GetBand(bandName))
@@ -405,28 +457,6 @@ namespace Mars.Clouds.GdalExtensions
                 East = (RasterBand<TBand>?)east?.GetBand(bandName),
                 West = (RasterBand<TBand>?)west?.GetBand(bandName)
             };
-        }
-
-        /// <returns><see cref="bool"/> array whose values are true where cells are null</returns>
-        /// <remarks>
-        /// Necessarily same code as <see cref="GridNullable{TCell}.GetUnpopulatedCellMap()"/> due to class split.
-        /// </remarks>
-        public bool[,] GetUnpopulatedTileMap()
-        {
-            bool[,] cellMap = new bool[this.VirtualRasterSizeInTilesX, this.VirtualRasterSizeInTilesY];
-            for (int yIndex = 0; yIndex < this.VirtualRasterSizeInTilesY; ++yIndex)
-            {
-                for (int xIndex = 0; xIndex < this.VirtualRasterSizeInTilesX; ++xIndex)
-                {
-                    TTile? value = this[xIndex, yIndex];
-                    if (value == null)
-                    {
-                        cellMap[xIndex, yIndex] = true;
-                    }
-                }
-            }
-
-            return cellMap;
         }
 
         //public string GetTileName(int tileGridIndexX, int tileGridIndexY)
@@ -477,8 +507,8 @@ namespace Mars.Clouds.GdalExtensions
                 return false;
             }
 
-            Debug.Assert((this.tileGrid != null) && (other.tileGrid != null));
-            if (this.tileGrid.IsSameExtentAndSpatialResolution(other.tileGrid) == false)
+            Debug.Assert((this.TileGrid != null) && (other.TileGrid != null));
+            if (this.TileGrid.IsSameExtentAndSpatialResolution(other.TileGrid) == false)
             {
                 return false;
             }
@@ -488,33 +518,18 @@ namespace Mars.Clouds.GdalExtensions
 
         private (int tileIndexX, int tileIndexY) PlaceTileInGrid(TTile tile)
         {
-            Debug.Assert(this.tileGrid != null);
+            Debug.Assert(this.TileGrid != null);
 
             int tileIndexX = (int)Double.Round((tile.Transform.OriginX - this.TileTransform.OriginX) / this.TileTransform.CellWidth);
             int tileIndexY = (int)Double.Round((tile.Transform.OriginY - this.TileTransform.OriginY) / this.TileTransform.CellHeight);
-            TTile? existingTile = this.tileGrid[tileIndexX, tileIndexY];
+            TTile? existingTile = this.TileGrid[tileIndexX, tileIndexY];
             if (existingTile != null)
             {
                 throw new ArgumentOutOfRangeException(nameof(tile), "Tiles '" + existingTile.FilePath + "' (extents " + existingTile.GetExtentString() + ") and '" + tile.FilePath + "' (" + tile.GetExtentString() + ") are both located at virtual raster position (" + tileIndexX + ", " + tileIndexY + ").");
             }
-            this.tileGrid[tileIndexX, tileIndexY] = tile;
+            this.TileGrid[tileIndexX, tileIndexY] = tile;
 
             return (tileIndexX, tileIndexY);
-        }
-
-        public void ReturnRowToObjectPool(int yIndex, ObjectPool<TTile> tilePool)
-        {
-            Debug.Assert(this.tileGrid != null);
-
-            for (int xIndex = 0; xIndex < this.VirtualRasterSizeInTilesX; ++xIndex)
-            {
-                TTile? tile = this.tileGrid[xIndex, yIndex];
-                if (tile != null)
-                {
-                    tilePool.Return(tile);
-                }
-                this.tileGrid[xIndex, yIndex] = null;
-            }
         }
 
         public (int xIndex, int yIndex) ToGridIndices(int tileIndex)
@@ -527,15 +542,15 @@ namespace Mars.Clouds.GdalExtensions
 
         public bool TryGetNeighborhood8<TBand>(double x, double y, string? bandName, [NotNullWhen(true)] out VirtualRasterNeighborhood8<TBand>? neighborhood) where TBand : IMinMaxValue<TBand>, INumber<TBand>
         {
-            if (this.tileGrid == null)
+            if (this.TileGrid == null)
             {
                 throw new InvalidOperationException("Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TryGetNeighborhood8) + "().");
             }
 
-            (int tileGridXindex, int tileGridYindex) = this.tileGrid.ToGridIndices(x, y);
+            (int tileGridXindex, int tileGridYindex) = this.TileGrid.ToGridIndices(x, y);
             if ((tileGridXindex < 0) || (tileGridXindex >= this.VirtualRasterSizeInTilesX) ||
                 (tileGridYindex < 0) || (tileGridYindex >= this.VirtualRasterSizeInTilesY) ||
-                (this.tileGrid[tileGridXindex, tileGridYindex] == null))
+                (this.TileGrid[tileGridXindex, tileGridYindex] == null))
             {
                 // trivial cases: requested center tile location is off the grid or has no data
                 neighborhood = null;
@@ -548,22 +563,22 @@ namespace Mars.Clouds.GdalExtensions
 
         public bool TryGetTileBand<TBand>(double x, double y, string? bandName, [NotNullWhen(true)] out RasterBand<TBand>? tileBand) where TBand : IMinMaxValue<TBand>, INumber<TBand>
         {
-            if (this.tileGrid == null)
+            if (this.TileGrid == null)
             {
                 throw new InvalidOperationException("Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TryGetNeighborhood8) + "().");
             }
 
-            (int tileGridXindex, int tileGridYindex) = this.tileGrid.ToGridIndices(x, y);
+            (int tileGridXindex, int tileGridYindex) = this.TileGrid.ToGridIndices(x, y);
             if ((tileGridXindex < 0) || (tileGridXindex >= this.VirtualRasterSizeInTilesX) ||
                 (tileGridYindex < 0) || (tileGridYindex >= this.VirtualRasterSizeInTilesY) ||
-                (this.tileGrid[tileGridXindex, tileGridYindex] == null))
+                (this.TileGrid[tileGridXindex, tileGridYindex] == null))
             {
                 // requested center tile location is off the grid or has no data
                 tileBand = null;
                 return false;
             }
 
-            TTile? tile = this.tileGrid[tileGridXindex, tileGridYindex];
+            TTile? tile = this.TileGrid[tileGridXindex, tileGridYindex];
             if ((tile == null) || (tile.TryGetBand(bandName, out RasterBand? untypedTileBand) == false) || ((untypedTileBand is RasterBand<TBand>) == false))
             {
                 tileBand = null;

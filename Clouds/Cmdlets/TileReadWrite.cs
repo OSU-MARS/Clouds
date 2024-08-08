@@ -1,5 +1,4 @@
 ﻿using Mars.Clouds.Las;
-using System.Collections.Concurrent;
 using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
@@ -37,6 +36,5 @@ namespace Mars.Clouds.Cmdlets
                             (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
             return status;
         }
-        
     }
 }

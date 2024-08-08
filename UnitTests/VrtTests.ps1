@@ -21,8 +21,9 @@ Export-VrtBands -Input $vrt -Bands "dsm" -Output ([System.IO.Path]::Combine($vrt
 Export-VrtBands -Input $vrt -Bands "cmm3" -Output ([System.IO.Path]::Combine($vrtDirectory, "cmm3.vrt"))
 Export-VrtBands -Input $vrt -Bands "chm" -Output ([System.IO.Path]::Combine($vrtDirectory, "chm.vrt"))
 Export-VrtBands -Input $vrt -Bands "sourceIDsurface" -Output ([System.IO.Path]::Combine($vrtDirectory, "sourceIDsurface.vrt"))
-Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "aerialMean") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm aerialMean.vrt"))
 Export-VrtBands -Input $vrt -Bands ("nAerial", "nGround") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm density.vrt"))
+Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "aerialMean") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm aerialMean.vrt"))
+Export-VrtBands -Input $vrt -Bands ("dsm", "cmm3", "chm", "aerialMean", "nAerial", "nGround") -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm cmm3 chm aerialMean density.vrt"))
 
 $vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3"
 $vrt = [System.IO.Path]::Combine($vrtDirectory, "orthoimage all.vrt")
