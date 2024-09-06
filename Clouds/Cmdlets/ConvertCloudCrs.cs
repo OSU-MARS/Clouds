@@ -40,7 +40,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // check for input files
-            List<string> cloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
 
             // create coordinate system to reproject to
             SpatialReference horizontalCrs = new(String.Empty);
@@ -51,7 +51,7 @@ namespace Mars.Clouds.Cmdlets
 
             // set point clouds' origins, coordinate systems, and source IDs
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
-            int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
             this.cancellationTokenSource = new();
             int cloudReprojectionsInitiated = -1;

@@ -158,7 +158,7 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.Classification), "-" + nameof(this.Classification) + " must be an existing directory containing classification rasters.");
             }
 
-            List<string> treetopTilePaths = GdalCmdlet.GetExistingFilePaths(this.Treetops, Constant.File.GeoPackageExtension);
+            List<string> treetopTilePaths = this.GetExistingFilePaths(this.Treetops, Constant.File.GeoPackageExtension);
             if (treetopTilePaths.Count < 2)
             {
                 // nothing to do

@@ -42,7 +42,7 @@ namespace Mars.Clouds.UnitTests
                 DiskTests.ValidateVirtualDisk(virtualDisk);
             }
 
-            int readThreads = capabilities.GetPracticalReadThreadCount(drivePaths, 2.0F, 4.5F * 2.0F);
+            int readThreads = capabilities.GetPracticalReadThreadCount(drivePaths, this.TestContext!.DeploymentDirectory!, 2.0F, 4.5F * 2.0F);
             Assert.IsTrue(readThreads > 0);
         }
 
@@ -65,9 +65,9 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue((f.BusType == BusType.SATA) && (f.MediaType == MediaType.HardDrive) && (f.PcieVersion == -1) && (f.PcieLanes == -1) && (f.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
             Assert.IsTrue(Object.ReferenceEquals(g, f));
 
-            int cThreads = capabilities.GetPracticalReadThreadCount(["C:\\"], 1.0F, 4.5F);
-            int dThreads = capabilities.GetPracticalReadThreadCount(["D:\\"], 1.0F, 4.5F);
-            int fgThreads = capabilities.GetPracticalReadThreadCount(["F:\\", "G:\\"], 1.0F, 4.5F);
+            int cThreads = capabilities.GetPracticalReadThreadCount(["C:\\"], this.TestContext!.DeploymentDirectory!, 1.0F, 4.5F);
+            int dThreads = capabilities.GetPracticalReadThreadCount(["D:\\"], this.TestContext!.DeploymentDirectory!, 1.0F, 4.5F);
+            int fgThreads = capabilities.GetPracticalReadThreadCount(["F:\\", "G:\\"], this.TestContext!.DeploymentDirectory!, 1.0F, 4.5F);
             Assert.IsTrue((cThreads == 4) && (dThreads == 11) && (fgThreads == 1));
 
             for (int driveIndex = 0; driveIndex < drives.Length; ++driveIndex)
@@ -76,7 +76,7 @@ namespace Mars.Clouds.UnitTests
                 {
                     PhysicalDisk e = capabilities.PhysicalDisksByRoot["E:\\"];
                     Assert.IsTrue((e.BusType == BusType.SATA) && (e.MediaType == MediaType.HardDrive) && (e.PcieVersion == -1) && (e.PcieLanes == -1) && (e.GetEstimatedMaximumTransferRateInGBs() == HardwareCapabilities.HardDriveDefaultTransferRateInGBs));
-                    int eThreads = capabilities.GetPracticalReadThreadCount(["E:\\"], 1.0F, 4.5F);
+                    int eThreads = capabilities.GetPracticalReadThreadCount(["E:\\"], this.TestContext!.DeploymentDirectory!, 1.0F, 4.5F);
                     Assert.IsTrue(eThreads == 1);
                     break;
                 }

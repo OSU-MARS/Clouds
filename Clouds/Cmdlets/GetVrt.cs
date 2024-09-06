@@ -117,7 +117,7 @@ namespace Mars.Clouds.Cmdlets
             int readThreads = this.ReadThreads;
             if (readThreads == -1)
             {
-                readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.TilePaths, 1.0F, 6.8F), this.MaxThreads);
+                readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.TilePaths, this.SessionState.Path.CurrentLocation.Path, 1.0F, 6.8F), this.MaxThreads);
             }
             int tileMetadataReadsCompleted = 0;
             int tileReadsInitiated = -1;

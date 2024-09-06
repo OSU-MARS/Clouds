@@ -27,7 +27,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // assemble inputs
-            List<string> sourceCloudPaths = FileCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            List<string> sourceCloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             if (sourceCloudPaths.Count < 1)
             {
                 throw new ParameterOutOfRangeException(nameof(this.Las), "-" + nameof(this.Las) + " = '" + String.Join(", ", this.Las) + "' does not match any existing point clouds.");
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
             // remove points from clouds
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
 
             this.cancellationTokenSource = new();
             int cloudFiltrationsInitiated = -1;

@@ -44,7 +44,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
             this.VirtualDisksByRoot = [];
         }
 
-        private static List<string> GetPathRoots(List<string> paths)
+        private static List<string> GetPathRoots(List<string> paths, string currentLocation)
         {
             if (paths.Count < 1)
             {
@@ -56,12 +56,12 @@ namespace Mars.Clouds.Cmdlets.Hardware
             {
                 string path = paths[index];
                 string? pathRoot = Path.GetPathRoot(path);
-                if (pathRoot == null)
+                if (String.IsNullOrEmpty(pathRoot))
                 {
-                    pathRoot = Path.GetPathRoot(Environment.CurrentDirectory);
-                    if (pathRoot == null)
+                    pathRoot = Path.GetPathRoot(currentLocation);
+                    if (String.IsNullOrEmpty(pathRoot))
                     {
-                        throw new NotSupportedException("Both the path '" + path + "' and the current directory '" + Environment.CurrentDirectory + "' are rootless.");
+                        throw new NotSupportedException("Both the path '" + path + "' and the current directory '" + currentLocation + "' are rootless.");
                     }
                 }
 
@@ -74,11 +74,11 @@ namespace Mars.Clouds.Cmdlets.Hardware
             return pathRoots;
         }
 
-        public int GetPracticalReadThreadCount(List<string> drivePaths, float driveTransferRatePerThreadInGBs, float ddrBandwidthPerThreadInGBs)
+        public int GetPracticalReadThreadCount(List<string> drivePaths, string currentLocation, float driveTransferRatePerThreadInGBs, float ddrBandwidthPerThreadInGBs)
         {
             // currently Windows specific
             // When needed, support can be added for other drive identification methods such as /def/sd and mount paths on Linux.
-            List<string> pathRoots = HardwareCapabilities.GetPathRoots(drivePaths);
+            List<string> pathRoots = HardwareCapabilities.GetPathRoots(drivePaths, currentLocation);
             if (pathRoots.Count < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(drivePaths), drivePaths.Count + " drive paths provided zero path roots.");

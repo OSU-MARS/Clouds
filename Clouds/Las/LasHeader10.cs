@@ -229,6 +229,11 @@ namespace Mars.Clouds.Las
             throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".");
         }
 
+        public virtual void IncrementFirstReturnCount(long returnNumbersRepaired)
+        {
+            this.LegacyNumberOfPointsByReturn[0] += (UInt32)returnNumbersRepaired;
+        }
+
         public virtual void SetNumberOfPointsByReturn(UInt64[] numberOfPointsByReturn)
         {
             UInt32 numberOfPointRecords = 0;

@@ -5,9 +5,9 @@ using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class FileCmdlet : Cmdlet
+    public class FileCmdlet : PSCmdlet
     {
-        protected static List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
+        protected List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
         {
             ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
             if (fileSearchPaths.Count < 1)
@@ -39,8 +39,21 @@ namespace Mars.Clouds.Cmdlets
                 {
                     if (File.Exists(fileSearchPath) == false)
                     {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load files. Path '" + fileSearchPath + "' is not an existing file, existing directory, or wildcarded search path.");
+                        if (Path.IsPathRooted(fileSearchPath) == false)
+                        {
+                            string rootedFileSearchPath = Path.Combine(this.SessionState.Path.CurrentLocation.Path, fileSearchPath);
+                            if (File.Exists(rootedFileSearchPath) == false)
+                            {
+                                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load files. Path '" + fileSearchPath + "' is not an existing file, existing directory, or wildcarded search path which could not be found at PowerShell's current location of '" + rootedFileSearchPath + "'.");
+                            }
+                            fileSearchPath = rootedFileSearchPath;
+                        }
+                        else
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load files. Path '" + fileSearchPath + "' is not an existing file, existing directory, or wildcarded search path. If the file exists this is usually an indication of a mismatch between the file path and PowerShell's current location.");
+                        }
                     }
+
                     filePaths.Add(fileSearchPath);
                     pathSpecifiesSingleFile = true;
                 }

@@ -52,6 +52,12 @@ namespace Mars.Clouds.Las
             return this.NumberOfPointsByReturn;
         }
 
+        public override void IncrementFirstReturnCount(long returnNumbersRepaired)
+        {
+            this.LegacyNumberOfPointsByReturn[0] += (UInt32)returnNumbersRepaired;
+            this.NumberOfPointsByReturn[0] += (UInt64)returnNumbersRepaired;
+        }
+
         public override void SetNumberOfPointsByReturn(UInt64[] numberOfPointsByReturn)
         {
             if (numberOfPointsByReturn.Length > this.NumberOfPointsByReturn.Length)

@@ -38,7 +38,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // Can check drive capabilities and do automatic thread setting if needed.
-            List<string> filePathsToRead = FileCmdlet.GetExistingFilePaths(this.Input, ".*", this.Search);
+            List<string> filePathsToRead = this.GetExistingFilePaths(this.Input, ".*", this.Search);
 
             long totalBytesRead = 0;
             bool durationElapsedOrFaulted = false;

@@ -61,7 +61,7 @@ namespace Mars.Clouds.Cmdlets
 
             VirtualRaster<TTile> vrt = [];
 
-            List<string> tilePaths = GdalCmdlet.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
+            List<string> tilePaths = this.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
             if (tilePaths.Count == 1)
             {
                 // synchronous read for single tile

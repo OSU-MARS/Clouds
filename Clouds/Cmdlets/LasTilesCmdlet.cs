@@ -15,7 +15,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether or not to ignore cases where a .las file's header indicates more variable length records (VLRs) than fit between the header and point data. Default is false but this is a common issue with .las files, particularly a two byte fragment between the last VLR and the start of the points.")]
         public SwitchParameter DiscardOverrunningVlrs { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Las { get; set; }
 
@@ -50,13 +50,13 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new InvalidOperationException("-" + nameof(this.MaxThreads) + " is " + this.MaxThreads + ". At least one thread must be allowed. Is the caller failing to assign a default value to -" + this.MaxThreads + " when it is not user specified?");
             }
-            int driveBasedReadThreadEstimate = HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
+            int driveBasedReadThreadEstimate = HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
             return Int32.Min(driveBasedReadThreadEstimate, this.MaxThreads / (1 + minWorkerThreadsPerReadThread));
         }
 
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
         {
-            List<string> lasTilePaths = GdalCmdlet.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            List<string> lasTilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             List<LasTile> lasTiles = new(lasTilePaths.Count);
 
             // due to the small read size asynchronous would probably be more efficient than multithreaded synchronous here

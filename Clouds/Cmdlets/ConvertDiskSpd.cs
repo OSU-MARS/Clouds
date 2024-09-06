@@ -25,7 +25,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            List<string> logFiles = FileCmdlet.GetExistingFilePaths(this.Result, Constant.File.XmlExtension);
+            List<string> logFiles = this.GetExistingFilePaths(this.Result, Constant.File.XmlExtension);
             List<Results> resultsByFile = new(logFiles.Count);
             for (int fileIndex = 0; fileIndex < logFiles.Count; ++fileIndex)
             {
