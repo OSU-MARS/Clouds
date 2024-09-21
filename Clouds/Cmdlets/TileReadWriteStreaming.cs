@@ -1,39 +1,62 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using System;
+using System.Diagnostics;
+using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class TileReadWriteStreaming<TTile> : TileReadWrite where TTile : Raster
+    internal static class TileReadWriteStreaming
     {
-        private readonly TileStreamPosition<TTile> tileReadPosition;
-        private readonly TileStreamPosition<TTile> tileWritePosition;
+        public static readonly TimeSpan NeighborhoodReadCompletionPollInterval = TimeSpan.FromSeconds(0.1);
+
+        public static TileReadWriteStreaming<TSourceTile, TileStreamPosition> Create<TSourceTile>(GridNullable<TSourceTile> sourceGrid, bool outputPathIsDirectory) where TSourceTile : class
+        {
+            bool[,] unpopulatedTileMapForRead = sourceGrid.GetUnpopulatedCellMap();
+            bool[,] unpopulatedTileMapForWrite = ArrayExtensions.Copy(unpopulatedTileMapForRead);
+            return new(sourceGrid, unpopulatedTileMapForRead, new(sourceGrid, unpopulatedTileMapForWrite), outputPathIsDirectory);
+        }
+    }
+
+    /// <summary>
+    /// Stream input raster tiles through memory when the output tiles require neighborhoods of input tiles.
+    /// </summary>
+    public class TileReadWriteStreaming<TSourceTile, TWritePosition> : TileReadWrite 
+        where TSourceTile : class
+        where TWritePosition : TileStreamPosition
+    {
+        protected Action<TSourceTile>? OnSourceTileRelease { get; private init; }
+        protected TileStreamPosition<TSourceTile> TileReadPosition { get; private init; }
+        protected TWritePosition TileWritePosition { get; private init; }
 
         public int MaxTileIndex { get; private init; }
         public RasterBandPool RasterBandPool { get; private init; }
-        public bool TileWriteDoesNotRequirePreviousRow { get; init; }
 
-        public TileReadWriteStreaming(VirtualRaster<TTile> vrt, bool outputPathIsDirectory)
+        public TileReadWriteStreaming(GridNullable<TSourceTile> sourceGrid, bool[,] unpopulatedTileMapForRead, TWritePosition tileWritePosition, bool outputPathIsDirectory)
             : base(outputPathIsDirectory)
         {
-            if (vrt.TileGrid == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(vrt), "Virtual raster's grid must be created before tiles can be streamed from it.");
-            }
+            this.TileReadPosition = new(sourceGrid, unpopulatedTileMapForRead);
+            this.TileWritePosition = tileWritePosition;
 
-            bool[,] unpopulatedTileMap = vrt.TileGrid.GetUnpopulatedCellMap();
-            bool[,] unpopulatedTileMapCopy = new bool[unpopulatedTileMap.GetLength(0), unpopulatedTileMap.GetLength(1)];
-            Array.Copy(unpopulatedTileMap, unpopulatedTileMapCopy, unpopulatedTileMap.Length);
-            this.tileReadPosition = new(vrt.TileGrid, unpopulatedTileMap);
-            this.tileWritePosition = new(vrt.TileGrid, unpopulatedTileMapCopy);
+            this.OnSourceTileRelease = null;
 
-            this.MaxTileIndex = vrt.VirtualRasterSizeInTilesX * vrt.VirtualRasterSizeInTilesY;
+            this.MaxTileIndex = sourceGrid.Cells; // could be elided by retaining a pointer to sourceGrid
             this.RasterBandPool = new();
-            this.TileWriteDoesNotRequirePreviousRow = false;
+
+            if (typeof(TSourceTile).IsSubclassOf(typeof(Raster)))
+            {
+                this.OnSourceTileRelease = (TSourceTile tile) =>
+                {
+                    Raster? raster = tile as Raster;
+                    Debug.Assert(raster != null);
+                    raster.ReturnBands(this.RasterBandPool);
+                };
+            }
         }
 
         public int GetMaximumIndexNeighborhood8(int writeIndex)
         {
-            int tileGridSizeX = this.tileReadPosition.TileGrid.SizeX;
+            int tileGridSizeX = this.TileReadPosition.TileGrid.SizeX;
             int writeIndexX = writeIndex % tileGridSizeX;
 
             int readCompletionIndexInclusive = writeIndex + tileGridSizeX; // advance one row
@@ -52,29 +75,73 @@ namespace Mars.Clouds.Cmdlets
 
         public bool IsReadCompleteTo(int tileIndex)
         {
-            (int tileIndexX, int tileIndexY) = this.tileReadPosition.TileGrid.ToGridIndices(tileIndex);
-            return this.tileReadPosition.IsCompleteTo(tileIndexX, tileIndexY);
+            (int tileIndexX, int tileIndexY) = this.TileReadPosition.TileGrid.ToGridIndices(tileIndex);
+            return this.TileReadPosition.IsCompleteTo(tileIndexX, tileIndexY);
         }
 
-        public void OnTileRead(int tileReadIndex)
+        public virtual void OnTileRead(int tileReadIndexX, int tileReadIndexY)
         {
-            (int readTileIndexX, int readTileIndexY) = this.tileReadPosition.TileGrid.ToGridIndices(tileReadIndex);
-            this.tileReadPosition.OnTileCompleted(readTileIndexX, readTileIndexY);
-            int maxReadReturnRowIndex = this.tileWritePosition.CompletedRowIndex;
-            if (this.TileWriteDoesNotRequirePreviousRow == false)
-            {
-                --maxReadReturnRowIndex;
-            }
-            this.tileReadPosition.TryReturnToRasterBandPool(this.RasterBandPool, maxReadReturnRowIndex);
+            this.TileReadPosition.OnTileCompleted(tileReadIndexX, tileReadIndexY, this.TileWritePosition.CompletedRowIndex, this.OnSourceTileRelease);
             ++this.TilesRead;
         }
 
-        public void OnTileWritten(int tileWriteIndex)
+        public void OnTileWritten(int tileWriteIndexX, int tileWriteIndexY)
         {
-            (int writeTileIndexX, int writeTileIndexY) = this.tileReadPosition.TileGrid.ToGridIndices(tileWriteIndex);
-            this.tileWritePosition.OnTileCompleted(writeTileIndexX, writeTileIndexY);
-            this.tileWritePosition.TryReturnToRasterBandPool(this.RasterBandPool);
+            this.TileWritePosition.OnTileCompleted(tileWriteIndexX, tileWriteIndexY);
             ++this.TilesWritten;
+        }
+
+        public bool TryEnsureRasterNeighborhoodRead<TTile>(int tileIndex, VirtualRaster<TTile> vrt, CancellationTokenSource cancellationTokenSource) where TTile : Raster
+        {
+            // if necessary, the outer while loop spin waits for other threads to complete neighborhood read
+            int maxNeighborhoodIndex = this.GetMaximumIndexNeighborhood8(tileIndex);
+            if (this.IsReadCompleteTo(maxNeighborhoodIndex))
+            {
+                return true; // nothing to do
+            }
+
+            for (int tileReadIndex = this.GetNextTileReadIndexThreadSafe(); tileReadIndex < this.MaxTileIndex; tileReadIndex = this.GetNextTileReadIndexThreadSafe())
+            {
+                TTile? tileToRead = vrt[tileReadIndex];
+                if (tileToRead == null)
+                {
+                    continue;
+                }
+
+                // must load tile at given index even if it's beyond the necessary neighborhood
+                // Otherwise some tiles would not get loaded.
+                if (this.RasterBandPool.FloatPool.Count > 0)
+                {
+                    lock (this.RasterBandPool)
+                    {
+                        tileToRead.TryTakeOwnershipOfDataBuffers(this.RasterBandPool);
+                    }
+                }
+
+                tileToRead.ReadBandData();
+
+                (int tileReadIndexX, int tileReadIndexY) = vrt.ToGridIndices(tileReadIndex);
+                lock (this)
+                {
+                    this.OnTileRead(tileReadIndexX, tileReadIndexY);
+                }
+                if (cancellationTokenSource.IsCancellationRequested)
+                {
+                    return false;
+                }
+                if (this.IsReadCompleteTo(maxNeighborhoodIndex))
+                {
+                    return true;
+                }
+            }
+
+            while ((this.IsReadCompleteTo(maxNeighborhoodIndex) == false) && (cancellationTokenSource.IsCancellationRequested == false))
+            {
+                // all tiles have pending reads, nothing to do but block until remaining read threads complete
+                Thread.Sleep(TileReadWriteStreaming.NeighborhoodReadCompletionPollInterval);
+            }
+
+            return cancellationTokenSource.IsCancellationRequested == false;
         }
     }
 }

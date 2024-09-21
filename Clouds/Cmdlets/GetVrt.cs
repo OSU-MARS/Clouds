@@ -110,7 +110,7 @@ namespace Mars.Clouds.Cmdlets
                 tileCountAcrossAllVrts += tilePaths.Count;
                 tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex] = new List<RasterBandStatistics>[tilePaths.Count];
                 tilePathsByVrtIndex[vrtIndex] = tilePaths;
-                vrtBandsAndStats.Vrts[vrtIndex] = [];
+                vrtBandsAndStats.Vrts[vrtIndex] = new();
             }
 
             // read tiles: get metadata for virtual raster position, read data and calculate band statistics if sampled
@@ -124,7 +124,7 @@ namespace Mars.Clouds.Cmdlets
             int vrtsRead = 0;
             ParallelTasks readVrts = new(Int32.Min(readThreads, tileCountAcrossAllVrts), () =>
             {
-                SortedList<DataType, Array?> bandBuffersByDataType = []; // pool buffers for bands to avoid overloading the GC
+                RasterBandPool dataBufferPool = new(); // pool buffers for bands to avoid overloading the GC
                 // Raster? tile = null; // for performance testing
                 TileEnumerator tileEnumerator = new(tilePathsByVrtIndex, this.MinTilesSampled, this.MinSamplingFraction);
                 for (int tileReadIndex = Interlocked.Increment(ref tileReadsInitiated); tileReadIndex < tileCountAcrossAllVrts; tileReadIndex = Interlocked.Increment(ref tileReadsInitiated))
@@ -138,7 +138,7 @@ namespace Mars.Clouds.Cmdlets
                     // must be newed distinctly since added to vrt
                     // Defer data read so band data buffers can be object pooled to avoid overloading the GC.
                     using Dataset tileDataset = Gdal.Open(tileEnumerator.Current, Access.GA_ReadOnly);
-                    Raster tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: false);
+                    Raster tile = Raster.Create(tileEnumerator.Current, tileDataset, readData: false);
                     //if (tile == null) // for performance testing
                     //{
                     //    tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: tileEnumerator.SampleTile);
@@ -170,20 +170,16 @@ namespace Mars.Clouds.Cmdlets
                         List<RasterBandStatistics> tileStatistics = [];
                         foreach (RasterBand band in tile.GetBands())
                         {
-                            string bandName = band.Name;
-                            DataType bandDataType = band.GetGdalDataType();
                             bool bandDataPreviouslyRead = band.HasData;
                             if (bandDataPreviouslyRead == false)
                             {
-                                bandBuffersByDataType.TryGetValue(bandDataType, out Array? bandDataBuffer);
-                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(bandDataBuffer);
+                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(dataBufferPool);
                                 band.ReadDataInSameCrsAndTransform(tileDataset); // band is reading its own data so CRS and transform are guaranteed
                             }
                             tileStatistics.Add(band.GetStatistics());
                             if (bandDataPreviouslyRead == false)
                             {
-                                Array bandDataBuffer = band.ReleaseData();
-                                bandBuffersByDataType[bandDataType] = bandDataBuffer;
+                                band.ReturnData(dataBufferPool);
                             }
                         }
 

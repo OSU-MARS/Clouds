@@ -7,21 +7,11 @@ namespace Mars.Clouds.GdalExtensions
     /// <summary>
     /// One band of a virtual raster tile and, where extant, its neighboring bands in the eight neighboring tiles (first order queen adjacency).
     /// </summary>
-    public class VirtualRasterNeighborhood8<TBand> where TBand : IMinMaxValue<TBand>, INumber<TBand>
+    public class RasterNeighborhood8<TBand> : Neighborhood8<RasterBand<TBand>> where TBand : IMinMaxValue<TBand>, INumber<TBand>
     {
-        public RasterBand<TBand> Center { get; private init; }
-        public RasterBand<TBand>? North { get; init; }
-        public RasterBand<TBand>? Northeast { get; init; }
-        public RasterBand<TBand>? Northwest { get; init; }
-        public RasterBand<TBand>? South { get; init; }
-        public RasterBand<TBand>? Southeast { get; init; }
-        public RasterBand<TBand>? Southwest { get; init; }
-        public RasterBand<TBand>? East { get; init; }
-        public RasterBand<TBand>? West { get; init; }
-
-        public VirtualRasterNeighborhood8(RasterBand<TBand> center)
+        public RasterNeighborhood8(RasterBand<TBand> center)
+            : base(center)
         {
-            this.Center = center;
         }
 
         public (TBand value, byte mask) GetValueMaskZero(int xIndex, int yIndex)

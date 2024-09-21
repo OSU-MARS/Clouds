@@ -78,7 +78,7 @@ namespace Mars.Clouds.GdalExtensions
         public abstract GridGeoTransform TileTransform { get; }
     }
 
-    public class VirtualRaster<TTile> : VirtualRaster, IEnumerable<TTile> where TTile : Raster
+    public class VirtualRaster<TTile> : VirtualRaster where TTile : Raster
     {
         private readonly List<TTile> ungriddedTiles;
 
@@ -293,7 +293,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.TileGrid != null)
             {
-                throw new InvalidOperationException("Grid is already built."); // debatable if one time call needs to be enforced
+                throw new InvalidOperationException("Tile grid is already created."); // debatable if one time call needs to be enforced
             }
             if (this.NonNullTileCount == 0)
             {
@@ -372,11 +372,6 @@ namespace Mars.Clouds.GdalExtensions
             return vrtDataset;
         }
 
-        public VirtualRasterEnumerator<TTile> GetEnumerator()
-        {
-            return new VirtualRasterEnumerator<TTile>(this);
-        }
-
         public string GetExtentString()
         {
             if (this.TileGrid != null)
@@ -384,10 +379,10 @@ namespace Mars.Clouds.GdalExtensions
                 return this.TileGrid.GetExtentString();
             }
 
-            return "unknown (virtual raster tile grid has not yet been built)";
+            return "unknown (virtual raster tile grid has not yet been created)";
         }
 
-        public VirtualRasterNeighborhood8<TBand> GetNeighborhood8<TBand>(int tileGridIndexX, int tileGridIndexY, string? bandName) where TBand : IMinMaxValue<TBand>, INumber<TBand>
+        public RasterNeighborhood8<TBand> GetNeighborhood8<TBand>(int tileGridIndexX, int tileGridIndexY, string? bandName) where TBand : IMinMaxValue<TBand>, INumber<TBand>
         {
             Debug.Assert(this.TileGrid != null);
 
@@ -446,7 +441,7 @@ namespace Mars.Clouds.GdalExtensions
                 west = this.TileGrid[westIndex, tileGridIndexY];
             }
 
-            return new VirtualRasterNeighborhood8<TBand>((RasterBand<TBand>)center.GetBand(bandName))
+            return new RasterNeighborhood8<TBand>((RasterBand<TBand>)center.GetBand(bandName))
             {
                 North = (RasterBand<TBand>?)north?.GetBand(bandName),
                 Northeast = (RasterBand<TBand>?)northeast?.GetBand(bandName),
@@ -457,27 +452,6 @@ namespace Mars.Clouds.GdalExtensions
                 East = (RasterBand<TBand>?)east?.GetBand(bandName),
                 West = (RasterBand<TBand>?)west?.GetBand(bandName)
             };
-        }
-
-        //public string GetTileName(int tileGridIndexX, int tileGridIndexY)
-        //{
-        //    Debug.Assert(this.tileGrid != null);
-        //    TTile? tile = this.tileGrid[tileGridIndexX, tileGridIndexY];
-        //    if (tile == null)
-        //    {
-        //        throw new InvalidOperationException("Tile name at (" + tileGridIndexX + ", " + tileGridIndexY + ") is null.");
-        //    }
-        //    return Tile.GetName(tile.FilePath);
-        //}
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return this.GetEnumerator();
-        }
-
-        IEnumerator<TTile> IEnumerable<TTile>.GetEnumerator()
-        {
-            return this.GetEnumerator();
         }
 
         public bool IsSameExtentAndSpatialResolution<TTileOther>(VirtualRaster<TTileOther> other) where TTileOther : Raster
@@ -540,7 +514,7 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndex, yIndex);
         }
 
-        public bool TryGetNeighborhood8<TBand>(double x, double y, string? bandName, [NotNullWhen(true)] out VirtualRasterNeighborhood8<TBand>? neighborhood) where TBand : IMinMaxValue<TBand>, INumber<TBand>
+        public bool TryGetNeighborhood8<TBand>(double x, double y, string? bandName, [NotNullWhen(true)] out RasterNeighborhood8<TBand>? neighborhood) where TBand : IMinMaxValue<TBand>, INumber<TBand>
         {
             if (this.TileGrid == null)
             {

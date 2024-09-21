@@ -162,6 +162,17 @@ namespace Mars.Clouds.GdalExtensions
             return true;
         }
 
+        public (GridGeoTransform subsampleTransform, int subsampledSizeX, int subsampledSizeY) Subsample(int subsamplingRatio)
+        {
+            if ((this.SizeX % subsamplingRatio != 0) || (this.SizeY % subsamplingRatio != 0))
+            {
+                throw new ArgumentOutOfRangeException(nameof(subsamplingRatio), "Downscaling ratio " + subsamplingRatio + " is not an integer multiple of the grid size " + this.SizeX + " by " + this.SizeY + ".");
+            }
+
+            GridGeoTransform subsampleTransform = new(this.Transform.OriginX, this.Transform.OriginY, this.Transform.CellWidth * subsamplingRatio, this.Transform.CellHeight * subsamplingRatio);
+            return (subsampleTransform, this.SizeX / subsamplingRatio, this.SizeY / subsamplingRatio);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ToCellIndex(int xIndex, int yIndex)
         {
@@ -293,23 +304,31 @@ namespace Mars.Clouds.GdalExtensions
         }
     }
 
-    public class Grid<TCell> : Grid where TCell : class
+    /// <remarks>
+    /// Constructors are protected because either a <see cref="TCell"/> : class, new() or a derived class is needed to ensure all elements are non-null after returning.
+    /// </remarks>
+    public class Grid<TCell> : Grid
     {
         protected TCell[] Data { get; private init; }
 
-        public Grid(Grid extent)
+        protected Grid(Grid extent)
             : this(extent, cloneCrsAndTransform: true)
         {
         }
 
-        public Grid(Grid extent, bool cloneCrsAndTransform)
+        protected Grid(Grid extent, bool cloneCrsAndTransform)
             : base(extent, cloneCrsAndTransform)
         {
             this.Data = new TCell[this.Cells];
         }
 
-        public Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
-            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
+        protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
+            : this(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
+        {
+        }
+
+        protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells, bool cloneCrsAndTransform)
+            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform)
         {
             this.Data = new TCell[this.Cells];
         }

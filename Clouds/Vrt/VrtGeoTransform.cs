@@ -59,7 +59,7 @@ namespace Mars.Clouds.Vrt
             switch (reader.Name)
             {
                 case "GeoTransform":
-                    this.transform.SetTransform(reader.ReadElementContentAsCsvDoubleArray());
+                    this.transform.Copy(reader.ReadElementContentAsCsvDoubleArray());
                     break;
                 default:
                     throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
@@ -73,7 +73,7 @@ namespace Mars.Clouds.Vrt
 
         public void SetTransform(ReadOnlySpan<double> padfTransform)
         {
-            this.transform.SetTransform(padfTransform);
+            this.transform.Copy(padfTransform);
         }
 
         public void WriteXml(XmlWriter writer)

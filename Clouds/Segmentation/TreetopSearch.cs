@@ -7,20 +7,21 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal abstract class TreetopSearch
+    internal abstract class TreetopSearch : TileReadWriteStreaming<DigitalSurfaceModel, TileStreamPosition>
     {
         private readonly string? surfaceBandName;
 
         public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
 
-        public TreetopSearch(string? surfaceBandName)
+        protected TreetopSearch(VirtualRaster<DigitalSurfaceModel> dsm, string? surfaceBandName, GridNullable<DigitalSurfaceModel> dsmGrid, bool[,] unpopulatedTileMapForRead, bool[,] unpopulatedTileMapForWrite, bool outputPathIsDirectory)
+            : base(dsmGrid, unpopulatedTileMapForRead, new(dsmGrid, unpopulatedTileMapForWrite), outputPathIsDirectory)
         {
             this.surfaceBandName = surfaceBandName;
 
-            this.Dsm = [];
+            this.Dsm = dsm;
         }
 
-        private static void AddToLayer(TreetopLayer treetopLayer, TreetopSearchState tileSearch, int treeID, double yIndexFractional, double xIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation, double treeRadiusInCrsUnits)
+        private static void AddToLayer(TreetopVector treetopLayer, TreetopSearchState tileSearch, int treeID, double yIndexFractional, double xIndexFractional, float groundElevationAtBaseOfTree, float treetopElevation, double treeRadiusInCrsUnits)
         {
             (double centroidX, double centroidY) = tileSearch.Dsm.Transform.GetProjectedCoordinate(xIndexFractional, yIndexFractional);
             float treeHeightInCrsUnits = treetopElevation - groundElevationAtBaseOfTree;
@@ -36,7 +37,7 @@ namespace Mars.Clouds.Segmentation
                 throw new ArgumentOutOfRangeException(nameof(tileIndexX) + ", " + nameof(tileIndexY), "DSM tile at position " + tileIndexX + ", " + tileIndexY + " is null.");
             }
 
-            VirtualRasterNeighborhood8<float> surfaceNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.surfaceBandName);
+            RasterNeighborhood8<float> surfaceNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.surfaceBandName);
             TreetopSearchState tileSearch = new(dsmTile, surfaceNeighborhood);
 
             // set default minimum height if one was not specified
@@ -50,8 +51,8 @@ namespace Mars.Clouds.Segmentation
             RasterBand<float> dsm = tileSearch.Dsm.Surface;
             double dsmCellSize = dsm.Transform.GetCellSize();
             RasterBand<float> chm = tileSearch.Dsm.CanopyHeight;
-            using DataSource treetopFile = OgrExtensions.Open(treetopFilePath);
-            using TreetopLayer treetopLayer = TreetopLayer.CreateOrOverwrite(treetopFile, dsm.Crs);
+            using DataSource treetopFile = OgrExtensions.CreateOrOpenForWrite(treetopFilePath);
+            using TreetopVector treetopLayer = TreetopVector.CreateOrOverwrite(treetopFile, dsm.Crs);
             for (int dsmIndex = 0, dsmYindex = 0; dsmYindex < dsm.SizeY; ++dsmYindex) // y for north up rasters
             {
                 for (int dsmXindex = 0; dsmXindex < dsm.SizeX; ++dsmIndex, ++dsmXindex) // x for north up rasters

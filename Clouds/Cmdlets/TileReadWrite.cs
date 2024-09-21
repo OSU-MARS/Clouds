@@ -3,6 +3,9 @@ using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
+    /// <summary>
+    /// Track input tile reads and output tile writes when each output tile uses only data in the corresponding input tile.
+    /// </summary>
     public class TileReadWrite : TileRead
     {
         private int tilesWritten;

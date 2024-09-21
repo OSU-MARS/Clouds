@@ -162,6 +162,46 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public static DataType GetMostCompactIntegerType(bool considerBand1, RasterBand<UInt32>? band1, bool considerBand2, RasterBand<UInt32>? band2)
+        {
+            bool hasMaxValue1 = false;
+            UInt32 maxValue1 = UInt32.MaxValue;
+            if (considerBand1)
+            {
+                if (band1 == null)
+                {
+                    throw new ArgumentNullException(nameof(band1), nameof(band1) + " is null but " + nameof(considerBand1) + " is true.");
+                }
+                hasMaxValue1 = band1.TryGetMaximumValue(out maxValue1);
+            }
+
+            bool hasMaxValue2 = false;
+            UInt32 maxValue2 = UInt32.MaxValue;
+            if (considerBand2)
+            {
+                if (band2 == null)
+                {
+                    throw new ArgumentNullException(nameof(band2), nameof(band2) + " is null but " + nameof(considerBand2) + " is true.");
+                }
+                hasMaxValue2 = band2.TryGetMaximumValue(out maxValue2);
+            }
+
+            if (hasMaxValue1 && hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1, maxValue2);
+            }
+            else if (hasMaxValue1)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue1);
+            }
+            else if (hasMaxValue2)
+            {
+                return DataTypeExtensions.GetMostCompactIntegerType(maxValue2);
+            }
+
+            return DataType.GDT_Byte; // minimum size since no data in either band
+        }
+
         public static DataType GetMostCompactIntegerType(RasterBand<UInt16> band)
         {
             bool hasMaxValue = band.TryGetMaximumValue(out UInt16 maxValue);

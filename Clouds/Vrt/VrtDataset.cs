@@ -172,7 +172,7 @@ namespace Mars.Clouds.Vrt
             }
         }
 
-        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string subdirectory, string vrtFileName)
+        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string? subdirectory, string vrtFileName)
         {
             string vrtBaseDirectoryPath = basePath;
             if (basePathIsDirectory == false)
@@ -186,7 +186,11 @@ namespace Mars.Clouds.Vrt
                 vrtBaseDirectoryPath = directoryPath;
             }
 
-            string vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            string vrtDatasetDirectoryPath = vrtBaseDirectoryPath;
+            if (subdirectory != null)
+            {
+                vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            }
             string vrtFilePath = Path.Combine(vrtDatasetDirectoryPath, vrtFileName);
             return (vrtFilePath, vrtDatasetDirectoryPath);
         }

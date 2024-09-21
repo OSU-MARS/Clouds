@@ -1,5 +1,5 @@
-﻿using Mars.Clouds.Extensions;
-using OSGeo.OSR;
+﻿using OSGeo.OSR;
+using System;
 
 namespace Mars.Clouds.GdalExtensions
 {
@@ -30,6 +30,12 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         public TCell? this[int cellIndex]
+        {
+            get { return this.Data[cellIndex]; }
+            set { this.Data[cellIndex] = value; }
+        }
+
+        public TCell? this[Int64 cellIndex]
         {
             get { return this.Data[cellIndex]; }
             set { this.Data[cellIndex] = value; }
