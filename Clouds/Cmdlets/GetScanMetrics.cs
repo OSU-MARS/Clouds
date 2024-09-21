@@ -19,7 +19,8 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Read(this.Cells, gridCellDefinitionDataset, readData: true);
+            Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: true);
+            gridCellDefinitionDataset.FlushCache();
 
             const string cmdletName = "Get-ScanMetrics";
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();

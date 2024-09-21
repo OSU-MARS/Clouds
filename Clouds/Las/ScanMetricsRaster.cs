@@ -11,6 +11,18 @@ namespace Mars.Clouds.Las
     // If needed a double accumulator class can be implemented with downcoversion to float when writing to disk.
     public class ScanMetricsRaster : Raster
     {
+        public const string AcceptedPointsBandName = "acceptedPoints";
+        public const string ScanAngleMeanAbsoluteBandName = "scanAngleMeanAbsolute";
+        public const string ScanDirectionMeanBandName = "scanDirection";
+        public const string ScanAngleMinBandName = "scanAngleMin";
+        public const string ScanAngleMaxBandName = "scanAngleMax";
+        public const string NoiseOrWithheldBandName = "noiseOrWithheld";
+        public const string EdgeOfFlightLineBandName = "edgeOfFlightLine";
+        public const string OverlapBandName = "overlap";
+        public const string GpstimeMinBandName = "gpstimeMin";
+        public const string GpstimeMeanBandName = "gpstimeMean";
+        public const string GpstimeMaxBandName = "gpstimeMax";
+
         public RasterBand<UInt32> AcceptedPoints { get; private init; } // number of accepted points (total number of points in cell is Points + NoiseOrWithheld)
         public RasterBand<UInt32> EdgeOfFlightLine { get; private init; }
         public RasterBand<double> GpstimeMin { get; private init; }
@@ -28,17 +40,17 @@ namespace Mars.Clouds.Las
         {
             // no data for min and max scan angles and GPS times should arguably be Double.MaxValue and Double.MinValue
             // However, GDAL's default TIFFTAG_GDAL_NODATA profile supports only one no data value per raster.
-            this.AcceptedPoints = new(this, "acceptedPoints", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
-            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
-            this.ScanDirectionMean = new(this, "scanDirection", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
-            this.ScanAngleMin = new(this, "scanAngleMin", RasterBand.NoDataDefaultFloat, Single.MaxValue);
-            this.ScanAngleMax = new(this, "scanAngleMax", RasterBand.NoDataDefaultFloat, Single.MinValue);
-            this.NoiseOrWithheld = new(this, "noiseOrWithheld", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
-            this.EdgeOfFlightLine = new(this, "edgeOfFlightLine", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
-            this.Overlap = new(this, "overlap", RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
-            this.GpstimeMin = new(this, "gpstimeMin", RasterBand.NoDataDefaultDouble, Double.MaxValue);
-            this.GpstimeMean = new(this, "gpstimeMean", RasterBand.NoDataDefaultDouble, RasterBandInitialValue.Default);
-            this.GpstimeMax = new(this, "gpstimeMax", RasterBand.NoDataDefaultDouble, Double.MinValue);
+            this.AcceptedPoints = new(this, ScanMetricsRaster.AcceptedPointsBandName, RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.ScanAngleMeanAbsolute = new(this, ScanMetricsRaster.ScanAngleMeanAbsoluteBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
+            this.ScanDirectionMean = new(this, ScanMetricsRaster.ScanDirectionMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
+            this.ScanAngleMin = new(this, ScanMetricsRaster.ScanAngleMinBandName, RasterBand.NoDataDefaultFloat, Single.MaxValue);
+            this.ScanAngleMax = new(this, ScanMetricsRaster.ScanAngleMaxBandName, RasterBand.NoDataDefaultFloat, Single.MinValue);
+            this.NoiseOrWithheld = new(this, ScanMetricsRaster.NoiseOrWithheldBandName, RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.EdgeOfFlightLine = new(this, ScanMetricsRaster.EdgeOfFlightLineBandName, RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.Overlap = new(this, ScanMetricsRaster.OverlapBandName, RasterBand.NoDataDefaultUInt32, RasterBandInitialValue.Default);
+            this.GpstimeMin = new(this, ScanMetricsRaster.GpstimeMinBandName, RasterBand.NoDataDefaultDouble, Double.MaxValue);
+            this.GpstimeMean = new(this, ScanMetricsRaster.GpstimeMeanBandName, RasterBand.NoDataDefaultDouble, RasterBandInitialValue.Default);
+            this.GpstimeMax = new(this, ScanMetricsRaster.GpstimeMaxBandName, RasterBand.NoDataDefaultDouble, Double.MinValue);
         }
 
         public void OnPointAdditionComplete()
@@ -81,21 +93,6 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public override IEnumerable<RasterBand> GetBands()
-        {
-            yield return this.AcceptedPoints;
-            yield return this.EdgeOfFlightLine;
-            yield return this.GpstimeMin;
-            yield return this.GpstimeMean;
-            yield return this.GpstimeMax;
-            yield return this.NoiseOrWithheld;
-            yield return this.Overlap;
-            yield return this.ScanAngleMeanAbsolute;
-            yield return this.ScanAngleMin;
-            yield return this.ScanAngleMax;
-            yield return this.ScanDirectionMean;
-        }
-
         public override int GetBandIndex(string name)
         {
             return name switch
@@ -113,6 +110,86 @@ namespace Mars.Clouds.Las
                 "gpstimeMax" => 10,
                 _ => throw new ArgumentOutOfRangeException(nameof(name), "Unknown band name '" + name + "'.")
             };
+        }
+
+        public override IEnumerable<RasterBand> GetBands()
+        {
+            yield return this.AcceptedPoints;
+            yield return this.EdgeOfFlightLine;
+            yield return this.GpstimeMin;
+            yield return this.GpstimeMean;
+            yield return this.GpstimeMax;
+            yield return this.NoiseOrWithheld;
+            yield return this.Overlap;
+            yield return this.ScanAngleMeanAbsolute;
+            yield return this.ScanAngleMin;
+            yield return this.ScanAngleMax;
+            yield return this.ScanDirectionMean;
+        }
+
+        public override List<RasterBandStatistics> GetBandStatistics()
+        {
+            return [ this.AcceptedPoints.GetStatistics(),
+                     this.EdgeOfFlightLine.GetStatistics(),
+                     this.GpstimeMin.GetStatistics(),
+                     this.GpstimeMean.GetStatistics(),
+                     this.GpstimeMax.GetStatistics(),
+                     this.NoiseOrWithheld.GetStatistics(),
+                     this.Overlap.GetStatistics(),
+                     this.ScanAngleMeanAbsolute.GetStatistics(),
+                     this.ScanAngleMin.GetStatistics(),
+                     this.ScanAngleMax.GetStatistics(),
+                     this.ScanDirectionMean.GetStatistics() ];
+        }
+
+        public override void ReadBandData()
+        {
+            using Dataset rasterDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
+            for (int gdalBandIndex = 1; gdalBandIndex <= rasterDataset.RasterCount; ++gdalBandIndex)
+            {
+                using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                string bandName = gdalBand.GetDescription();
+                switch (bandName)
+                {
+                    case ScanMetricsRaster.AcceptedPointsBandName:
+                        this.AcceptedPoints.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.EdgeOfFlightLineBandName:
+                        this.EdgeOfFlightLine.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.GpstimeMinBandName:
+                        this.GpstimeMin.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.GpstimeMeanBandName:
+                        this.GpstimeMean.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.GpstimeMaxBandName:
+                        this.GpstimeMax.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.NoiseOrWithheldBandName:
+                        this.NoiseOrWithheld.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.OverlapBandName:
+                        this.Overlap.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.ScanAngleMeanAbsoluteBandName:
+                        this.ScanAngleMeanAbsolute.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.ScanAngleMinBandName:
+                        this.ScanAngleMin.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.ScanAngleMaxBandName:
+                        this.ScanAngleMax.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ScanMetricsRaster.ScanDirectionMeanBandName:
+                        this.ScanDirectionMean.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    default:
+                        throw new NotSupportedException("Unhandled band '" + bandName + "' in local maxima raster '" + this.FilePath + "'.");
+                }
+            }
+
+            rasterDataset.FlushCache();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
@@ -188,6 +265,21 @@ namespace Mars.Clouds.Las
             }
 
             return true;
+        }
+
+        public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)
+        {
+            this.AcceptedPoints.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.EdgeOfFlightLine.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.GpstimeMin.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.GpstimeMean.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.GpstimeMax.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.NoiseOrWithheld.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.Overlap.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ScanAngleMeanAbsolute.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ScanAngleMin.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ScanAngleMax.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ScanDirectionMean.TryTakeOwnershipOfDataBuffer(dataBufferPool);
         }
 
         public override void Write(string rasterPath, bool compress)

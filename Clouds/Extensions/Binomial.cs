@@ -38,7 +38,7 @@ namespace Mars.Clouds.Extensions
         //            1,   6,  15,  20,  15,   6,  1      0.0002441406F, 0.001464844F, 0.003662109F, 0.004882812F, 0.003662109F, 0.001464844F, 0.0002441406F ];
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static (Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowCurrentMask) AdvanceToLastCellInRow(VirtualRasterNeighborhood8<float> neighborhood, int yIndex, Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowNextMask)
+        private static (Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowCurrentMask) AdvanceToLastCellInRow(RasterNeighborhood8<float> neighborhood, int yIndex, Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowNextMask)
         {
             byte currentRowCenterMask = currentRowNextMask;
             int xIndexNext = neighborhood.Center.SizeX;
@@ -117,7 +117,7 @@ namespace Mars.Clouds.Extensions
         //    return (currentRowNextMask, currentRowCenterMask);
         //}
 
-        private static (byte currentRowNextMask, byte currentRowCenterMask) GatherInitial3(VirtualRasterNeighborhood8<float> neighborhood, int yIndexNext, out Vector128<float> previousRowValues, out Vector128<float> currentRowValues, out Vector128<float> nextRowValues, out Vector128<byte> maskVector)
+        private static (byte currentRowNextMask, byte currentRowCenterMask) GatherInitial3(RasterNeighborhood8<float> neighborhood, int yIndexNext, out Vector128<float> previousRowValues, out Vector128<float> currentRowValues, out Vector128<float> nextRowValues, out Vector128<byte> maskVector)
         {
             int yIndexPrevious = yIndexNext - 2;
             (float previousRowPreviousValue, byte previousRowPreviousMask) = neighborhood.GetValueMaskZero(xIndex: -1, yIndexPrevious);
@@ -153,7 +153,7 @@ namespace Mars.Clouds.Extensions
         ///                              2, 4, 2,      0.1250, 0.250, 0.1250,
         ///                              1, 2, 1 ]     0.0625, 0.125, 0.0625 ]
         /// </remarks>
-        public static void Smooth3x3(VirtualRasterNeighborhood8<float> neighborhood, RasterBand<float> smoothed)
+        public static void Smooth3x3(RasterNeighborhood8<float> neighborhood, RasterBand<float> smoothed)
         {
             RasterBand<float> band = neighborhood.Center;
             if ((band.SizeX != smoothed.SizeX) || (band.SizeY != smoothed.SizeY))
@@ -264,7 +264,7 @@ namespace Mars.Clouds.Extensions
 
         // AVX implementation of masked convolution
         // Can be made more efficient once AVX10/256 is more broadly available.
-        private static void SmoothWithNoDataOmitted3x3(VirtualRasterNeighborhood8<float> neighborhood, RasterBand<float> smoothed)
+        private static void SmoothWithNoDataOmitted3x3(RasterNeighborhood8<float> neighborhood, RasterBand<float> smoothed)
         {
             Debug.Assert(neighborhood.Center.Transform.CellHeight < 0.0F, "Currently only negative cell heights are supported as assumptions are made as to y indexing of neighboring north and south tiles.");
             RasterBand<float> band = neighborhood.Center;

@@ -110,6 +110,31 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndexMin, xIndexMaxInclusive, yIndexMin, yIndexMaxInclusive);
         }
 
+        /// <summary>
+        /// Get a grid transform and size which covers the same extent as this grid.
+        /// </summary>
+        /// <remarks>
+        /// If the new cell size is not an exact multiple of the current x and y extent the returned sizes are rounded up to
+        /// extend beyond the current size.
+        /// </remarks>
+        public (GridGeoTransform transform, int spanningSizeX, int spanningSizeY) GetSpanningEquivalent(double newCellWidth, double newCellHeight)
+        {
+            if (newCellWidth < 0.0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(newCellWidth), newCellWidth + " is not a valid cell width. Cell sizes must be positive.");
+            }
+            if ((Math.Sign(newCellHeight) != Math.Sign(this.Transform.CellHeight)) || (newCellHeight == 0.0))
+            {
+                // if needed, changes in cell height signs can be supported by recalculating the origin and ensuring spanningSizeY is positive
+                throw new ArgumentOutOfRangeException(nameof(newCellHeight), newCellHeight + " is not a supported cell height. Cell height must have the same sign as the current cell height (" + this.Transform.CellHeight + ") and be nonzero.");
+            }
+
+            GridGeoTransform transform = new(this.Transform.OriginX, this.Transform.OriginY, newCellWidth, newCellHeight);
+            int spanningSizeX = (int)Math.Ceiling(this.SizeX * this.Transform.CellWidth / newCellWidth);
+            int spanningSizeY = (int)Math.Ceiling(this.SizeY * this.Transform.CellHeight / newCellHeight);
+            return (transform, spanningSizeX, spanningSizeY);
+        }
+
         public bool IsSameExtent(Extent other)
         {
             if ((this.Transform.OriginX == other.XMin) && (this.SizeX * this.Transform.CellWidth == other.Width))
@@ -151,10 +176,10 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         /// <remarks>Does not check CRS.</remarks>
-        public bool IsSameExtentAndSpatialResolution(VirtualRaster other)
+        public bool IsSameExtentAndSpatialResolution(VirtualRaster vrt)
         {
-            if ((this.SizeX != other.VirtualRasterSizeInTilesX) || (this.SizeY != other.VirtualRasterSizeInTilesY) ||
-                (GridGeoTransform.Equals(this.Transform, other.TileTransform) == false))
+            if ((this.SizeX != vrt.SizeInTilesX) || (this.SizeY != vrt.SizeInTilesY) ||
+                (GridGeoTransform.Equals(this.Transform, vrt.TileTransform) == false))
             {
                 return false;
             }
@@ -219,11 +244,11 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public (int xIndex, int yIndex) ToGridIndices(int tileIndex)
+        public (int xIndex, int yIndex) ToGridIndices(int cellIndex)
         {
-            Debug.Assert(tileIndex >= 0);
-            int yIndex = tileIndex / this.SizeX;
-            int xIndex = tileIndex - this.SizeY * yIndex;
+            Debug.Assert(cellIndex >= 0);
+            int yIndex = cellIndex / this.SizeX;
+            int xIndex = cellIndex - this.SizeX * yIndex;
             return (xIndex, yIndex);
         }
 
@@ -293,23 +318,15 @@ namespace Mars.Clouds.GdalExtensions
         }
     }
 
-    public class Grid<TCell> : Grid where TCell : class
+    /// <remarks>
+    /// Constructors are protected because either a <see cref="TCell"/> : class, new() or a derived class is needed to ensure all elements in <see cref="Data"> are non-null after returning.
+    /// </remarks>
+    public class Grid<TCell> : Grid
     {
         protected TCell[] Data { get; private init; }
 
-        public Grid(Grid extent)
-            : this(extent, cloneCrsAndTransform: true)
-        {
-        }
-
-        public Grid(Grid extent, bool cloneCrsAndTransform)
-            : base(extent, cloneCrsAndTransform)
-        {
-            this.Data = new TCell[this.Cells];
-        }
-
-        public Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells)
-            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform: true)
+        protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells, bool cloneCrsAndTransform)
+            : base(crs, transform, xSizeInCells, ySizeInCells, cloneCrsAndTransform)
         {
             this.Data = new TCell[this.Cells];
         }

@@ -7,6 +7,7 @@ using System.Text;
 using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -153,11 +154,11 @@ namespace Mars.Clouds.Las
             return unbuffered ? (1.0F, 4.3F) : (1.2F, 7.1F);
         }
 
-        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToDsmBandwidth(DigitalSufaceModelBands dsmBands, bool unbuffered)
+        public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToDsmBandwidth(DigitalSurfaceModelBands dsmBands, bool unbuffered)
         {
             // SN850X on 5950X CPU lanes, aerial and ground means accumulated
             // If needed, additional band combinations can be profiled.
-            if (dsmBands.HasFlag(DigitalSufaceModelBands.Subsurface))
+            if ((dsmBands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface)
             {
                 // DigitalSufaceModelBands.Default | DigitalSufaceModelBands.Subsurface | DigitalSufaceModelBands.ReturnNumberSurface
                 // For now, assume slow enough buffered-unbuffered doesn't matter.
@@ -1209,6 +1210,104 @@ namespace Mars.Clouds.Las
             }
         }
 
+        public void ReadPointsToGrid(LasTile openedFile, GridNullable<PointListZirnc> metricsGrid)
+        {
+            LasHeader10 lasHeader = openedFile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(openedFile);
+
+            // set cell capacity to a reasonable fraction of the tile's average density
+            // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
+            int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(openedFile, metricsGrid);
+            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
+            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            {
+                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                {
+                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
+                    if (abaCell != null)
+                    {
+                        if (abaCell.Capacity == 0) // if cell already has some allocation, assume it's overlapped by another tile and do nothing
+                        {
+                            abaCell.Capacity = cellInitialPointCapacity;
+                        }
+                    }
+                }
+            }
+
+            // read points
+            // This implementation is currently synchronous as both synchronous and overlapped asynchronous reads hold an 18 TB IronWolf
+            // Pro at a steady ~260 MB/s (ST18000NT001, 285 MB/s sustained transfer rate) under Windows 10 22H2, suggesting little ability
+            // to improve on OS prefetching given the 128 kB to 1 MB buffer sizes used by LasTile.CreatePointReader(). Since SSDs and NVMes
+            // offer lower read latencies additional read threads appear likely to be of limited benefit. If a tile is cached in memory
+            // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
+            // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
+            // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
+
+            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
+
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
+            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
+            {
+                this.BaseStream.ReadExactly(pointBytes);
+                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                if (notNoiseOrWithheld == false)
+                {
+                    continue;
+                }
+
+                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
+                {
+                    // point lies outside of the ABA grid and is therefore not of interest
+                    // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
+                    continue;
+                }
+
+                Int64 cellIndex = metricsGrid.ToCellIndex(xIndex, yIndex);
+                PointListZirnc? abaCell = metricsGrid[cellIndex];
+                if (abaCell == null)
+                {
+                    // point lies within ABA grid but is not within a cell of interest
+                    continue;
+                }
+
+                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
+                abaCell.Z.Add(z);
+
+                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
+                abaCell.Intensity.Add(intensity);
+
+                byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
+                abaCell.ReturnNumber.Add(returnNumber);
+
+                abaCell.Classification.Add(classification);
+            }
+
+            // increment ABA cell tile load counts
+            // Could include this in the initial loop, though that's not strictly proper.
+            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            {
+                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                {
+                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
+                    if (abaCell != null)
+                    {
+                        ++abaCell.TilesLoaded;
+                        // useful breakpoint in debugging loaded-intersected issues between tiles
+                        //if ((abaCell.TilesLoaded > 1) || (abaCell.TilesIntersected > 1))
+                        //{
+                        //    int q = 0;
+                        //}
+                    }
+                }
+            }
+        }
+
         public void ReadPointsToGrid(LasFile openedFile, ScanMetricsRaster scanMetrics)
         {
             LasHeader10 lasHeader = openedFile.Header;
@@ -1309,104 +1408,6 @@ namespace Mars.Clouds.Las
                 else
                 {
                     ++scanMetrics.NoiseOrWithheld[cellIndex];
-                }
-            }
-        }
-
-        public void ReadPointsToGrid(LasTile openedFile, Grid<PointListZirnc> metricsGrid)
-        {
-            LasHeader10 lasHeader = openedFile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(openedFile);
-
-            // set cell capacity to a reasonable fraction of the tile's average density
-            // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
-            int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(openedFile, metricsGrid);
-            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
-            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
-            {
-                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
-                {
-                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
-                    if (abaCell != null)
-                    {
-                        if (abaCell.Capacity == 0) // if cell already has some allocation, assume it's overlapped by another tile and do nothing
-                        {
-                            abaCell.Capacity = cellInitialPointCapacity;
-                        }
-                    }
-                }
-            }
-
-            // read points
-            // This implementation is currently synchronous as both synchronous and overlapped asynchronous reads hold an 18 TB IronWolf
-            // Pro at a steady ~260 MB/s (ST18000NT001, 285 MB/s sustained transfer rate) under Windows 10 22H2, suggesting little ability
-            // to improve on OS prefetching given the 128 kB to 1 MB buffer sizes used by LasTile.CreatePointReader(). Since SSDs and NVMes
-            // offer lower read latencies additional read threads appear likely to be of limited benefit. If a tile is cached in memory
-            // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
-            // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
-            // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
-            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
-            byte pointFormat = lasHeader.PointDataRecordFormat;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
-
-            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
-
-            float zOffset = (float)lasHeader.ZOffset;
-            float zScale = (float)lasHeader.ZScaleFactor;
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
-            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
-            {
-                this.BaseStream.ReadExactly(pointBytes);
-                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
-                if (notNoiseOrWithheld == false)
-                {
-                    continue;
-                }
-
-                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
-                {
-                    // point lies outside of the ABA grid and is therefore not of interest
-                    // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
-                    continue;
-                }
-
-                Int64 cellIndex = metricsGrid.ToCellIndex(xIndex, yIndex);
-                PointListZirnc? abaCell = metricsGrid[cellIndex];
-                if (abaCell == null)
-                {
-                    // point lies within ABA grid but is not within a cell of interest
-                    continue;
-                }
-
-                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
-                abaCell.Z.Add(z);
-
-                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
-                abaCell.Intensity.Add(intensity);
-
-                byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
-                abaCell.ReturnNumber.Add(returnNumber);
-
-                abaCell.Classification.Add(classification);
-            }
-
-            // increment ABA cell tile load counts
-            // Could include this in the initial loop, though that's not strictly proper.
-            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
-            {
-                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
-                {
-                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
-                    if (abaCell != null)
-                    {
-                        ++abaCell.TilesLoaded;
-                        // useful breakpoint in debugging loaded-intersected issues between tiles
-                        //if ((abaCell.TilesLoaded > 1) || (abaCell.TilesIntersected > 1))
-                        //{
-                        //    int q = 0;
-                        //}
-                    }
                 }
             }
         }

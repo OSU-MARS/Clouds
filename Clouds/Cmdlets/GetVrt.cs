@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "If set, a .xlsx is created alongside the .vrt with band statistics for each tile (overall statistics for each band are included in the .vrt).")]
         public SwitchParameter Stats { get; set; }
 
-        [Parameter(HelpMessage = "Number of threads, out of -MaxThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
+        [Parameter(HelpMessage = "Number of threads, out of -ComputeThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
         [ValidateRange(1, 32)] // arbitrary upper bound
         public int ReadThreads { get; set; }
 
@@ -110,21 +110,21 @@ namespace Mars.Clouds.Cmdlets
                 tileCountAcrossAllVrts += tilePaths.Count;
                 tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex] = new List<RasterBandStatistics>[tilePaths.Count];
                 tilePathsByVrtIndex[vrtIndex] = tilePaths;
-                vrtBandsAndStats.Vrts[vrtIndex] = [];
+                vrtBandsAndStats.Vrts[vrtIndex] = new();
             }
 
             // read tiles: get metadata for virtual raster position, read data and calculate band statistics if sampled
             int readThreads = this.ReadThreads;
             if (readThreads == -1)
             {
-                readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.TilePaths, this.SessionState.Path.CurrentLocation.Path, 1.0F, 6.8F), this.MaxThreads);
+                readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.TilePaths, this.SessionState.Path.CurrentLocation.Path, 1.0F, 6.8F), this.DataThreads);
             }
             int tileMetadataReadsCompleted = 0;
             int tileReadsInitiated = -1;
             int vrtsRead = 0;
             ParallelTasks readVrts = new(Int32.Min(readThreads, tileCountAcrossAllVrts), () =>
             {
-                SortedList<DataType, Array?> bandBuffersByDataType = []; // pool buffers for bands to avoid overloading the GC
+                RasterBandPool dataBufferPool = new(); // pool buffers for bands to avoid overloading the GC
                 // Raster? tile = null; // for performance testing
                 TileEnumerator tileEnumerator = new(tilePathsByVrtIndex, this.MinTilesSampled, this.MinSamplingFraction);
                 for (int tileReadIndex = Interlocked.Increment(ref tileReadsInitiated); tileReadIndex < tileCountAcrossAllVrts; tileReadIndex = Interlocked.Increment(ref tileReadsInitiated))
@@ -138,7 +138,7 @@ namespace Mars.Clouds.Cmdlets
                     // must be newed distinctly since added to vrt
                     // Defer data read so band data buffers can be object pooled to avoid overloading the GC.
                     using Dataset tileDataset = Gdal.Open(tileEnumerator.Current, Access.GA_ReadOnly);
-                    Raster tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: false);
+                    Raster tile = Raster.Create(tileEnumerator.Current, tileDataset, readData: false);
                     //if (tile == null) // for performance testing
                     //{
                     //    tile = Raster.Read(tileEnumerator.Current, tileDataset, readData: tileEnumerator.SampleTile);
@@ -147,6 +147,8 @@ namespace Mars.Clouds.Cmdlets
                     //{
                     //    tile.Reset(tileEnumerator.Current, tileDataset, readData: tileEnumerator.SampleTile);
                     //}
+                    tileDataset.FlushCache();
+
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
                         return; // no point in continuing if task is cancelled
@@ -170,20 +172,16 @@ namespace Mars.Clouds.Cmdlets
                         List<RasterBandStatistics> tileStatistics = [];
                         foreach (RasterBand band in tile.GetBands())
                         {
-                            string bandName = band.Name;
-                            DataType bandDataType = band.GetGdalDataType();
                             bool bandDataPreviouslyRead = band.HasData;
                             if (bandDataPreviouslyRead == false)
                             {
-                                bandBuffersByDataType.TryGetValue(bandDataType, out Array? bandDataBuffer);
-                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(bandDataBuffer);
+                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(dataBufferPool);
                                 band.ReadDataInSameCrsAndTransform(tileDataset); // band is reading its own data so CRS and transform are guaranteed
                             }
                             tileStatistics.Add(band.GetStatistics());
                             if (bandDataPreviouslyRead == false)
                             {
-                                Array bandDataBuffer = band.ReleaseData();
-                                bandBuffersByDataType[bandDataType] = bandDataBuffer;
+                                band.ReturnData(dataBufferPool);
                             }
                         }
 
@@ -224,14 +222,14 @@ namespace Mars.Clouds.Cmdlets
                     }
                     if (vrt.IsSameExtentAndSpatialResolution(previousVrt) == false)
                     {
-                        throw new NotSupportedException("Virtual raster '" + this.TilePaths[vrtIndex - 1] + "' and '" + this.TilePaths[vrtIndex] + "' differ in spatial extent or resolution. Sizes are " + previousVrt.VirtualRasterSizeInTilesX + " by " + previousVrt.VirtualRasterSizeInTilesY + " and " + vrt.VirtualRasterSizeInTilesX + " by " + vrt.VirtualRasterSizeInTilesY + " tiles with tiles being " + previousVrt.TileCellSizeX + " by " + previousVrt.TileSizeInCellsY + " and " + vrt.TileSizeInCellsX + " by " + vrt.TileSizeInCellsY + " cells, respectively.");
+                        throw new NotSupportedException("Virtual raster '" + this.TilePaths[vrtIndex - 1] + "' and '" + this.TilePaths[vrtIndex] + "' differ in spatial extent or resolution. Sizes are " + previousVrt.SizeInTilesX + " by " + previousVrt.SizeInTilesY + " and " + vrt.SizeInTilesX + " by " + vrt.SizeInTilesY + " tiles with tiles being " + previousVrt.TileCellSizeX + " by " + previousVrt.TileSizeInCellsY + " and " + vrt.TileSizeInCellsX + " by " + vrt.TileSizeInCellsY + " cells, respectively.");
                     }
                 }
 
                 GridNullable<List<RasterBandStatistics>>? vrtStats = null;
                 if (this.MinSamplingFraction > 0.0F)
                 {
-                    vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.VirtualRasterSizeInTilesX, vrt.VirtualRasterSizeInTilesY);
+                    vrtStats = new(vrt.Crs, vrt.TileTransform, vrt.SizeInTilesX, vrt.SizeInTilesY);
                     List<RasterBandStatistics>?[] tileBandStatisticsByUngriddedTileIndexInVrt = tileBandStatisticsByVrtUngriddedTileIndex[vrtIndex];
                     Debug.Assert(tileBandStatisticsByUngriddedTileIndexInVrt.Length == vrt.NonNullTileCount);
 

@@ -60,19 +60,20 @@ namespace Mars.Clouds.Cmdlets
             {
                 this.MaxPointTiles = Int32.Max(25, hardwareCapabilities.PhysicalCores);
             }
-            if (this.MaxThreads < 2)
+            if (this.DataThreads < 2)
             {
-                throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
             }
 
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Read(this.Cells, gridCellDefinitionDataset, readData: true);
+            Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: true);
+            gridCellDefinitionDataset.FlushCache();
             int gridEpsg = cellDefinitions.Crs.ParseEpsg();
 
             const string cmdletName = "Get-GridMetrics";
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
 
-            VirtualRaster<Raster<float>> dtm = this.ReadVirtualRaster<Raster<float>>(cmdletName, this.Dtm, readData: true, this.CancellationTokenSource);
+            VirtualRaster<Raster<float>> dtm = this.ReadVirtualRasterMetadata<Raster<float>>(cmdletName, this.Dtm, Raster<float>.CreateFromBandMetadata, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
                 throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
@@ -187,7 +188,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     PointListZirnc gridCell = populatedCellBatch[batchIndex];
                     (double cellCenterX, double cellCenterY) = metricsRaster.Transform.GetCellCenter(gridCell.XIndex, gridCell.YIndex);
-                    if (tileRead.DtmTiles.TryGetNeighborhood8(cellCenterX, cellCenterY, this.DtmBand, out VirtualRasterNeighborhood8<float>? dtmNeighborhood) == false)
+                    if (tileRead.DtmTiles.TryGetNeighborhood8(cellCenterX, cellCenterY, this.DtmBand, out RasterNeighborhood8<float>? dtmNeighborhood) == false)
                     {
                         throw new InvalidOperationException("Could not find DTM tile for metrics grid cell at (" + cellCenterX + ", " + cellCenterY + ") (metrics grid indices " + gridCell.XIndex + ", " + gridCell.YIndex + ") in DTM band " + this.DtmBand + ".");
                     }

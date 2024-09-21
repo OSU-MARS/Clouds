@@ -1,13 +1,15 @@
 ﻿### Overview
-A research codebase with an ad hoc collection of PowerShell cmdlets for working with remotely sensed data, primarily point clouds.
+A forest biometrics research codebase with an ad hoc collection of PowerShell cmdlets for working with remotely sensed data, primarily point 
+clouds.
 
 - `Get-Dsm`: get digital surface, canopy maxima, and canopy height models from a set of point cloud tiles with supporting information
-- `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
 - `Get-Orthoimages`: get 16 bit RGB+NIR orthoimages with LiDAR intensity bands from point clouds
-- `Get-TreeTops`: find treetop candidates in a digital surface or canopy height model
+- `Get-Treetops`: simple unsupervised classification of local maxima as treetop candidates in a digital surface or canopy height model
+- `Get-Crowns`: treetop seeded segmentation of individual tree crowns from a digital surface model using path cost functions
+- `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
 
 The cmdlets are multithreaded at the tile level and attempt to self configure to reasonable defaults. The current configuration logic is 
-nascent and manually setting `-ReadThreads` and `-MaxThreads` on cmdlets which offer them may improve performance or be needed to constrain
+nascent and manually setting `-ReadThreads` and `-DataThreads` on cmdlets which offer them may improve performance or be needed to constrain
 memory use. [LAS](https://www.asprs.org/divisions-committees/lidar-division/laser-las-file-format-exchange-activities) and [GDAL](https://gdal.org/) 
 file formats are supported, though GDAL testing is limited to GeoPackage and GeoTIFF. In cases where directories are searched for data tiles 
 .las and .tif are the default file extensions.
@@ -22,11 +24,11 @@ needed. On Windows systems which are not OEM locked, [FanControl](https://github
 airflow to drive temperatures.
 
 Clouds' DRAM utilization varies with dataset structure and with parallelism. AMD Zen 3, Intel Raptor Lake, or newer processors with 12–16 cores 
-and 64–128 GB of DDR are assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB with most processing 
-likely fitting within 64 GB of DDR per terabyte of point cloud data. Tile processing rates depend on drive and processor core capabilities but
-desktop hardware has been shown to sustain .las read speeds up to 4.9 GB/s with operating system agnostic code, increasing to 7.0 GB/s with
-operating system specific optimizations. Also, peak transfer rates of 7 GB/s have been observed from some cmdlets. AVX, AVX2, and FMA instructions 
-are used at times for processing. AVX10/256 and AVX10/512 are not currently utilized.
+and 64–128 GB of DDR (6-8 GB DDR per core) are assumed as typical hardware. Development and testing extend to point cloud tile sets up to 2 TB
+with most processing likely fitting within 64 GB of DDR per terabyte of point cloud data. Tile processing rates depend on drive and processor 
+core capabilities but desktop hardware has been shown to sustain .las read speeds up to 4.9 GB/s with operating system agnostic code, increasing
+to 7.0 GB/s with operating system specific optimizations. Also, peak transfer rates of 7 GB/s have been observed from some cmdlets. AVX, AVX2,
+and FMA instructions are used at times for processing. AVX10/256 and AVX10/512 are not currently utilized.
 
 Code is currently pre-alpha and provided as is. Typically, the head commit should compile and pass unit tests but this isn't guaranteed (the
 commit before head should be fine). APIs are volatile and breaking changes are routine.
@@ -167,7 +169,7 @@ rates, both among cores and when the operating system chooses to move threads be
 
 Clouds cmdlets therefore favor fully asynchronous parallelism where, when a thread completes a processing step on a tile, it considers current 
 workload status and determines which step would by most useful to start on next. This design attempts to maximize throughput by fully utilizing 
-all available resources. If more than one cmdlet, or if other workloads need to run concurrently, utilization can be restricted via `-MaxThreads`
+all available resources. If more than one cmdlet, or if other workloads need to run concurrently, utilization can be restricted via `-DataThreads`
 and other throttling parameters.
 
 At present, Clouds does not try to schedule reads optimally across drives. The current assumption is all tiles to be read are either 1) within a
@@ -188,8 +190,8 @@ A few other performance details are notable.
   and additional DDR transfers not present in benchmarking. Profiling of Clouds shows ±20% or more variations in throughput depending on selection 
   among cmdlet implementation tradeoffs and the number of threads running. Absent substantial RAM overclocking, desktop processors' dual channel 
   bandwidth to DDR4 and memory access efficiency is increasingly likely to become a limiting factor as drive transfer rates approach 4–5 GB/s. 
-  With DDR5, throughput upper bounds of of 6–7 GB/s appear likely. Monitoring tools, such as [HWiNFO64](https://www.hwinfo.com/), can be helpful 
-  in tracking DDR and drive transfer rates.
+  With DDR5, throughput upper bounds of 12+ GB/s appear likely but have not been tested due to lack of PCIe 5.0 x4 or raided 4.0 x4 drives. 
+  Monitoring tools, such as [HWiNFO64](https://www.hwinfo.com/), can be helpful  in tracking DDR and drive transfer rates.
 - Drive characteristics and IO coding patterns alter the memory bandwidth demanded by a given IO transfer rate. While little data is available,
   IO to memory ratios have been measured to differ by a factor of 1.5 between NVMes, potentially leading to DDR differences of 10+ GB/s and drive
   transfer rate differences of 1+ GB/s. In application code, such as Clouds, IO is implemented as synchronous or asynchronous with various 
@@ -231,10 +233,10 @@ this very likely means tile processing bottlenecks on the drive. Scripting cmdle
 read speed limitations. However, the redundant reads still accumulate towards hard drives' annual workload rate limits. Also, because each
 cmdlet invocation is independent, Clouds has no mechanism for learning optimal thread allocations and IO patterns based on what it's asked
 to do. In lieu, cmdlets ask `HardwareCapabilities` for estimates of optimal drive interactions and attempt to set reasonable defaults based
-on profiling during development. However, it's likely use of `-ReadThreads`, `-MaxThreads`, and other settings can create configurations
+on profiling during development. However, it's likely use of `-DataThreads`, `-ReadThreads`, and other settings can create configurations
 with higher than default throughput by accounting for specifics of individual hardware. `HardwareCapabilities` makes best case assumptions 
 of drive throughput and uses a simple model for workload interactions with total DDR bandwidth. Memory timings are ignored, as are differences
-among processors DDR controllers and internal IO structures.
+among processors' DDR controllers and internal IO structures.
 
 GeoTIFFs with different datatypes in different bands are perhaps best described as semi-supported within the [OSGEO](https://www.osgeo.org/) 
 toolset. Currently GeoTIFFs are written with all bands being of the same type using GDAL's default no data profile that requires all bands

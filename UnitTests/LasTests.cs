@@ -24,8 +24,10 @@ namespace Mars.Clouds.UnitTests
         {
             Debug.Assert(this.UnitTestPath != null);
 
-            VirtualRaster<Raster<float>> dtm = [];
-            dtm.Add(Raster<float>.Read(Path.Combine(this.UnitTestPath, TestConstant.DtmFileName), readData: true));
+            VirtualRaster<Raster<float>> dtm = new();
+            Raster<float> tile = Raster<float>.CreateFromBandMetadata(Path.Combine(this.UnitTestPath, TestConstant.DtmFileName));
+            tile.ReadBandData();
+            dtm.Add(tile);
             dtm.CreateTileGrid();
 
             return dtm;
@@ -42,7 +44,7 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue(dtmRaster.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
             RasterBandPool dataBufferPool = new();
-            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, DigitalSufaceModelBands.Default | DigitalSufaceModelBands.Subsurface | DigitalSufaceModelBands.ReturnNumberSurface, dtmTile, dataBufferPool);
+            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, DigitalSurfaceModelBands.Default | DigitalSurfaceModelBands.Subsurface | DigitalSurfaceModelBands.ReturnNumberSurface, dtmTile, dataBufferPool);
 
             using LasReader pointReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
             byte[]? pointReadBuffer = null;
@@ -50,10 +52,10 @@ namespace Mars.Clouds.UnitTests
             pointReader.ReadPointsToDsm(lasTile, dsmTile, ref pointReadBuffer, ref subsurfaceBuffer);
             dsmTile.OnPointAdditionComplete(dtmTile, 1.0F, subsurfaceBuffer);
             
-            VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = [];
+            VirtualRaster<DigitalSurfaceModel> dsmVirtualRaster = new();
             dsmVirtualRaster.Add(dsmTile);
             dsmVirtualRaster.CreateTileGrid();
-            VirtualRasterNeighborhood8<float> dsmNeighborhood = dsmVirtualRaster.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, bandName: "dsm");
+            RasterNeighborhood8<float> dsmNeighborhood = dsmVirtualRaster.GetNeighborhood8<float>(tileGridIndexX: 0, tileGridIndexY: 0, bandName: "dsm");
             Binomial.Smooth3x3(dsmNeighborhood, dsmTile.CanopyMaxima3);
 
             Assert.IsTrue((dsmTile.AerialPoints != null) && (dsmTile.Subsurface != null) && (dsmTile.AerialMean != null) && (dsmTile.GroundMean != null) && (dsmTile.GroundPoints != null) && (dsmTile.ReturnNumberSurface != null) && (dsmTile.SourceIDSurface != null));
@@ -263,13 +265,13 @@ namespace Mars.Clouds.UnitTests
             GridMetricsRaster abaMetrics = new(abaGrid, abaMetricsSettings);
 
             (double psmeCell1X, double psmeCell1Y) = abaMetrics.Transform.GetCellCenter(psmeCell1.XIndex, psmeCell1.YIndex);
-            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell1X, psmeCell1Y, bandName: null, out VirtualRasterNeighborhood8<float>? psmeDtmNeighborhood1));
+            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell1X, psmeCell1Y, bandName: null, out RasterNeighborhood8<float>? psmeDtmNeighborhood1));
             (double psmeCell2X, double psmeCell2Y) = abaMetrics.Transform.GetCellCenter(psmeCell2.XIndex, psmeCell2.YIndex);
-            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell2X, psmeCell2Y, bandName: null, out VirtualRasterNeighborhood8<float>? psmeDtmNeighborhood2));
+            Assert.IsTrue(dtm.TryGetNeighborhood8(psmeCell2X, psmeCell2Y, bandName: null, out RasterNeighborhood8<float>? psmeDtmNeighborhood2));
             (double adjacentCell1X, double adjacentCell1Y) = abaMetrics.Transform.GetCellCenter(adjacentCell1.XIndex, adjacentCell1.YIndex);
-            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell1X, adjacentCell1Y, bandName: null, out VirtualRasterNeighborhood8<float>? adjacentCellNeighborhood1));
+            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell1X, adjacentCell1Y, bandName: null, out RasterNeighborhood8<float>? adjacentCellNeighborhood1));
             (double adjacentCell2X, double adjacentCell2Y) = abaMetrics.Transform.GetCellCenter(adjacentCell2.XIndex, adjacentCell2.YIndex);
-            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell2X, adjacentCell2Y, bandName: null, out VirtualRasterNeighborhood8<float>? adjacentCellNeighborhood2));
+            Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell2X, adjacentCell2Y, bandName: null, out RasterNeighborhood8<float>? adjacentCellNeighborhood2));
 
             abaMetrics.SetMetrics(psmeCell1, psmeDtmNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
             abaMetrics.SetMetrics(psmeCell2, psmeDtmNeighborhood2, oneMeterHeightClass, twoMeterHeightThreshold);

@@ -22,7 +22,9 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Merge, "Treetops")]
     public class MergeTreetops : GdalCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Paths to one or more directories containing the treetop files to merge. Wildcards may be used and, if not specfied, *.gpkg will be used.")]
+        private readonly CancellationTokenSource cancellationTokenSource;
+
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Paths to one or more directories containing treetop tiles. Wildcards may be included and, if not specfied, *.gpkg search pattern will be used.")]
         [ValidateNotNullOrEmpty]
         public List<string> Treetops { get; set; }
 
@@ -43,112 +45,13 @@ namespace Mars.Clouds.Cmdlets
 
         public MergeTreetops() 
         {
+            this.cancellationTokenSource = new();
+
             this.Classification = String.Empty;
             this.ClassificationBandName = null;
             this.ClassNames = [ "bare", "bare shadow", "brown tree", "conifer", "conifer shadow", "conifer deep shadow", "grey tree", "hardwood", "hardwood shadow", "hardwood deep shadow" ];
             this.Merge = "treetops" + Constant.File.GeoPackageExtension;
             this.Treetops = [];
-        }
-
-        private (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan elapsedTime) LoadClassificationTiles(List<string> treetopTilePaths)
-        {
-            Debug.Assert(this.Classification != null);
-
-            int tileLoadsInitiated = -1;
-            int tilesLoaded = 0;
-            VirtualRaster<Raster<byte>> classificationTiles = [];
-            ParallelTasks loadClassificationVrt = new(Int32.Min(this.MaxThreads, treetopTilePaths.Count), () =>
-            {
-                // for now, load classification tiles in direct correspondence to treetop tiles
-                // Current behavior is ok if classification and treetop tiles are 1:1 over a contiguous extent or if treetop tiles
-                // extend beyond the classified area. If either tile grid has holes or only part of the treetop tiles is indicated 
-                // then useful classification tiles may not be loaded. Incomplete classification accounts will follow from the edge
-                // effects.
-                for (int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < treetopTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
-                {
-                    string treetopTilePath = treetopTilePaths[tileIndex];
-                    string treetopTileName = Tile.GetName(treetopTilePath);
-                    string classificationTilePath = Path.Combine(this.Classification, treetopTileName + Constant.File.GeoTiffExtension);
-                    if (File.Exists(classificationTilePath) == false)
-                    {
-                        return; // treetop tile has no corresponding classification tile
-                    }
-
-                    Raster<byte> classificationTile = Raster<byte>.Read(classificationTilePath, readData: true);
-                    lock (classificationTiles)
-                    {
-                        classificationTiles.Add(classificationTile);
-                        ++tilesLoaded;
-                    }
-                }
-            }, new());
-
-            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
-            while (loadClassificationVrt.WaitAll(Constant.DefaultProgressInterval) == false)
-            {
-                progress.StatusDescription = "Loading classification tile " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "..."; // same basename
-                progress.Update(tilesLoaded, treetopTilePaths.Count);
-                this.WriteProgress(progress);
-            }
-
-            return (classificationTiles, progress.Stopwatch.Elapsed);
-        }
-
-        private (SortedList<string, Treetops>, int tileFieldWidth, TimeSpan elapsedTime) LoadTreetopTiles(List<string> treetopTilePaths, VirtualRaster<Raster<byte>> classificationTiles)
-        {
-            SortedList<string, Treetops> treetopsByTile = new(treetopTilePaths.Count);
-            int tileFieldWidth = 16;
-            int tileLoadsInitiated = -1;
-            int tilesLoaded = 0;
-            ParallelTasks loadAndClassifyTreetops = new(Int32.Min(this.MaxThreads, treetopTilePaths.Count), () =>
-            {
-                for(int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < treetopTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
-                {
-                    string treetopTilePath = treetopTilePaths[tileIndex];
-                    using DataSource? treetopTile = Ogr.Open(treetopTilePath, update: 0);
-                    using TreetopLayer treetopLayer = TreetopLayer.Open(treetopTile);
-                    SpatialReference tileCrs = treetopLayer.GetSpatialReference();
-                    if (SpatialReferenceExtensions.IsSameCrs(tileCrs, classificationTiles.Crs) == false)
-                    {
-                        throw new NotSupportedException("Tile '" + treetopTilePath + "' does not have the same coordinate system ('" + tileCrs.GetName() + "') as other tiles ('" + classificationTiles.Crs.GetName() + "').");
-                    }
-
-                    Treetops treetops = treetopLayer.GetTreetops(this.ClassNames.Length);
-                    (double treetopTileXcentroid, double treetopTileYcentroid) = treetopLayer.GetCentroid();
-                    if (classificationTiles.TryGetNeighborhood8(treetopTileXcentroid, treetopTileYcentroid, this.ClassificationBandName, out VirtualRasterNeighborhood8<byte>? neighborhood))
-                    {
-                        // get classification counts if the treetop tile has a corresponding classification tile
-                        // Some incomplete classification information may available for treetops with a classification within their radius.
-                        // For now, it's considered acceptable to leave these trees' counts as zero. Effetively incomplete counts are
-                        // reported for treetops which like within a classification tile but whose radius extends beyond the area where
-                        // classification information is available.
-                        treetops.GetClassCounts(neighborhood);
-                    }
-
-                    string treetopTileName = Tile.GetName(treetopTilePath);
-                    lock (treetopsByTile)
-                    {
-                        treetopsByTile.Add(treetopTileName, treetops);
-
-                        if (tileFieldWidth < treetopTileName.Length)
-                        {
-                            tileFieldWidth = treetopTileName.Length;
-                        }
-
-                        ++tilesLoaded;
-                    }
-                }
-            }, new());
-
-            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
-            while (loadAndClassifyTreetops.WaitAll(Constant.DefaultProgressInterval) == false)
-            {
-                progress.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
-                progress.Update(tilesLoaded, treetopTilePaths.Count);
-                this.WriteProgress(progress);
-            }
-
-            return (treetopsByTile, tileFieldWidth, progress.Stopwatch.Elapsed);
         }
 
         protected override void ProcessRecord()
@@ -186,16 +89,67 @@ namespace Mars.Clouds.Cmdlets
             treetopTilePaths.Sort(StringComparer.Ordinal);
 
             // load tiles and get treetop classifications
-            (VirtualRaster<Raster<byte>> classificationTiles, TimeSpan classificationLoadTime) = this.LoadClassificationTiles(treetopTilePaths);
-            classificationTiles.CreateTileGrid();
-            (SortedList<string, Treetops> treetopsByTile, int tileFieldWidth, TimeSpan treetopLoadTime) = this.LoadTreetopTiles(treetopTilePaths, classificationTiles);
+            const string cmdletName = "Merge-Treetops";
+            VirtualRaster<Raster<byte>> classificationTiles = this.ReadVirtualRasterMetadata(cmdletName, this.Merge, Raster<byte>.CreateFromBandMetadata, this.cancellationTokenSource);
+
+            SortedList<string, Treetops> treetopsByTile = new(treetopTilePaths.Count);
+            int tileFieldWidth = 16;
+            int tileLoadsInitiated = -1;
+            int tilesLoaded = 0;
+            ParallelTasks loadAndClassifyTreetops = new(Int32.Min(this.DataThreads, treetopTilePaths.Count), () =>
+            {
+                Treetops? treetops = null;
+                for (int tileIndex = Interlocked.Increment(ref tileLoadsInitiated); tileIndex < treetopTilePaths.Count; tileIndex = Interlocked.Increment(ref tileLoadsInitiated))
+                {
+                    string treetopTilePath = treetopTilePaths[tileIndex];
+                    using DataSource? treetopTile = OgrExtensions.OpenForRead(treetopTilePath);
+                    using TreetopVector treetopLayer = TreetopVector.Open(treetopTile);
+                    SpatialReference tileCrs = treetopLayer.GetSpatialReference();
+                    if (SpatialReferenceExtensions.IsSameCrs(tileCrs, classificationTiles.Crs) == false)
+                    {
+                        throw new NotSupportedException("Tile '" + treetopTilePath + "' does not have the same coordinate system ('" + tileCrs.GetName() + "') as other tiles ('" + classificationTiles.Crs.GetName() + "').");
+                    }
+
+                    treetopLayer.GetTreetops(this.ClassNames.Length, ref treetops);
+                    (double treetopTileXcentroid, double treetopTileYcentroid) = treetopLayer.GetCentroid();
+                    if (classificationTiles.TryGetNeighborhood8(treetopTileXcentroid, treetopTileYcentroid, this.ClassificationBandName, out RasterNeighborhood8<byte>? classificationNeighborhood))
+                    {
+                        // get classification counts if the treetop tile has a corresponding classification tile
+                        // Some incomplete classification information may available for treetops with a classification within their radius.
+                        // For now, it's considered acceptable to leave these trees' counts as zero. Effetively incomplete counts are
+                        // reported for treetops which like within a classification tile but whose radius extends beyond the area where
+                        // classification information is available.
+                        treetops.GetClassCounts(classificationNeighborhood);
+                    }
+
+                    string treetopTileName = Tile.GetName(treetopTilePath);
+                    lock (treetopsByTile)
+                    {
+                        treetopsByTile.Add(treetopTileName, treetops);
+
+                        if (tileFieldWidth < treetopTileName.Length)
+                        {
+                            tileFieldWidth = treetopTileName.Length;
+                        }
+
+                        ++tilesLoaded;
+                    }
+                }
+            }, new());
+
+            TimedProgressRecord progress = new(cmdletName, "placeholder");
+            while (loadAndClassifyTreetops.WaitAll(Constant.DefaultProgressInterval) == false)
+            {
+                progress.StatusDescription = "Loading treetops and classifications in " + Tile.GetName(treetopTilePaths[Int32.Min(tilesLoaded, treetopTilePaths.Count - 1)]) + "...";
+                progress.Update(tilesLoaded, treetopTilePaths.Count);
+                this.WriteProgress(progress);
+            }
 
             // write merged and classified treetops
             // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. Particularly in write to disk.
             int totalTreetops = 0;
-            using DataSource mergedTreetopFile = OgrExtensions.Open(mergedTreetopFilePath);
-            TreetopLayer mergedTreetopLayer = TreetopLayer.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
-            TimedProgressRecord progress = new("Get-Treetops", "placeholder");
+            using DataSource mergedTreetopFile = OgrExtensions.CreateOrOpenForWrite(mergedTreetopFilePath);
+            TreetopVector mergedTreetopLayer = TreetopVector.CreateOrOverwrite(mergedTreetopFile, classificationTiles.Crs, tileFieldWidth, this.ClassNames);
             for (int tileIndex = 0; tileIndex < treetopsByTile.Count; ++tileIndex)
             {
                 if (tileIndex % 10 == 0)
@@ -215,17 +169,22 @@ namespace Mars.Clouds.Cmdlets
             progress.SecondsRemaining = -1;
             this.WriteProgress(progress);
             // explicitly dispose merged treetop layer to trigger write transaction commit and then flush the write cache to file
-            // CLR doesn't have to Dispose() when a using() { } ends and tends not to, so relying using() and not synchronously waiting
+            // CLR doesn't have to Dispose() when a using() { } ends and tends not to, so relying on using() and not synchronously waiting
             // on the flush creates problems with reporting incomplete execution times and the cmdlet appearing to have exited while the
-            // write is committing to disk.
+            // write is still continuing to disk.
             mergedTreetopLayer.Dispose();
             mergedTreetopFile.FlushCache(); // GDAL write speeds are only ~10 MB/s max
 
             progress.Stopwatch.Stop();
-            TimeSpan writeTime = progress.Stopwatch.Elapsed;
-            TimeSpan totalTime = classificationLoadTime + treetopLoadTime + writeTime;
+            TimeSpan totalTime = progress.Stopwatch.Elapsed;
             string elapsedTimeFormat = totalTime.TotalHours > 1.0 ? "h\\:mm\\:ss" : "mm\\:ss";
-            this.WriteVerbose("Merged " + totalTreetops.ToString("#,#,0") + " treetops in " + totalTime.ToString(elapsedTimeFormat) + " (classification raster load " + classificationLoadTime.ToString("mm\\:ss") + ", treetop load and class counting " + treetopLoadTime.ToString("mm\\:ss") + ").");
+            this.WriteVerbose("Merged " + totalTreetops.ToString("#,#,0") + " treetops in " + totalTime.ToString(elapsedTimeFormat) + ".");
+        }
+
+        protected override void StopProcessing()
+        {
+            this.cancellationTokenSource?.Cancel();
+            base.StopProcessing();
         }
     }
 }

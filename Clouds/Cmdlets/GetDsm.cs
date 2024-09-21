@@ -28,6 +28,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string? DtmBand { get; set; }
 
+        [Parameter(HelpMessage = "If set, calculate the DSM and canompy maxima models' slope and aspect.")]
+        public SwitchParameter SlopeAspect { get; set; }
+
         [Parameter(HelpMessage = "Separation distance between DSM layer and subsurface layer. Default is no distance specified which leaves DSM subsurface extraction disabled. Specifying a gap distance enables the DSM's subsurface layer and subsurface buffer used to look for gaps.")]
         [ValidateRange(0.0F, 300.0F)] // arbitrary upper bound
         public float SubsurfaceGap { get; set; }
@@ -38,6 +41,7 @@ namespace Mars.Clouds.Cmdlets
             this.Dtm = String.Empty;
             this.DtmBand = null;
             // leave this.MaxThreads at default
+            this.SlopeAspect = false;
             this.SubsurfaceGap = Single.NaN;
         }
 
@@ -49,22 +53,26 @@ namespace Mars.Clouds.Cmdlets
             }
 
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            if (this.MaxThreads < 2)
+            if (this.DataThreads < 2)
             {
-                throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
             }
 
-            string cmdletName = "Get-Dsm";
+            const string cmdletName = "Get-Dsm";
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
             bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
-            DsmReadCreateWrite dsmReadCreateWrite = new(lasGrid, dsm, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
-            DigitalSufaceModelBands dsmBands = DigitalSufaceModelBands.Default;
+            DsmReadCreateWrite dsmReadCreateWrite = DsmReadCreateWrite.Create(lasGrid, dsm, this.SlopeAspect, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
+            DigitalSurfaceModelBands dsmBands = DigitalSurfaceModelBands.Default;
             if (Single.IsNaN(this.SubsurfaceGap))
             {
-                dsmBands |= DigitalSufaceModelBands.Subsurface;
+                dsmBands |= DigitalSurfaceModelBands.Subsurface;
+            }
+            if (this.SlopeAspect)
+            {
+                dsmBands |= DigitalSurfaceModelBands.SlopeAspect;
             }
 
             // spin up point cloud read and tile worker threads
@@ -76,13 +84,13 @@ namespace Mars.Clouds.Cmdlets
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDsmBandwidth(dsmBands, this.Unbuffered);
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
 
-            int preferredCompletionThreadsAsymptotic = Int32.Min(this.MaxThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
+            int preferredCompletionThreadsAsymptotic = Int32.Min(this.DataThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
-            int preferredCompletionThreadsLWithFewTiles = Int32.Min(this.MaxThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles
+            int preferredCompletionThreadsLWithFewTiles = Int32.Min(this.DataThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles
             // default number of workers is the number of tiles or the asymptotic limit with large number of tiles, whichever is less
             // No value in more than one worker per tile.
             int tileCompletionThreads = Int32.Min(lasGrid.NonNullCells, Int32.Max(preferredCompletionThreadsLWithFewTiles, preferredCompletionThreadsAsymptotic));
-            Debug.Assert(readThreads + tileCompletionThreads <= this.MaxThreads);
+            Debug.Assert(readThreads + tileCompletionThreads <= this.DataThreads);
 
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
             ParallelTasks dsmTasks = new(readThreads + tileCompletionThreads, () =>
@@ -93,55 +101,12 @@ namespace Mars.Clouds.Cmdlets
                 while (dsmReadCreateWrite.TileWritesInitiated < lasGrid.NonNullCells)
                 {
                     // create canopy maxima models and write as many tiles as are available for completion
-                    // An emphasis on completion minimizes total memory footporint by keeping as few tiles in DDR as is practical.
-                    bool noTilesAvailableForWrite = false;
-                    while (noTilesAvailableForWrite == false)
-                    {
-                        DigitalSurfaceModel? dsmTileToCmmAndWrite = null;
-                        int tileWriteIndexX = -1;
-                        int tileWriteIndexY = -1;
-                        lock (dsmReadCreateWrite)
-                        {
-                            if (dsmReadCreateWrite.TryGetNextTileToWrite(out tileWriteIndexX, out tileWriteIndexY, out dsmTileToCmmAndWrite))
-                            {
-                                ++dsmReadCreateWrite.TileWritesInitiated;
-                            }
-                            else
-                            {
-                                if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
-                                {
-                                    return;
-                                }
-                                noTilesAvailableForWrite = true;
-                            }
-                        }
-                        if (dsmTileToCmmAndWrite != null)
-                        {
-                            VirtualRasterNeighborhood8<float> tileNeighborhood = dsmReadCreateWrite.Dsm.GetNeighborhood8<float>(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite.Surface.Name);
-                            Debug.Assert(Object.ReferenceEquals(dsmTileToCmmAndWrite.Surface, tileNeighborhood.Center));
-                            Binomial.Smooth3x3(tileNeighborhood, dsmTileToCmmAndWrite.CanopyMaxima3);
-
-                            if (this.NoWrite == false)
-                            {
-                                dsmTileToCmmAndWrite.Write(dsmTileToCmmAndWrite.FilePath, this.CompressRasters);
-                            }
-                            lock (dsmReadCreateWrite)
-                            {
-                                // mark tile as written even when NoWrite is set so that virtual raster completion's updated and the tile's returned to the object pool
-                                // Since OnTileWritten() returns completed tiles to the DSM object pool the lock taken here must be on the
-                                // same object as when tiles are requested from the pool.
-                                dsmReadCreateWrite.OnTileWritten(tileWriteIndexX, tileWriteIndexY, dsmTileToCmmAndWrite);
-                            }
-                        }
-
-                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
-                        {
-                            return;
-                        }
-                    }
+                    // An emphasis on completion minimizes total memory footprint by keeping as few tiles in DDR as is practical.
+                    // TODO: support .vrt creation
+                    dsmReadCreateWrite.TryWriteCompletedTiles(this.CancellationTokenSource, bandStatisticsByTile: null);
 
                     // if all available tiles are completed and tiles remain to be read, read another tile and create its DSM
-                    if (dsmReadCreateWrite.TileReadIndex < lasGrid.Cells)
+                    if (dsmReadCreateWrite.TileReadIndex < dsmReadCreateWrite.MaxTileIndex)
                     {
                         readSemaphore.Wait(this.CancellationTokenSource.Token);
                         if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
@@ -152,7 +117,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         LasTile? lasTile = null;
-                        for (int tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileReadIndex < lasGrid.Cells; tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
+                        for (int tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileReadIndex < dsmReadCreateWrite.MaxTileIndex; tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
                         {
                             lasTile = lasGrid[tileReadIndex];
                             if (lasTile == null)
@@ -175,7 +140,7 @@ namespace Mars.Clouds.Cmdlets
                             // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
                             if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.NonNullTileCount == 0))
                             {
-                                dsmReadCreateWrite.Dsm.TileTransform.SetTransform(dtmTile.Transform);
+                                dsmReadCreateWrite.Dsm.TileTransform.Copy(dtmTile.Transform);
                             }
 
                             // create new DSM tile
@@ -243,27 +208,27 @@ namespace Mars.Clouds.Cmdlets
 
         private class DsmReadCreateWrite : TileReadCreateWriteStreaming<LasTileGrid, LasTile, DigitalSurfaceModel>
         {
-            private readonly bool noWrite;
-
             public VirtualRaster<DigitalSurfaceModel> Dsm { get; private init; }
             public bool DtmPathIsDirectory { get; private init; }
             public LasTileGrid Las { get; private init; }
 
+            public bool CalculateDsmAndCmmSlopeAndAspect { get; init; }
             public float MeanPointsPerTile { get; private init; }
             public UInt64 TotalNumberOfPoints { get; private init; }
             public float TotalPointDataInGB { get; private init; }
 
-            public DsmReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, bool dsmPathIsDirectory, bool dtmPathIsDirectory, bool noWrite)
-                : base(lasGrid, dsm, dsmPathIsDirectory)
+            // dsm.TileGrid checked for null in Create()
+            protected DsmReadCreateWrite(LasTileGrid lasGrid, bool[,] unpopulatedTileMapForRead, VirtualRaster<DigitalSurfaceModel> dsm, bool[,] unpopulatedTileMapForCreate, bool[,] unpopulatedTileMapForWrite, bool dsmPathIsDirectory, bool dtmPathIsDirectory)
+                : base(lasGrid, unpopulatedTileMapForRead, dsm.TileGrid!, unpopulatedTileMapForCreate, unpopulatedTileMapForWrite, dsmPathIsDirectory)
             {
                 Debug.Assert(SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dsm.Crs));
                 if (lasGrid.IsSameExtentAndSpatialResolution(dsm) == false)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " with extent (" + lasGrid.GetExtentString() + ") while the DSM tile grid is " + dsm.VirtualRasterSizeInTilesX + " x " + dsm.VirtualRasterSizeInTilesY + " with extent " + dsm.GetExtentString() + ". Are the LAS and DTM tiles matched?");
+                    throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " with extent (" + lasGrid.GetExtentString() + ") while the DSM tile grid is " + dsm.SizeInTilesX + " x " + dsm.SizeInTilesY + " with extent " + dsm.GetExtentString() + ". Are the LAS and DTM tiles matched?");
                 }
 
-                this.noWrite = noWrite;
-
+                this.BypassOutputRasterWriteToDisk = false;
+                this.CalculateDsmAndCmmSlopeAndAspect = false;
                 this.Dsm = dsm;
                 this.DtmPathIsDirectory = dtmPathIsDirectory;
                 this.Las = lasGrid;
@@ -285,13 +250,42 @@ namespace Mars.Clouds.Cmdlets
                 this.TotalPointDataInGB = (float)totalTileSizeInBytes / (1024.0F * 1024.0F * 1024.0F);
             }
 
+            public static DsmReadCreateWrite Create(LasTileGrid lasGrid, VirtualRaster<DigitalSurfaceModel> dsm, bool calculateDsmAndCmmSlopeAndAspect, bool dsmPathIsDirectory, bool dtmPathIsDirectory, bool bypassOutputRasterWriteToDisk)
+            {
+                if (dsm.TileGrid == null)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(dsm), "DSM's grid has not been built.");
+                }
+
+                bool[,] unpopulatedTileMapForRead = lasGrid.GetUnpopulatedCellMap();
+                bool[,] unpopulatedTileMapForCreate = ArrayExtensions.Copy(unpopulatedTileMapForRead);
+                bool[,] unpopulatedTileMapForWrite = ArrayExtensions.Copy(unpopulatedTileMapForRead);
+                return new(lasGrid, unpopulatedTileMapForRead, dsm, unpopulatedTileMapForCreate, unpopulatedTileMapForWrite, dsmPathIsDirectory, dtmPathIsDirectory)
+                {
+                    BypassOutputRasterWriteToDisk = bypassOutputRasterWriteToDisk,
+                    CalculateDsmAndCmmSlopeAndAspect = calculateDsmAndCmmSlopeAndAspect
+                };
+            }
+
             public override string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
             {
                 string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
                                 this.Dsm.NonNullTileCount + (this.Dsm.NonNullTileCount == 1 ? " DSM created, " : " DSMs created, ") +
-                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (noWrite ? "completed (" : "written (") + totalThreads +
+                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (this.BypassOutputRasterWriteToDisk ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;
+            }
+
+            protected override void OnTileWrite(int tileWriteIndexX, int tileWriteIndexY, DigitalSurfaceModel dsmTileToCmm)
+            {
+                RasterNeighborhood8<float> dsmNeighborhood = this.Dsm.GetNeighborhood8<float>(tileWriteIndexX, tileWriteIndexY, dsmTileToCmm.Surface.Name);
+                Debug.Assert(Object.ReferenceEquals(dsmTileToCmm.Surface, dsmNeighborhood.Center));
+                Binomial.Smooth3x3(dsmNeighborhood, dsmTileToCmm.CanopyMaxima3);
+                if (this.CalculateDsmAndCmmSlopeAndAspect)
+                {
+                    RasterNeighborhood8<float> cmmNeighborhood = this.Dsm.GetNeighborhood8<float>(tileWriteIndexX, tileWriteIndexY, dsmTileToCmm.CanopyMaxima3.Name);
+                    dsmTileToCmm.CalculateSlopeAndAspect(dsmNeighborhood, cmmNeighborhood);
+                }
             }
         }
     }

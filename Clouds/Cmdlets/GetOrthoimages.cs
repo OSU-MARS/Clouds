@@ -11,8 +11,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Orthoimages")]
     public class GetOrthoimages : LasTilesToTilesCmdlet
     {
-        private TileReadWrite? imageReadWrite;
-
         [Parameter(HelpMessage = "Number of unsigned bits per cell in RGB, NIR, and intensity bands in output tiles. Can be 16, 32, or 64. Default is 16, which is likely to occasionally result in points' RGB, NIR, and possibly intensity values of 65535 being reduced to 65534 to disambiguate them from no data values.")]
         [ValidateRange(16, 64)] // could also use [ValidateSet] but string conversion is required
         public int BitDepth { get; set; }
@@ -26,8 +24,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetOrthoimages() 
         {
-            this.imageReadWrite = null;
-
             this.BitDepth = 16;
             this.CellSize = -1.0;
             this.Image = String.Empty;
@@ -42,17 +38,17 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per cell for RGB, NIR, and intensity bands.");
             }
 
-            if (this.MaxThreads < 2)
+            if (this.DataThreads < 2)
             {
-                throw new ParameterOutOfRangeException(nameof(this.MaxThreads), "-" + nameof(this.MaxThreads) + " must be at least two.");
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
             }
 
-            string cmdletName = "Get-Orthoimages";
+            const string cmdletName = "Get-Orthoimages";
             bool imagePathIsDirectory = Directory.Exists(this.Image);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Image), imagePathIsDirectory);
 
             (int imageTileSizeX, int imageTileSizeY) = this.SetCellSize(lasGrid);
-            this.imageReadWrite = new(imagePathIsDirectory);
+            TileReadWrite imageReadWrite = new(imagePathIsDirectory);
 
             // start single reader and multiple writers
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToImageBandwidth(this.Unbuffered);
@@ -62,7 +58,7 @@ namespace Mars.Clouds.Cmdlets
 
             long cellsWritten = 0;
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
-            ParallelTasks orthoimageTasks = new(Int32.Min(maxUsefulThreads, this.MaxThreads), () =>
+            ParallelTasks orthoimageTasks = new(Int32.Min(maxUsefulThreads, this.DataThreads), () =>
             {
                 ImageRaster<UInt64>? imageTile = null;
                 byte[]? pointReadBuffer = null;
@@ -74,7 +70,7 @@ namespace Mars.Clouds.Cmdlets
                     return;
                 }
 
-                for (int tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = this.imageReadWrite.GetNextTileReadIndexThreadSafe())
+                for (int tileIndex = imageReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = imageReadWrite.GetNextTileReadIndexThreadSafe())
                 {
                     LasTile? lasTile = lasGrid[tileIndex];
                     if (lasTile == null)
@@ -83,11 +79,13 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // read tile
-                    imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY);
+                    string tileName = Tile.GetName(lasTile.FilePath);
+                    string imageTilePath = imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
+                    imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY, imageTilePath);
                     using LasReader pointReader = lasTile.CreatePointReader(unbuffered: this.Unbuffered, enableAsync: false);
                     pointReader.ReadPointsToImage(lasTile, imageTile, ref pointReadBuffer);
                     readSemaphore.Release();
-                    this.imageReadWrite.IncrementTilesReadThreadSafe();
+                    imageReadWrite.IncrementTilesReadThreadSafe();
 
                     if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
@@ -104,14 +102,11 @@ namespace Mars.Clouds.Cmdlets
                     // write tile to disk
                     if (this.NoWrite == false)
                     {
-                        string tileName = Tile.GetName(lasTile.FilePath);
-                        string imageTilePath = this.imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
-                        imageTile.Write(imageTilePath, this.BitDepth, this.CompressRasters);
-
-                        lock (this.imageReadWrite)
+                        imageTile.Write(imageTile.FilePath, this.BitDepth, this.CompressRasters);
+                        lock (imageReadWrite)
                         {
                             cellsWritten += imageTile.Cells;
-                            ++this.imageReadWrite.TilesWritten;
+                            ++imageReadWrite.TilesWritten;
                         }
                     }
 
@@ -127,18 +122,18 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, this.imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
             this.WriteProgress(progress);
             while (orthoimageTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = this.imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count);
-                progress.Update(this.imageReadWrite.TilesWritten, lasGrid.NonNullCells);
+                progress.StatusDescription = imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count);
+                progress.Update(imageReadWrite.TilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Found brightnesses of " + cellsWritten.ToString("n0") + " pixels in " + this.imageReadWrite.TilesRead + (this.imageReadWrite.TilesRead == 1 ? " point cloud tile in " : " point cloud tiles in ") + progress.Stopwatch.ToElapsedString() + ": " + (this.imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose("Found brightnesses of " + cellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + (imageReadWrite.TilesRead == 1 ? " point cloud tile in " : " point cloud tiles in ") + progress.Stopwatch.ToElapsedString() + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
             base.ProcessRecord();
         }
 

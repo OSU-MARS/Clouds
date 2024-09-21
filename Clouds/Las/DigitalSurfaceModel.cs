@@ -9,22 +9,25 @@ using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.Las
 {
-    public class DigitalSurfaceModel : Raster, IRasterSerializable<DigitalSurfaceModel>
+    public class DigitalSurfaceModel : Raster
     {
         private const string DiagnosticDirectoryPointCounts = "nPoints";
         private const string DiagnosticDirectoryReturnNumber = "returnNumber";
         private const string DiagnosticDirectorySourceID = "sourceID";
         private const string DiagnosticDirectoryZ = "z";
+        public const string DirectorySlopeAspect = "slopeAspect";
 
-        public const string DiagnosticDirectorySlopeAspect = "slopeAspect";
-
-        public const string AerialPointsBandName = "nAerial";
-        public const string CanopyHeightBandName = "chm";
-        public const string CanopyMaximaBandName = "cmm3";
         public const string SurfaceBandName = "dsm";
+        public const string CanopyMaximaBandName = "cmm3";
+        public const string CanopyHeightBandName = "chm";
+        public const string CmmAspect3BandName = "cmmAspect3";
+        public const string CmmSlope3BandName = "cmmSlope3";
+        public const string DsmAspectBandName = "dsmAspect";
+        public const string DsmSlopeBandName = "dsmSlope";
         public const string SubsurfaceBandName = "subsurfaceDsm";
         public const string AerialMeanBandName = "aerialMean";
         public const string GroundMeanBandName = "groundMean";
+        public const string AerialPointsBandName = "nAerial";
         public const string GroundPointsBandName = "nGround";
         public const string ReturnNumberBandName = "returnNumberSurface";
         public const string SourceIDSurfaceBandName = "sourceIDsurface";
@@ -35,6 +38,14 @@ namespace Mars.Clouds.Las
         public RasterBand<float> Surface { get; private set; } // digital surface model
         public RasterBand<float> CanopyMaxima3 { get; private set; } // canopy maxima model obtained from the digital surface model using a 3x3 kernel
         public RasterBand<float> CanopyHeight { get; private set; } // canopy height model obtained from DSM - DTM
+
+        public DigitalSurfaceModelBands Bands { get; private set; }
+
+        // slope and aspect bands
+        public RasterBandSlope? DsmSlope { get; private set; }
+        public RasterBandAspect? DsmAspect { get; private set; }
+        public RasterBandSlope? CmmSlope3 { get; private set; }
+        public RasterBandAspect? CmmAspect3 { get; private set; }
 
         // diagnostic bands in z
         public RasterBand<float>? Subsurface { get; private set; } // estimate of next surface layer below digital surface model
@@ -51,12 +62,12 @@ namespace Mars.Clouds.Las
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSufaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
+        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
             : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
         {
-            if ((bands & DigitalSufaceModelBands.Required) != DigitalSufaceModelBands.Required)
+            if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {
-                throw new ArgumentOutOfRangeException(nameof(bands), "One or more required bands is missing from " + nameof(bands) + ".");
+                throw new ArgumentOutOfRangeException(nameof(bands), nameof(bands) + " must include " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.Primary) + ".");
             }
             if (this.Crs.IsCompound() == 0)
             {
@@ -69,11 +80,16 @@ namespace Mars.Clouds.Las
                 throw new ArgumentOutOfRangeException(nameof(dtmTile), dsmFilePath + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
             }
 
+            this.Bands = DigitalSurfaceModelBands.Primary;
             this.FilePath = dsmFilePath;
-
             this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+
+            this.DsmSlope = null;
+            this.DsmAspect = null;
+            this.CmmSlope3 = null;
+            this.CmmAspect3 = null;
 
             this.Subsurface = null;
             this.AerialMean = null;
@@ -83,39 +99,17 @@ namespace Mars.Clouds.Las
             this.ReturnNumberSurface = null;
             this.SourceIDSurface = null;
 
-            if (bands.HasFlag(DigitalSufaceModelBands.Subsurface))
-            {
-                this.Subsurface = new(this, DigitalSurfaceModel.SubsurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.AerialMean))
-            {
-                this.AerialMean = new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.GroundMean))
-            {
-                this.GroundMean = new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.AerialPoints))
-            {
-                this.AerialPoints = new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.GroundPoints))
-            {
-                this.GroundPoints = new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.ReturnNumberSurface))
-            {
-                this.ReturnNumberSurface = new(this, DigitalSurfaceModel.ReturnNumberBandName, 0, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, which is defined as no data in LAS specification
-            }
-            if (bands.HasFlag(DigitalSufaceModelBands.SourceIDSurface))
-            {
-                this.SourceIDSurface = new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData, dataBufferPool); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
-            }
+            this.EnsureSupportingBandsCreated(bands, dataBufferPool);
         }
 
-        public DigitalSurfaceModel(Dataset dsmDataset, bool readData)
+        private DigitalSurfaceModel(Dataset dsmDataset, DigitalSurfaceModelBands bands, bool readData, RasterBandPool? dataBufferPool)
             : base(dsmDataset)
         {
+            if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bands), nameof(bands) + " must include " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.Primary) + ".");
+            }
+
             for (int gdalBandIndex = 1; gdalBandIndex <= dsmDataset.RasterCount; ++gdalBandIndex)
             {
                 using Band gdalBand = dsmDataset.GetRasterBand(gdalBandIndex);
@@ -124,92 +118,335 @@ namespace Mars.Clouds.Las
                 {
                     case DigitalSurfaceModel.SurfaceBandName:
                         this.Surface = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.Surface;
                         break;
                     case DigitalSurfaceModel.CanopyMaximaBandName:
                         this.CanopyMaxima3 = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.CanopyMaxima3;
                         break;
                     case DigitalSurfaceModel.CanopyHeightBandName:
                         this.CanopyHeight = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.CanopyHeight;
                         break;
-                    // only required bands are expected in the primary dataset but it's possible diagnostic bands have been merged
+                    // only primary bands are expected in the primary dataset but it's possible diagnostic bands have been merged
+                    case DigitalSurfaceModel.DsmSlopeBandName:
+                        this.DsmSlope = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.DsmSlope;
+                        break;
+                    case DigitalSurfaceModel.DsmAspectBandName:
+                        this.DsmAspect = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.DsmAspect;
+                        break;
+                    case DigitalSurfaceModel.CmmSlope3BandName:
+                        this.CmmSlope3 = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.CmmSlope3;
+                        break;
+                    case DigitalSurfaceModel.CmmAspect3BandName:
+                        this.CmmAspect3 = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.CmmAspect3;
+                        break;
                     case DigitalSurfaceModel.SubsurfaceBandName:
                         this.Subsurface = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.Subsurface;
                         break;
                     case DigitalSurfaceModel.AerialMeanBandName:
                         this.AerialMean = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.AerialMean;
                         break;
                     case DigitalSurfaceModel.GroundMeanBandName:
                         this.GroundMean = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.GroundMean;
                         break;
                     case DigitalSurfaceModel.AerialPointsBandName:
                         this.AerialPoints = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.AerialPoints;
                         break;
                     case DigitalSurfaceModel.GroundPointsBandName:
                         this.GroundPoints = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.GroundPoints;
                         break;
                     case DigitalSurfaceModel.ReturnNumberBandName:
                         this.ReturnNumberSurface = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.ReturnNumberSurface;
                         break;
                     case DigitalSurfaceModel.SourceIDSurfaceBandName:
                         this.SourceIDSurface = new(dsmDataset, gdalBand, readData);
+                        this.Bands |= DigitalSurfaceModelBands.SourceIDSurface;
                         break;
                     default:
                         throw new NotSupportedException("Unhandled band '" + bandName + "'.");
                 }
             }
             
-            // required bands
+            // primary bands
             if (this.Surface == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named 'dsm'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.SurfaceBandName + "'.");
             }
             if (this.CanopyMaxima3 == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named 'cmm3'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.CanopyMaximaBandName + "'.");
             }
             if (this.CanopyHeight == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named 'chm'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.CanopyHeightBandName + "'.");
             }
+            Debug.Assert((this.Bands & DigitalSurfaceModelBands.Primary) == DigitalSurfaceModelBands.Primary);
 
-            // other bands are optional and can remain null
+            // supporting bands
+            this.EnsureSupportingBandsCreated(bands, dataBufferPool);
         }
 
-        public override IEnumerable<RasterBand> GetBands()
+        public void CalculateSlopeAndAspect(RasterNeighborhood8<float> dsmNeighborhood, RasterNeighborhood8<float> cmmNeighborhood)
         {
-            yield return this.Surface;
-            yield return this.CanopyMaxima3;
-            yield return this.CanopyHeight;
-
-            if (this.Subsurface != null)
+            if ((this.DsmSlope == null) || (this.DsmAspect == null) || (this.CmmSlope3 == null) || (this.CmmAspect3 == null))
             {
-                yield return this.Subsurface;
-            }
-            if (this.AerialMean != null)
-            {
-                yield return this.AerialMean;
-            }
-            if (this.GroundMean != null)
-            {
-                yield return this.GroundMean;
+                throw new InvalidOperationException("DSM and CMM slope and aspect cannot be calculated because at least one slope or aspect band was not instantiated. Current bands are " + this.Bands + ". Was the surface model tile created with " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.SlopeAspect) + "?");
             }
 
-            if (this.AerialPoints != null)
+            Debug.Assert((this.Bands &= DigitalSurfaceModelBands.SlopeAspect) == DigitalSurfaceModelBands.SlopeAspect);
+            this.CalculateSlopeAndAspect(dsmNeighborhood, this.DsmSlope, this.DsmAspect);
+            this.CalculateSlopeAndAspect(cmmNeighborhood, this.CmmSlope3, this.CmmAspect3);
+        }
+
+        private void CalculateSlopeAndAspect(RasterNeighborhood8<float> surfaceNeighborhood, RasterBand<float> slopeBand, RasterBand<float> aspectBand)
+        {
+            RasterBand<float> surface = surfaceNeighborhood.Center;
+            if ((surface.Transform.CellHeight > 0.0) || (surface.SizeX < 2) || (surface.SizeY < 2))
             {
-                yield return this.AerialPoints;
-            }
-            if (this.GroundPoints != null)
-            {
-                yield return this.GroundPoints;
+                throw new NotSupportedException("Surface raster has a positive cell height or is smaller than 2x2 cells.");
             }
 
-            if (this.ReturnNumberSurface != null)
+            int maxInteriorIndexX = this.SizeX - 1;
+            int maxIteriorIndexY = this.SizeY - 1;
+            float weightX = (float)(0.25 / surface.Transform.CellWidth);
+            float weightY = (float)(0.25 / Math.Abs(surface.Transform.CellHeight)); // accommodate both negative and positive cell heights
+
+            // first row
+            bool hasNorthwest = surfaceNeighborhood.TryGetValue(-1, -1, out float zNorthwest);
+            bool hasWest = surfaceNeighborhood.TryGetValue(-1, 0, out float zWest);
+            bool hasSouthwest = surfaceNeighborhood.TryGetValue(-1, 1, out float zSouthwest);
+            bool hasNorth = surfaceNeighborhood.TryGetValue(0, -1, out float zNorth);
+            bool hasCenter = surface.TryGetValue(0, 0, out float zCenter);
+            bool hasSouth = surface.TryGetValue(0, 1, out float zSouth);
+            bool hasNortheast;
+            bool hasEast;
+            bool hasSoutheast;
+            float zNortheast;
+            float zEast;
+            float zSoutheast;
+            float slope;
+            float aspect;
+            for (int xIndex = 0; xIndex < maxInteriorIndexX; ++xIndex)
             {
-                yield return this.ReturnNumberSurface;
+                int xIndexNext = xIndex + 1;
+                hasNortheast = surfaceNeighborhood.TryGetValue(xIndexNext, -1, out zNortheast);
+                hasEast = surface.TryGetValue(xIndexNext, 0, out zEast);
+                hasSoutheast = surface.TryGetValue(xIndexNext, 1, out zSoutheast);
+                if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                                   hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                                   hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                                   weightX, weightY, out slope, out aspect))
+                {
+                    slopeBand[xIndex, 0] = slope;
+                    aspectBand[xIndex, 0] = aspect;
+                }
+
+                hasNorthwest = hasNorth;
+                hasWest = hasCenter;
+                hasSouthwest = hasSouth;
+                hasNorth = hasNortheast;
+                hasCenter = hasEast;
+                hasSouth = hasSoutheast;
+
+                zNorthwest = zNorth;
+                zWest = zCenter;
+                zSouthwest = zSouth;
+                zNorth = zNortheast;
+                zCenter = zEast;
+                zSouth = zSoutheast;
             }
-            if (this.SourceIDSurface != null)
+
+            hasNortheast = surfaceNeighborhood.TryGetValue(this.SizeX, -1, out zNortheast);
+            hasEast = surfaceNeighborhood.TryGetValue(this.SizeX, 0, out zEast);
+            hasSoutheast = surfaceNeighborhood.TryGetValue(this.SizeX, 1, out zSoutheast);
+            if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                               hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                               hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                               weightX, weightY, out slope, out aspect))
             {
-                yield return this.SourceIDSurface;
+                slopeBand[maxInteriorIndexX, 0] = slope;
+                aspectBand[maxInteriorIndexX, 0] = aspect;
+            }
+
+            // rows 1..n-1
+            int yIndexPrevious;
+            int yIndexNext;
+            for (int yIndex = 1; yIndex < maxIteriorIndexY; ++yIndex)
+            {
+                yIndexPrevious = yIndex - 1;
+                yIndexNext = yIndex + 1;
+                hasNorthwest = surfaceNeighborhood.TryGetValue(-1, yIndexPrevious, out zNorthwest);
+                hasWest = surfaceNeighborhood.TryGetValue(-1, yIndex, out zWest);
+                hasSouthwest = surfaceNeighborhood.TryGetValue(-1, yIndexNext, out zSouthwest);
+                hasNorth = surfaceNeighborhood.TryGetValue(0, yIndexPrevious, out zNorth);
+                hasCenter = surfaceNeighborhood.TryGetValue(0, yIndex, out zCenter);
+                hasSouth = surfaceNeighborhood.TryGetValue(0, yIndexNext, out zSouth);
+                for (int xIndex = 0; xIndex < maxInteriorIndexX; ++xIndex)
+                {
+                    int xIndexNext = xIndex + 1;
+                    hasNortheast = surfaceNeighborhood.TryGetValue(xIndexNext, yIndexPrevious, out zNortheast);
+                    hasEast = surface.TryGetValue(xIndexNext, yIndex, out zEast);
+                    hasSoutheast = surface.TryGetValue(xIndexNext, yIndexNext, out zSoutheast);
+                    if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                                       hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                                       hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                                       weightX, weightY, out slope, out aspect))
+                    {
+                        slopeBand[xIndex, yIndex] = slope;
+                        aspectBand[xIndex, yIndex] = aspect;
+                    }
+
+                    hasNorthwest = hasNorth;
+                    hasWest = hasCenter;
+                    hasSouthwest = hasSouth;
+                    hasNorth = hasNortheast;
+                    hasCenter = hasEast;
+                    hasSouth = hasSoutheast;
+
+                    zNorthwest = zNorth;
+                    zWest = zCenter;
+                    zSouthwest = zSouth;
+                    zNorth = zNortheast;
+                    zCenter = zEast;
+                    zSouth = zSoutheast;
+                }
+
+                hasNortheast = surfaceNeighborhood.TryGetValue(this.SizeX, yIndexPrevious, out zNortheast);
+                hasEast = surfaceNeighborhood.TryGetValue(this.SizeX, yIndex, out zEast);
+                hasSoutheast = surfaceNeighborhood.TryGetValue(this.SizeX, yIndexNext, out zSoutheast);
+                if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                                   hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                                   hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                                   weightX, weightY, out slope, out aspect))
+                {
+                    slopeBand[maxInteriorIndexX, yIndex] = slope;
+                    aspectBand[maxInteriorIndexX, yIndex] = aspect;
+                }
+            }
+
+            // last row
+            yIndexPrevious = maxIteriorIndexY - 1;
+            yIndexNext = maxIteriorIndexY + 1;
+            hasNorthwest = surfaceNeighborhood.TryGetValue(-1, yIndexPrevious, out zNorthwest);
+            hasWest = surfaceNeighborhood.TryGetValue(-1, maxIteriorIndexY, out zWest);
+            hasSouthwest = surfaceNeighborhood.TryGetValue(-1, yIndexNext, out zSouthwest);
+            hasNorth = surfaceNeighborhood.TryGetValue(0, yIndexPrevious, out zNorth);
+            hasCenter = surfaceNeighborhood.TryGetValue(0, maxIteriorIndexY, out zCenter);
+            hasSouth = surfaceNeighborhood.TryGetValue(0, yIndexNext, out zSouth);
+            for (int xIndex = 1; xIndex < maxInteriorIndexX; ++xIndex)
+            {
+                int xIndexNext = xIndex + 1;
+                hasNortheast = surface.TryGetValue(xIndexNext, yIndexPrevious, out zNortheast);
+                hasEast = surface.TryGetValue(xIndexNext, maxIteriorIndexY, out zEast);
+                hasSoutheast = surfaceNeighborhood.TryGetValue(xIndexNext, yIndexNext, out zSoutheast);
+                if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                                   hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                                   hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                                   weightX, weightY, out slope, out aspect))
+                {
+                    slopeBand[xIndex, maxIteriorIndexY] = slope;
+                    aspectBand[xIndex, maxIteriorIndexY] = aspect;
+                }
+
+                hasNorthwest = hasNorth;
+                hasWest = hasCenter;
+                hasSouthwest = hasSouth;
+                hasNorth = hasNortheast;
+                hasCenter = hasEast;
+                hasSouth = hasSoutheast;
+
+                zNorthwest = zNorth;
+                zWest = zCenter;
+                zSouthwest = zSouth;
+                zNorth = zNortheast;
+                zCenter = zEast;
+                zSouth = zSoutheast;
+            }
+
+            hasNortheast = surfaceNeighborhood.TryGetValue(this.SizeX, yIndexPrevious, out zNortheast);
+            hasEast = surfaceNeighborhood.TryGetValue(this.SizeX, maxIteriorIndexY, out zEast);
+            hasSoutheast = surfaceNeighborhood.TryGetValue(this.SizeX, yIndexNext, out zSoutheast);
+            if (DigitalSurfaceModel.TryCalculateSlopeAndAspect(hasNorthwest, zNorthwest, hasNorth, zNorth, hasNortheast, zNortheast,
+                                                               hasWest, zWest, hasCenter, zCenter, hasEast, zEast,
+                                                               hasSouthwest, zSouthwest, hasSouth, zSouth, hasSoutheast, zSoutheast,
+                                                               weightX, weightY, out slope, out aspect))
+            {
+                slopeBand[maxInteriorIndexX, maxIteriorIndexY] = slope;
+                aspectBand[maxInteriorIndexX, maxIteriorIndexY] = aspect;
+            }
+        }
+
+        public static DigitalSurfaceModel CreateFromPrimaryBandMetadata(string dsmPrimaryBandFilePath)
+        {
+            return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary);
+        }
+
+        public static DigitalSurfaceModel CreateFromPrimaryBandMetadata(string dsmPrimaryBandFilePath, DigitalSurfaceModelBands bands)
+        {
+            using Dataset dsmDataset = Gdal.Open(dsmPrimaryBandFilePath, Access.GA_ReadOnly);
+            // leave dataset in GDAL's cache on the assumption primary band data will be read later
+            return new(dsmDataset, bands, readData: false, dataBufferPool: null);
+        }
+
+        public void EnsureSupportingBandsCreated(DigitalSurfaceModelBands bands, RasterBandPool? dataBufferPool)
+        {
+            this.Bands |= bands;
+            if ((bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope)
+            {
+                this.DsmSlope ??= new(this, DigitalSurfaceModel.DsmSlopeBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+
+            if ((bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect)
+            {
+                this.DsmAspect ??= new(this, DigitalSurfaceModel.DsmAspectBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3)
+            {
+                this.CmmSlope3 ??= new(this, DigitalSurfaceModel.CmmSlope3BandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3)
+            {
+                this.CmmAspect3 ??= new(this, DigitalSurfaceModel.CmmAspect3BandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+
+            if ((bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface)
+            {
+                this.Subsurface ??= new(this, DigitalSurfaceModel.SubsurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean)
+            {
+                this.AerialMean ??= new(this, DigitalSurfaceModel.AerialMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean)
+            {
+                this.GroundMean ??= new(this, DigitalSurfaceModel.GroundMeanBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints)
+            {
+                this.AerialPoints ??= new(this, DigitalSurfaceModel.AerialPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
+            }
+            if ((bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints)
+            {
+                this.GroundPoints ??= new(this, DigitalSurfaceModel.GroundPointsBandName, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, lacks no data value as count of zero is valid
+            }
+            if ((bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface)
+            {
+                this.ReturnNumberSurface ??= new(this, DigitalSurfaceModel.ReturnNumberBandName, 0, RasterBandInitialValue.Default, dataBufferPool); // leave at default of zero, which is defined as no data in LAS specification
+            }
+            if ((bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface)
+            {
+                this.SourceIDSurface ??= new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData, dataBufferPool); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
             }
         }
 
@@ -229,6 +466,39 @@ namespace Mars.Clouds.Las
             }
 
             int bandIndex = 3;
+            if (this.DsmSlope != null)
+            {
+                if (String.Equals(name, this.DsmSlope.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
+            if (this.DsmAspect != null)
+            {
+                if (String.Equals(name, this.DsmAspect.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
+            if (this.CmmSlope3 != null)
+            {
+                if (String.Equals(name, this.CmmSlope3.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
+            if (this.CmmAspect3 != null)
+            {
+                if (String.Equals(name, this.CmmAspect3.Name, StringComparison.Ordinal))
+                {
+                    return bandIndex;
+                }
+                ++bandIndex;
+            }
+
             if (this.Subsurface != null)
             {
                 if (String.Equals(name, this.Subsurface.Name, StringComparison.Ordinal))
@@ -288,6 +558,116 @@ namespace Mars.Clouds.Las
             }
 
             throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+        }
+
+        public override IEnumerable<RasterBand> GetBands()
+        {
+            yield return this.Surface;
+            yield return this.CanopyMaxima3;
+            yield return this.CanopyHeight;
+
+            if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
+            {
+                yield return this.DsmSlope;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect) && (this.DsmAspect != null))
+            {
+                yield return this.DsmAspect;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3) && (this.CmmSlope3 != null))
+            {
+                yield return this.CmmSlope3;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3) && (this.CmmAspect3 != null))
+            {
+                yield return this.CmmAspect3;
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface) && (this.Subsurface != null))
+            {
+                yield return this.Subsurface;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean) && (this.AerialMean != null))
+            {
+                yield return this.AerialMean;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean) && (this.GroundMean != null))
+            {
+                yield return this.GroundMean;
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints) && (this.AerialPoints != null))
+            {
+                yield return this.AerialPoints;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints) && (this.GroundPoints != null))
+            {
+                yield return this.GroundPoints;
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null))
+            {
+                yield return this.ReturnNumberSurface;
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null))
+            {
+                yield return this.SourceIDSurface;
+            }
+        }
+
+        public override List<RasterBandStatistics> GetBandStatistics()
+        {
+            List<RasterBandStatistics> bandStatistics = [ this.Surface.GetStatistics(), this.CanopyMaxima3.GetStatistics(), this.CanopyHeight.GetStatistics() ];
+
+            if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
+            {
+                bandStatistics.Add(this.DsmSlope.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect) && (this.DsmAspect != null))
+            {
+                bandStatistics.Add(this.DsmAspect.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3) && (this.CmmSlope3 != null))
+            {
+                bandStatistics.Add(this.CmmSlope3.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3) && (this.CmmAspect3 != null))
+            {
+                bandStatistics.Add(this.CmmAspect3.GetStatistics());
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface) && (this.Subsurface != null))
+            {
+                bandStatistics.Add(this.Subsurface.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean) && (this.AerialMean != null))
+            {
+                bandStatistics.Add(this.AerialMean.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean) && (this.GroundMean != null))
+            {
+                bandStatistics.Add(this.GroundMean.GetStatistics());
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints) && (this.AerialPoints != null))
+            {
+                bandStatistics.Add(this.AerialPoints.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints) && (this.GroundPoints != null))
+            {
+                bandStatistics.Add(this.GroundPoints.GetStatistics());
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null))
+            {
+                bandStatistics.Add(this.ReturnNumberSurface.GetStatistics());
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null))
+            {
+                bandStatistics.Add(this.SourceIDSurface.GetStatistics());
+            }
+
+            return bandStatistics;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -462,66 +842,134 @@ namespace Mars.Clouds.Las
             // this.SourceIDSurface
         }
 
+        public override void ReadBandData()
+        {
+            // default to reading all bands
+            this.ReadBandData(this.Bands);
+        }
+
         /// <summary>
-        /// Read specified digital surface model bands. Required bands (<see cref="DigitalSufaceModelBands.Required"/>) must always be requested.
+        /// Read specified digital surface model bands.
         /// </summary>
         /// <remarks>
         /// For now, does not modify bands whose flags are not set. They will be left as null if never loaded or with previous data if
         /// previously loaded.
         /// </remarks>
-        public void Read(DigitalSufaceModelBands bands, RasterBandPool dataBufferPool)
+        public void ReadBandData(DigitalSurfaceModelBands bands)
         {
-            if ((bands & DigitalSufaceModelBands.Required) != DigitalSufaceModelBands.Required)
+            if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.None)
             {
-                throw new ArgumentNullException(nameof(bands), "Required bands must be set on " + bands + ".");
-            }
-
-            // alleviate memory pressure by offloading GC in streaming virtual raster reads
-            // If a previously used tile has been returned into the object pool, capture its required band data arrays and any
-            // unpopulated diagnostic bands. Not very useful if tile sizes depart from the virtual raster convention of all being
-            // identical size.
-            this.Surface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.CanopyMaxima3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.CanopyHeight.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-
-            this.Subsurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.AerialMean?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.GroundMean?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-
-            this.AerialPoints?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.GroundPoints?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-
-            this.ReturnNumberSurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.SourceIDSurface?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-
-            using Dataset dsmDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
-            Debug.Assert((this.SizeX == dsmDataset.RasterXSize) && (this.SizeY == dsmDataset.RasterYSize) && SpatialReferenceExtensions.IsSameCrs(this.Crs, dsmDataset.GetSpatialRef()));
-            for (int gdalBandIndex = 1; gdalBandIndex <= dsmDataset.RasterCount; ++gdalBandIndex)
-            {
-                Band gdalBand = dsmDataset.GetRasterBand(gdalBandIndex);
-                string bandName = gdalBand.GetDescription();
-                switch (bandName)
+                using Dataset dsmDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
+                Debug.Assert((this.SizeX == dsmDataset.RasterXSize) && (this.SizeY == dsmDataset.RasterYSize) && SpatialReferenceExtensions.IsSameCrs(this.Crs, dsmDataset.GetSpatialRef()));
+                for (int gdalBandIndex = 1; gdalBandIndex <= dsmDataset.RasterCount; ++gdalBandIndex)
                 {
-                    case DigitalSurfaceModel.SurfaceBandName:
-                        Debug.Assert(this.Surface.IsNoData(gdalBand));
-                        this.Surface.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
-                        break;
-                    case DigitalSurfaceModel.CanopyMaximaBandName:
-                        Debug.Assert(this.CanopyMaxima3.IsNoData(gdalBand));
-                        this.CanopyMaxima3.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
-                        break;
-                    case DigitalSurfaceModel.CanopyHeightBandName:
-                        Debug.Assert(this.CanopyHeight.IsNoData(gdalBand));
-                        this.CanopyHeight.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
-                        break;
-                    default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in DSM tile '" + this.FilePath + ".");
+                    Band gdalBand = dsmDataset.GetRasterBand(gdalBandIndex);
+                    string bandName = gdalBand.GetDescription();
+                    switch (bandName)
+                    {
+                        case DigitalSurfaceModel.SurfaceBandName:
+                            if ((bands & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
+                            {
+                                Debug.Assert(this.Surface.IsNoData(gdalBand));
+                                this.Surface.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                            }
+                            break;
+                        case DigitalSurfaceModel.CanopyMaximaBandName:
+                            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
+                            {
+                                Debug.Assert(this.CanopyMaxima3.IsNoData(gdalBand));
+                                this.CanopyMaxima3.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                            }
+                            break;
+                        case DigitalSurfaceModel.CanopyHeightBandName:
+                            if ((bands & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
+                            {
+                                Debug.Assert(this.CanopyHeight.IsNoData(gdalBand));
+                                this.CanopyHeight.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                            }
+                            break;
+                        default:
+                            throw new NotSupportedException("Unhandled band '" + bandName + "' in DSM tile '" + this.FilePath + ".");
+                    }
                 }
+
+                dsmDataset.FlushCache();
             }
 
-            if ((bands & DigitalSufaceModelBands.DiagnosticZ) != DigitalSufaceModelBands.None)
+            if ((bands & DigitalSurfaceModelBands.SlopeAspect) != DigitalSurfaceModelBands.None)
             {
-                string zTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                string slopeAspectTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createDiagnosticDirectory: false);
+                using Dataset slopeAspectDataset = Gdal.Open(slopeAspectTilePath, Access.GA_ReadOnly);
+                SpatialReference crs = slopeAspectDataset.GetSpatialRef();
+                for (int gdalBandIndex = 1; gdalBandIndex <= slopeAspectDataset.RasterCount; ++gdalBandIndex)
+                {
+                    Band gdalBand = slopeAspectDataset.GetRasterBand(gdalBandIndex);
+                    string bandName = gdalBand.GetDescription();
+                    switch (bandName)
+                    {
+                        case DigitalSurfaceModel.DsmSlopeBandName:
+                            if ((bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope)
+                            {
+                                if (this.DsmSlope == null)
+                                {
+                                    this.DsmSlope = new(slopeAspectDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.DsmSlope.Read(slopeAspectDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
+                        case DigitalSurfaceModel.DsmAspectBandName:
+                            if ((bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect)
+                            {
+                                if (this.DsmAspect == null)
+                                {
+                                    this.DsmAspect = new(slopeAspectDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.DsmAspect.Read(slopeAspectDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
+                        case DigitalSurfaceModel.CmmSlope3BandName:
+                            if ((bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3)
+                            {
+                                if (this.CmmSlope3 == null)
+                                {
+                                    this.CmmSlope3 = new(slopeAspectDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.CmmSlope3.Read(slopeAspectDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
+                        case DigitalSurfaceModel.CmmAspect3BandName:
+                            if ((bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3)
+                            {
+                                if (this.CmmAspect3 == null)
+                                {
+                                    this.CmmAspect3 = new(slopeAspectDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    this.CmmAspect3.Read(slopeAspectDataset, crs, gdalBand);
+                                }
+                            }
+                            break;
+                        default:
+                            throw new NotSupportedException("Unhandled band '" + bandName + "' in z diagnostics tile '" + slopeAspectTilePath + "'.");
+                    }
+                }
+
+                slopeAspectDataset.FlushCache();
+            }
+
+            if ((bands & DigitalSurfaceModelBands.DiagnosticZ) != DigitalSurfaceModelBands.None)
+            {
+                string zTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: false);
                 using Dataset zDataset = Gdal.Open(zTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = zDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= zDataset.RasterCount; ++gdalBandIndex)
@@ -531,7 +979,7 @@ namespace Mars.Clouds.Las
                     switch (bandName)
                     {
                         case DigitalSurfaceModel.SubsurfaceBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.Subsurface))
+                            if ((bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface)
                             {
                                 if (this.Subsurface == null)
                                 {
@@ -544,7 +992,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         case DigitalSurfaceModel.AerialMeanBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.AerialMean))
+                            if ((bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean)
                             {
                                 if (this.AerialMean == null)
                                 {
@@ -557,7 +1005,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         case DigitalSurfaceModel.GroundMeanBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.GroundMean))
+                            if ((bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean)
                             {
                                 if (this.GroundMean == null)
                                 {
@@ -573,11 +1021,13 @@ namespace Mars.Clouds.Las
                             throw new NotSupportedException("Unhandled band '" + bandName + "' in z diagnostics tile '" + zTilePath + "'.");
                     }
                 }
+
+                zDataset.FlushCache();
             }
 
-            if ((bands & DigitalSufaceModelBands.PointCounts) != DigitalSufaceModelBands.None)
+            if ((bands & DigitalSurfaceModelBands.PointCounts) != DigitalSurfaceModelBands.None)
             {
-                string pointCountTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                string pointCountTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: false);
                 using Dataset pointCountDataset = Gdal.Open(pointCountTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = pointCountDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= pointCountDataset.RasterCount; ++gdalBandIndex)
@@ -587,7 +1037,7 @@ namespace Mars.Clouds.Las
                     switch (bandName)
                     {
                         case DigitalSurfaceModel.AerialPointsBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.AerialPoints))
+                            if ((bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints)
                             {
                                 if (this.AerialPoints == null)
                                 {
@@ -600,7 +1050,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         case DigitalSurfaceModel.GroundPointsBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.GroundPoints))
+                            if ((bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints)
                             {
                                 if (this.GroundPoints == null)
                                 {
@@ -616,11 +1066,13 @@ namespace Mars.Clouds.Las
                             throw new NotSupportedException("Unhandled band '" + bandName + "' in point count diagnostics tile '" + pointCountTilePath + "'.");
                     }
                 }
+
+                pointCountDataset.FlushCache();
             }
 
-            if ((bands & DigitalSufaceModelBands.ReturnNumberSurface) != DigitalSufaceModelBands.None)
+            if ((bands & DigitalSurfaceModelBands.ReturnNumberSurface) != DigitalSurfaceModelBands.None)
             {
-                string returnNumberTilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: false);
+                string returnNumberTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: false);
                 using Dataset returnNumberDataset = Gdal.Open(returnNumberTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = returnNumberDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= returnNumberDataset.RasterCount; ++gdalBandIndex)
@@ -630,7 +1082,7 @@ namespace Mars.Clouds.Las
                     switch (bandName)
                     {
                         case DigitalSurfaceModel.ReturnNumberBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.ReturnNumberSurface))
+                            if ((bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface)
                             {
                                 if (this.ReturnNumberSurface == null)
                                 {
@@ -646,11 +1098,13 @@ namespace Mars.Clouds.Las
                             throw new NotSupportedException("Unhandled band '" + bandName + "' in source ID diagnostics tile '" + returnNumberTilePath + "'.");
                     }
                 }
+
+                returnNumberDataset.FlushCache();
             }
 
-            if ((bands & DigitalSufaceModelBands.SourceIDSurface) != DigitalSufaceModelBands.None)
+            if ((bands & DigitalSurfaceModelBands.SourceIDSurface) != DigitalSurfaceModelBands.None)
             {
-                string sourceIDtilePath = Raster.GetDiagnosticFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
+                string sourceIDtilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
                 using Dataset sourceIDdataset = Gdal.Open(sourceIDtilePath, Access.GA_ReadOnly);
                 SpatialReference crs = sourceIDdataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= sourceIDdataset.RasterCount; ++gdalBandIndex)
@@ -660,7 +1114,7 @@ namespace Mars.Clouds.Las
                     switch (bandName)
                     {
                         case DigitalSurfaceModel.SourceIDSurfaceBandName:
-                            if (bands.HasFlag(DigitalSufaceModelBands.SourceIDSurface))
+                            if ((bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface)
                             {
                                 if (this.SourceIDSurface == null)
                                 {
@@ -676,14 +1130,9 @@ namespace Mars.Clouds.Las
                             throw new NotSupportedException("Unhandled band '" + bandName + "' in source ID diagnostics tile '" + sourceIDtilePath + "'.");
                     }
                 }
-            }
-        }
 
-        public static DigitalSurfaceModel Read(string rasterPath, bool readData)
-        {
-            // likely reads only primary bands with diagnostic bands needing calls to Read()'s other overload
-            using Dataset dsmDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-            return new(dsmDataset, readData);
+                sourceIDdataset.FlushCache();
+            }
         }
 
         public void Reset(string filePath, LasFile lasFile, Grid newExtents)
@@ -691,7 +1140,7 @@ namespace Mars.Clouds.Las
             // inherited from Grid
             if ((this.SizeX != newExtents.SizeX) || (this.SizeY != newExtents.SizeY))
             {
-                throw new NotSupportedException(nameof(this.Reset) + " does not currently support changing the DSM's size from " + this.SizeX + " x " + this.SizeY + " cells to " + newExtents.SizeX + " x " + newExtents.SizeY + ".");
+                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the DSM's size from " + this.SizeX + " x " + this.SizeY + " cells to " + newExtents.SizeX + " x " + newExtents.SizeY + ".");
             }
 
             SpatialReference lasFileCrs = lasFile.GetSpatialReference();
@@ -706,20 +1155,42 @@ namespace Mars.Clouds.Las
             }
 
             Debug.Assert(Object.ReferenceEquals(this.Transform, this.Surface.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyMaxima3.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyHeight.Transform) &&
+                         ((this.DsmSlope == null) || Object.ReferenceEquals(this.Transform, this.DsmSlope!.Transform)) && ((this.DsmAspect == null) || Object.ReferenceEquals(this.Transform, this.DsmAspect!.Transform)) && ((this.CmmSlope3 == null) || Object.ReferenceEquals(this.Transform, this.CmmSlope3!.Transform)) && ((this.CmmAspect3 == null) || Object.ReferenceEquals(this.Transform, this.CmmAspect3!.Transform)) &&
                          ((this.Subsurface == null) || Object.ReferenceEquals(this.Transform, this.Subsurface!.Transform)) && ((this.AerialMean == null) || Object.ReferenceEquals(this.Transform, this.AerialMean!.Transform)) && ((this.GroundMean == null) || Object.ReferenceEquals(this.Transform, this.GroundMean!.Transform)) &&
                          ((this.AerialPoints == null) || Object.ReferenceEquals(this.Transform, this.AerialPoints!.Transform)) && ((this.GroundPoints == null) || Object.ReferenceEquals(this.Transform, this!.GroundPoints.Transform)) && 
                          ((this.ReturnNumberSurface == null) || Object.ReferenceEquals(this.Transform, this.ReturnNumberSurface!.Transform)) && ((this.SourceIDSurface == null) || Object.ReferenceEquals(this.Transform, this.SourceIDSurface!.Transform)));
             this.Transform.Copy(newExtents.Transform);
 
+            // this.Bands remains unchanged as Reset() does not add or remove bands
             // inherited from Raster
             this.FilePath = filePath;
 
             // digital surface model fields
+            // Contents of secondary bands which are instantiated but not flagged in this.Bands are reset in case the band later
+            // becomes flagged.
+            // Fills are no ops if the band's data hasn't been loaded or if the data buffers have been returned to pool.
             Debug.Assert(this.Surface.HasNoDataValue && this.CanopyMaxima3.HasNoDataValue && this.CanopyHeight.HasNoDataValue);
 
             Array.Fill(this.Surface.Data, this.Surface.NoDataValue);
             Array.Fill(this.CanopyMaxima3.Data, this.CanopyMaxima3.NoDataValue);
             Array.Fill(this.CanopyHeight.Data, this.CanopyHeight.NoDataValue);
+
+            if (this.DsmSlope != null)
+            {
+                Array.Fill(this.DsmSlope.Data, this.DsmSlope.NoDataValue);
+            }
+            if (this.DsmAspect != null)
+            {
+                Array.Fill(this.DsmAspect.Data, this.DsmAspect.NoDataValue);
+            }
+            if (this.CmmSlope3 != null)
+            {
+                Array.Fill(this.CmmSlope3.Data, this.CmmSlope3.NoDataValue);
+            }
+            if (this.CmmAspect3 != null)
+            {
+                Array.Fill(this.CmmAspect3.Data, this.CmmAspect3.NoDataValue);
+            }
 
             if (this.Subsurface != null)
             {
@@ -760,19 +1231,72 @@ namespace Mars.Clouds.Las
 
         public override void ReturnBands(RasterBandPool dataBufferPool)
         {
-            this.Surface.ReturnData(dataBufferPool);
-            this.CanopyMaxima3.ReturnData(dataBufferPool);
-            this.CanopyHeight.ReturnData(dataBufferPool);
+            // default to returning all bands present
+            this.ReturnBands(this.Bands, dataBufferPool);
+        }
 
-            this.Subsurface?.ReturnData(dataBufferPool);
-            this.AerialMean?.ReturnData(dataBufferPool);
-            this.GroundMean?.ReturnData(dataBufferPool);
+        public void ReturnBands(DigitalSurfaceModelBands bands, RasterBandPool dataBufferPool)
+        {
+            if ((bands & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
+            {
+                this.Surface.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
+            {
+                this.CanopyMaxima3.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
+            {
+                this.CanopyHeight.ReturnData(dataBufferPool);
+            }
 
-            this.AerialPoints?.ReturnData(dataBufferPool);
-            this.GroundPoints?.ReturnData(dataBufferPool);
+            if ((bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope)
+            {
+                this.DsmSlope?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect)
+            {
+                this.DsmAspect?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3)
+            {
+                this.CmmSlope3?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3)
+            {
+                this.CmmAspect3?.ReturnData(dataBufferPool);
+            }
 
-            this.ReturnNumberSurface?.ReturnData(dataBufferPool);
-            this.SourceIDSurface?.ReturnData(dataBufferPool);
+            if ((bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface)
+            {
+                this.Subsurface?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean)
+            {
+                this.AerialMean?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean)
+            {
+                this.GroundMean?.ReturnData(dataBufferPool);
+            }
+
+            if ((bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints)
+            {
+                this.AerialPoints?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints)
+            {
+                this.GroundPoints?.ReturnData(dataBufferPool);
+            }
+
+            if ((bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface)
+            {
+                this.ReturnNumberSurface?.ReturnData(dataBufferPool);
+            }
+            if ((bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface)
+            {
+                this.SourceIDSurface?.ReturnData(dataBufferPool);
+            }
         }
 
         private void SetCrs(SpatialReference crs)
@@ -781,6 +1305,25 @@ namespace Mars.Clouds.Las
             this.Surface.Crs = crs;
             this.CanopyMaxima3.Crs = crs;
             this.CanopyHeight.Crs = crs;
+
+            // update secondary bands' CRS regardless of whether the band is flagged in this.Band
+            // Bands should default to a consistent CRS if later flagged.
+            if (this.DsmSlope != null)
+            {
+                this.DsmSlope.Crs = crs;
+            }
+            if (this.DsmAspect != null)
+            {
+                this.DsmAspect.Crs = crs;
+            }
+            if (this.CmmSlope3 != null)
+            {
+                this.CmmSlope3.Crs = crs;
+            }
+            if (this.CmmAspect3 != null)
+            {
+                this.CmmAspect3.Crs = crs;
+            }
 
             if (this.Subsurface != null)
             {
@@ -814,6 +1357,81 @@ namespace Mars.Clouds.Las
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool TryCalculateSlopeAndAspect(bool hasNorthwest, float zNorthwest, bool hasNorth, float zNorth, bool hasNortheast, float zNortheast,
+                                                       bool hasWest, float zWest, bool hasCenter, float zCenter, bool hasEast, float zEast,
+                                                       bool hasSouthwest, float zSouthwest, bool hasSouth, float zSouth, bool hasSoutheast, float zSoutheast,
+                                                       float weightX, float weightY, out float slope, out float aspect)
+        {
+            // Zhou et al. 2004 define fx as north-south and fy as east-west
+            // Zhou Q, Liu X. 2004. Analysis of errors of derived slope and aspect related to DEM data properties. Computers & Geosciences 30:369–378. doi:10.1016/j.cageo.2003.07.005
+            // Probably this is because 0° aspect is north.
+            float fx;
+            float fy;
+            if (hasNorthwest && hasNortheast && hasSouthwest && hasSoutheast)
+            {
+                // frame finite difference
+                fx = weightY * (zNorthwest - zSouthwest + zNortheast - zSoutheast);
+                fy = weightX * (zSoutheast - zSouthwest + zNortheast - zNorthwest);
+            }
+            else if (hasNorth && hasSouth && hasEast && hasWest)
+            {
+                // second order finite difference
+                fx = 2.0F * weightY * (zNorth - zSouth);
+                fy = 2.0F * weightX * (zEast - zWest);
+            }
+            else if (hasCenter == false)
+            {
+                slope = Single.NaN;
+                aspect = Single.NaN;
+                return false;
+            }
+            else
+            {
+                // try for simple difference fx and fy
+                if (hasNorth)
+                {
+                    fx = 4.0F * weightY * (zNorth - zCenter);
+                }
+                else if (hasSouth)
+                {
+                    fx = 4.0F * weightY * (zCenter - zSouth);
+                }
+                else
+                {
+                    slope = Single.NaN;
+                    aspect = Single.NaN;
+                    return false;
+                }
+                if (hasWest)
+                {
+                    fy = 4.0F * weightX * (zCenter - zWest);
+                }
+                else if (hasEast)
+                {
+                    fy = 4.0F * weightX * (zEast - zCenter);
+                }
+                else
+                {
+                    slope = Single.NaN;
+                    aspect = Single.NaN;
+                    return false;
+                }
+            }
+
+            slope = 180.0F / MathF.PI * MathF.Atan(fx * fx + fy * fy);
+            aspect = -180.0F / MathF.PI * (MathF.Atan2(fx, fy) + 0.5F * MathF.PI);
+            if (aspect < 0.0F)
+            {
+                aspect = 360.0F + aspect; // can yield exactly 360.0F
+            }
+            if (aspect == 360.0F)
+            {
+                aspect = 0.0F; // disambiguate numerical edge case
+            }
+            return true;
+        }
+
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
             if ((name == null) || (String.Equals(this.Surface.Name, name, StringComparison.Ordinal)))
@@ -828,31 +1446,47 @@ namespace Mars.Clouds.Las
             {
                 band = this.CanopyHeight;
             }
-            else if ((this.Subsurface != null) && String.Equals(this.Subsurface.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null) && String.Equals(this.DsmSlope.Name, name, StringComparison.Ordinal))
+            {
+                band = this.DsmSlope;
+            }
+            else if (((this.Bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect) && (this.DsmAspect != null) && String.Equals(this.DsmAspect.Name, name, StringComparison.Ordinal))
+            {
+                band = this.DsmAspect;
+            }
+            else if (((this.Bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3) && (this.CmmSlope3 != null) && String.Equals(this.CmmSlope3.Name, name, StringComparison.Ordinal))
+            {
+                band = this.CmmSlope3;
+            }
+            else if (((this.Bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3) && (this.CmmAspect3 != null) && String.Equals(this.CmmAspect3.Name, name, StringComparison.Ordinal))
+            {
+                band = this.CmmAspect3;
+            }
+            else if (((this.Bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface) && (this.Subsurface != null) && String.Equals(this.Subsurface.Name, name, StringComparison.Ordinal))
             {
                 band = this.Subsurface;
             }
-            else if ((this.AerialMean != null) && String.Equals(this.AerialMean.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean) && (this.AerialMean != null) && String.Equals(this.AerialMean.Name, name, StringComparison.Ordinal))
             {
                 band = this.AerialMean;
             }
-            else if ((this.GroundMean != null) && String.Equals(this.GroundMean.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean) && (this.GroundMean != null) && String.Equals(this.GroundMean.Name, name, StringComparison.Ordinal))
             {
                 band = this.GroundMean;
             }
-            else if ((this.AerialPoints != null) && String.Equals(this.AerialPoints.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints) && (this.AerialPoints != null) && String.Equals(this.AerialPoints.Name, name, StringComparison.Ordinal))
             {
                 band = this.AerialPoints;
             }
-            else if ((this.GroundPoints != null) && String.Equals(this.GroundPoints.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints) && (this.GroundPoints != null) && String.Equals(this.GroundPoints.Name, name, StringComparison.Ordinal))
             {
                 band = this.GroundPoints;
             }
-            else if ((this.ReturnNumberSurface != null) && String.Equals(this.ReturnNumberSurface.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null) && String.Equals(this.ReturnNumberSurface.Name, name, StringComparison.Ordinal))
             {
                 band = this.ReturnNumberSurface;
             }
-            else if ((this.SourceIDSurface != null) && String.Equals(this.SourceIDSurface.Name, name, StringComparison.Ordinal))
+            else if (((this.Bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null) && String.Equals(this.SourceIDSurface.Name, name, StringComparison.Ordinal))
             {
                 band = this.SourceIDSurface;
             }
@@ -865,73 +1499,200 @@ namespace Mars.Clouds.Las
             return true;
         }
 
+        public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)
+        {
+            // alleviate memory pressure by offloading GC in streaming virtual raster reads
+            // Not useful if tile sizes depart from the virtual raster convention of all being identical size.
+            this.Surface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.CanopyMaxima3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.CanopyHeight.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+
+            if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
+            {
+                this.DsmSlope.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect) && (this.DsmAspect != null))
+            {
+                this.DsmAspect.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3) && (this.CmmSlope3 != null))
+            {
+                this.CmmSlope3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3) && (this.CmmAspect3 != null))
+            {
+                this.CmmAspect3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface) && (this.Subsurface != null))
+            {
+                this.Subsurface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean) && (this.AerialMean != null))
+            {
+                this.AerialMean.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean) && (this.GroundMean != null))
+            {
+                this.GroundMean.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints) && (this.AerialPoints != null))
+            {
+                this.AerialPoints.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints) && (this.GroundPoints != null))
+            {
+                this.GroundPoints.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+
+            if (((this.Bands & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null))
+            {
+                this.ReturnNumberSurface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            if (((this.Bands & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null))
+            {
+                this.SourceIDSurface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+        }
+
         public override void Write(string dsmPath, bool compress)
+        {
+            // default to (over)writing all bands present
+            this.Write(dsmPath, this.Bands, compress);
+        }
+
+        public void Write(string dsmPrimaryPath, DigitalSurfaceModelBands bandsToWriteIfPresent, bool compress)
         {
             // primary data bands
             // GDAL+GeoTIFF single type constraint: convert all bands to double and write with default no data value
-            Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
-            using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(dsmPath, 3, DataType.GDT_Float32, compress);
-            this.Surface.Write(dsmDataset, 1);
-            this.CanopyMaxima3.Write(dsmDataset, 2);
-            this.CanopyHeight.Write(dsmDataset, 3);
-            this.FilePath = dsmPath;
+            if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.None)
+            {
+                Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
+                using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(dsmPrimaryPath, 3, DataType.GDT_Float32, compress);
+                if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
+                {
+                    this.Surface.Write(dsmDataset, 1);
+                }
+                if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
+                {
+                    this.CanopyMaxima3.Write(dsmDataset, 2);
+                }
+                if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
+                {
+                    this.CanopyHeight.Write(dsmDataset, 3);
+                }
+                this.FilePath = dsmPrimaryPath;
+            }
+
+            // slope and aspect bands
+            if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.SlopeAspect) != DigitalSurfaceModelBands.None)
+            {
+                bool writeDsmSlope = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null);
+                bool writeDsmAspect = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect) && (this.DsmAspect != null);
+                bool writeCmmSlope3 = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3) && (this.CmmSlope3 != null);
+                bool writeCmmAspect3 = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3) && (this.CmmAspect3 != null);
+                int slopeAspectBands = (writeDsmSlope ? 1 : 0) + (writeDsmAspect ? 1 : 0) + (writeCmmSlope3 ? 1 : 0) + (writeCmmAspect3 ? 1 : 0);
+                if (slopeAspectBands > 0)
+                {
+                    string slopeAspectTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DirectorySlopeAspect, createDiagnosticDirectory: true);
+
+                    using Dataset slopeAspectDataset = this.CreateGdalRasterAndSetFilePath(slopeAspectTilePath, slopeAspectBands, DataType.GDT_Float32, compress);
+                    int gdalBand = 1;
+                    if (writeDsmSlope)
+                    {
+                        Debug.Assert(this.DsmSlope!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.DsmSlope.Write(slopeAspectDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeDsmAspect)
+                    {
+                        Debug.Assert(this.DsmAspect!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.DsmAspect.Write(slopeAspectDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeCmmSlope3)
+                    {
+                        Debug.Assert(this.CmmSlope3!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.CmmSlope3.Write(slopeAspectDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeCmmAspect3)
+                    {
+                        Debug.Assert(this.CmmAspect3!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.CmmAspect3.Write(slopeAspectDataset, gdalBand);
+                    }
+                }
+            }
 
             // diagnostic bands in z
             // Bands are single precision floating pointm sane as z values.
-            int zDiagnosticBands = (this.Subsurface != null ? 1 : 0) + (this.AerialMean != null ? 1 : 0) + (this.GroundMean != null ? 1 : 0);
-            if (zDiagnosticBands > 0)
+            if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.DiagnosticZ) != DigitalSurfaceModelBands.None)
             {
-                string zTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                bool writeSubsurface = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Subsurface) == DigitalSurfaceModelBands.Subsurface) && (this.Subsurface != null);
+                bool writeAerialMean = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.AerialMean) == DigitalSurfaceModelBands.AerialMean) && (this.AerialMean != null);
+                bool writeGroundMean = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.GroundMean) == DigitalSurfaceModelBands.GroundMean) && (this.GroundMean != null);
+                int zDiagnosticBands = (writeSubsurface ? 1 : 0) + (writeAerialMean ? 1 : 0) + (writeGroundMean ? 1 : 0);
+                if (zDiagnosticBands > 0)
+                {
+                    string zTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
 
-                using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, zDiagnosticBands, DataType.GDT_Float32, compress);
-                int gdalBand = 1;
-                if (this.Subsurface != null)
-                {
-                    Debug.Assert(this.Subsurface.IsNoData(RasterBand.NoDataDefaultFloat));
-                    this.Subsurface.Write(zDataset, gdalBand);
-                    ++gdalBand;
+                    using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, zDiagnosticBands, DataType.GDT_Float32, compress);
+                    int gdalBand = 1;
+                    if (writeSubsurface)
+                    {
+                        Debug.Assert(this.Subsurface!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.Subsurface.Write(zDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeAerialMean)
+                    {
+                        Debug.Assert(this.AerialMean!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.AerialMean.Write(zDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeGroundMean)
+                    {
+                        Debug.Assert(this.GroundMean!.IsNoData(RasterBand.NoDataDefaultFloat));
+                        this.GroundMean.Write(zDataset, gdalBand);
+                    }
                 }
-                if (this.AerialMean != null)
-                {
-                    Debug.Assert(this.AerialMean.IsNoData(RasterBand.NoDataDefaultFloat));
-                    this.AerialMean.Write(zDataset, gdalBand);
-                    ++gdalBand;
-                }
-                if (this.GroundMean != null)
-                {
-                    Debug.Assert(this.GroundMean.IsNoData(RasterBand.NoDataDefaultFloat));
-                    this.GroundMean.Write(zDataset, gdalBand);
-                }
-            }
-            else if ((this.Subsurface != null) || (this.AerialMean != null) || (this.GroundMean != null))
-            {
-                throw new NotSupportedException("Subsurface and mean elevation bands were not written as only one or two of the three layers is available.");
             }
 
             // diagnostic bands: point counts
             // Bands are unsigned 8, 16, or 32 bit integers depending on the largest value counted. 8 and 16 bit cases could potentially
             // be merged with source ID tiles but are not.
-            if ((this.AerialPoints != null) && (this.GroundPoints != null))
+            if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.PointCounts) != DigitalSurfaceModelBands.None)
             {
-                Debug.Assert((this.AerialPoints.HasNoDataValue == false) && (this.GroundPoints.HasNoDataValue == false));
-                string pointCountTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
-                DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(this.AerialPoints, this.GroundPoints);
+                bool writeAerialPoints = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.AerialPoints) == DigitalSurfaceModelBands.AerialPoints) && (this.AerialPoints != null);
+                bool writeGroundPoints = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.GroundPoints) == DigitalSurfaceModelBands.GroundPoints) && (this.GroundPoints != null);
+                int pointCountBands = (writeAerialPoints ? 1 : 0) + (writeGroundPoints ? 1 : 0);
+                if (pointCountBands > 0)
+                {
+                    string pointCountTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                    DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(writeAerialPoints, this.AerialPoints, writeGroundPoints, this.GroundPoints);
 
-                using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, 2, pointCountBandType, compress);
-                this.AerialPoints.Write(pointCountDataset, 1);
-                this.GroundPoints.Write(pointCountDataset, 2);
-                Debug.Assert(pointCountDataset.RasterCount == 2);
-            }
-            else if ((this.AerialPoints != null) || (this.GroundPoints != null))
-            {
-                throw new NotSupportedException("Point count bands were not written as only one of the two layers is available.");
+                    using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, pointCountBands, pointCountBandType, compress);
+                    int gdalBand = 1;
+                    if (writeAerialPoints)
+                    {
+                        Debug.Assert(this.AerialPoints!.HasNoDataValue == false); // nullability doesn't flow through bool
+                        this.AerialPoints.Write(pointCountDataset, gdalBand);
+                        ++gdalBand;
+                    }
+                    if (writeGroundPoints)
+                    {
+                        Debug.Assert(this.GroundPoints!.HasNoDataValue == false); // nullability doesn't flow through bool
+                        this.GroundPoints.Write(pointCountDataset, gdalBand);
+                    }
+                }
             }
 
             // diagnostic bands: return number
             // For now, write band even if return numbers aren't defined in the data source.
-            if (this.ReturnNumberSurface != null)
+            if (((bandsToWriteIfPresent & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null))
             {
-                string returnNumberTilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: true);
+                string returnNumberTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: true);
 
                 using Dataset returnNumberDataset = this.CreateGdalRasterAndSetFilePath(returnNumberTilePath, 1, DataType.GDT_Byte, compress);
                 this.ReturnNumberSurface.Write(returnNumberDataset, 1);
@@ -940,9 +1701,9 @@ namespace Mars.Clouds.Las
 
             // diagnostic bands: source IDs
             // For now, write band even if the maximum source ID is zero.
-            if (this.SourceIDSurface != null)
+            if (((bandsToWriteIfPresent & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null))
             {
-                string sourceIDtilePath = Raster.GetDiagnosticFilePath(dsmPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
+                string sourceIDtilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
                 DataType sourceIDbandType = DataTypeExtensions.GetMostCompactIntegerType(this.SourceIDSurface); // could cache this when points are being added
 
                 using Dataset sourceIDdataset = this.CreateGdalRasterAndSetFilePath(sourceIDtilePath, 1, sourceIDbandType, compress);

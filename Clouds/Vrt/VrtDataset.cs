@@ -69,9 +69,14 @@ namespace Mars.Clouds.Vrt
             }
 
             // add bands
-            for (int vrtBandIndex = 0; vrtBandIndex < vrtBandNames.Count; ++vrtBandIndex) 
+            for (int bandNameIndex = 0; bandNameIndex < vrtBandNames.Count; ++bandNameIndex) 
             {
-                string vrtBandName = vrtBandNames[vrtBandIndex];
+                string vrtBandName = vrtBandNames[bandNameIndex];
+                int vrtBandIndex = vrt.BandNames.IndexOf(vrtBandName);
+                if (vrtBandIndex < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(vrtBandNames), "Band '" + vrtBandName + "' not found in virtual raster's list of bands.");
+                }
                 int tilesWithBand = vrt.TileCountByBand[vrtBandIndex];
                 int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[vrtBandIndex];
                 Debug.Assert((tilesWithBand <= vrt.NonNullTileCount) && (tilesWithNoDataValue <= tilesWithBand));
@@ -100,9 +105,9 @@ namespace Mars.Clouds.Vrt
                 // add sources and combine statistics from sampled tiles
                 RasterBandStatistics vrtBandStatistics = new();
                 int tilesWithStatisticsForVrtBand = 0;
-                for (int tileIndexY = 0; tileIndexY < vrt.VirtualRasterSizeInTilesY; ++tileIndexY)
+                for (int tileIndexY = 0; tileIndexY < vrt.SizeInTilesY; ++tileIndexY)
                 {
-                    for (int tileIndexX = 0; tileIndexX < vrt.VirtualRasterSizeInTilesX; ++tileIndexX)
+                    for (int tileIndexX = 0; tileIndexX < vrt.SizeInTilesX; ++tileIndexX)
                     {
                         TTile? tile = vrt[tileIndexX, tileIndexY];
                         if (tile == null)
@@ -172,7 +177,7 @@ namespace Mars.Clouds.Vrt
             }
         }
 
-        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string subdirectory, string vrtFileName)
+        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string? subdirectory, string vrtFileName)
         {
             string vrtBaseDirectoryPath = basePath;
             if (basePathIsDirectory == false)
@@ -186,7 +191,11 @@ namespace Mars.Clouds.Vrt
                 vrtBaseDirectoryPath = directoryPath;
             }
 
-            string vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            string vrtDatasetDirectoryPath = vrtBaseDirectoryPath;
+            if (subdirectory != null)
+            {
+                vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            }
             string vrtFilePath = Path.Combine(vrtDatasetDirectoryPath, vrtFileName);
             return (vrtFilePath, vrtDatasetDirectoryPath);
         }

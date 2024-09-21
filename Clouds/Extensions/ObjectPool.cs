@@ -31,57 +31,9 @@ namespace Mars.Clouds.Extensions
             this.objects.Enqueue(item);
         }
 
-        public void ReturnThreadSafe(List<T> items)
-        {
-            lock (this.objects) 
-            {
-                for (int index = 0; index < items.Count; ++index)
-                {
-                    this.objects.Enqueue(items[index]);
-                }
-            }
-        }
-
         public bool TryGet([NotNullWhen(true)] out T? item)
         {
             return this.objects.TryDequeue(out item);
-        }
-
-        public bool TryGetThreadSafe([NotNullWhen(true)] out T? item)
-        {
-            if (this.Count == 0)
-            {
-                item = null;
-                return false;
-            }
-            lock (this.objects)
-            {
-                return this.objects.TryDequeue(out item);
-            }
-        }
-
-        public int TryGetThreadSafe(List<T> items, int count)
-        {
-            if (this.Count == 0)
-            {
-                return 0;
-            }
-
-            int itemsAdded = 0;
-            lock (this.objects)
-            {
-                int maxObjectCount = Int32.Min(count, this.Count);
-                for (int objectCount = 0; objectCount < maxObjectCount; ++objectCount)
-                {
-                    if (this.objects.TryDequeue(out T? item))
-                    {
-                        items.Add(item);
-                        ++itemsAdded;
-                    }
-                }
-            }
-
-            return itemsAdded;
         }
     }
 }

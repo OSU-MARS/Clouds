@@ -1,5 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.GdalExtensions
@@ -7,26 +6,19 @@ namespace Mars.Clouds.GdalExtensions
     /// <summary>
     /// One band of a virtual raster tile and, where extant, its neighboring bands in the eight neighboring tiles (first order queen adjacency).
     /// </summary>
-    public class VirtualRasterNeighborhood8<TBand> where TBand : IMinMaxValue<TBand>, INumber<TBand>
+    /// <remarks>
+    /// Can't derive from <see cref="GridNeighborhood8"/> as <see cref="RasterBand"/> is <see cref="Grid"/> rather than <see cref="Grid{TCell}"/>.
+    /// </remarks>
+    public class RasterNeighborhood8<TBand> : Neighborhood8<RasterBand<TBand>> where TBand : struct, IMinMaxValue<TBand>, INumber<TBand>
     {
-        public RasterBand<TBand> Center { get; private init; }
-        public RasterBand<TBand>? North { get; init; }
-        public RasterBand<TBand>? Northeast { get; init; }
-        public RasterBand<TBand>? Northwest { get; init; }
-        public RasterBand<TBand>? South { get; init; }
-        public RasterBand<TBand>? Southeast { get; init; }
-        public RasterBand<TBand>? Southwest { get; init; }
-        public RasterBand<TBand>? East { get; init; }
-        public RasterBand<TBand>? West { get; init; }
-
-        public VirtualRasterNeighborhood8(RasterBand<TBand> center)
+        public RasterNeighborhood8(RasterBand<TBand> center)
+            : base(center)
         {
-            this.Center = center;
         }
 
         public (TBand value, byte mask) GetValueMaskZero(int xIndex, int yIndex)
         {
-            if (this.TryGetValue(xIndex, yIndex, out TBand? value))
+            if (this.TryGetValue(xIndex, yIndex, out TBand value))
             {
                 return (value, 1);
             }
@@ -35,7 +27,7 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryGetValue(int xIndex, int yIndex, [NotNullWhen(true)] out TBand? value)
+        public bool TryGetValue(int xIndex, int yIndex, out TBand value)
         {
             value = default;
             if (yIndex < 0)

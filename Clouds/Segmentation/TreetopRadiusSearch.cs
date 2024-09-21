@@ -1,17 +1,35 @@
-﻿using Mars.Clouds.GdalExtensions;
-using System.Diagnostics;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using System;
+using System.Diagnostics;
 
 namespace Mars.Clouds.Segmentation
 {
     internal class TreetopRadiusSearch : TreetopSearch
     {
-        public bool SearchInHeight { get; set; }
+        public bool SearchCanopyHeightModel { get; set; }
 
-        public TreetopRadiusSearch(string? surfaceBandName)
-            : base(surfaceBandName)
+        protected TreetopRadiusSearch(VirtualRaster<DigitalSurfaceModel> dsm, string? surfaceBandName, GridNullable<DigitalSurfaceModel> dsmGrid, bool[,] unpopulatedTileMapForRead, bool[,] unpopulatedTileMapForWrite, bool outputPathIsDirectory)
+            : base(dsm, surfaceBandName, dsmGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory)
         {
-            this.SearchInHeight = false;
+            this.SearchCanopyHeightModel = false;
+        }
+
+        public static TreetopRadiusSearch Create(VirtualRaster<DigitalSurfaceModel> dsm, string? surfaceBandName, bool searchChm, bool outputPathIsDirectory)
+        {
+            if (dsm.TileGrid == null)
+            {
+                throw new ArgumentException("DSM's grid has not been created.", nameof(dsm));
+            }
+
+            surfaceBandName ??= searchChm ? DigitalSurfaceModel.CanopyHeightBandName : DigitalSurfaceModel.SubsurfaceBandName;
+            bool[,] unpopulatedTileMapForRead = dsm.TileGrid.GetUnpopulatedCellMap();
+            bool[,] unpopulatedTileMapForWrite = ArrayExtensions.Copy(unpopulatedTileMapForRead);
+            return new(dsm, surfaceBandName, dsm.TileGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory)
+            {
+                SearchCanopyHeightModel = true
+            };
         }
 
         protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float surfaceZ, float dtmZ, TreetopSearchState searchState)
@@ -24,11 +42,11 @@ namespace Mars.Clouds.Segmentation
             float searchRadiusInCrsUnits = searchRadiusInM / searchState.CrsLinearUnits;
 
             // check if point is local maxima
-            float candidateZ = this.SearchInHeight ? heightInCrsUnits : surfaceZ;
+            float candidateZ = this.SearchCanopyHeightModel ? heightInCrsUnits : surfaceZ;
             bool cellInSimilarElevationGroup = false;
             bool higherCellFound = false;
             bool newEqualHeightPatchFound = false;
-            VirtualRasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
+            RasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
             int ySearchRadiusInCells = Math.Max((int)(searchRadiusInCrsUnits / searchState.CellHeight + 0.5F), 1);
             int localMaximaRadiusInCells = ySearchRadiusInCells;
             for (int searchYoffset = 0; searchYoffset <= ySearchRadiusInCells; ++searchYoffset)

@@ -9,11 +9,24 @@ using System.Numerics;
 
 namespace Mars.Clouds.Las
 {
+    public class ImageRaster
+    {
+        public const string DiagnosticDirectoryPointCounts = "nPoints";
+        public const string DiagnosticDirectoryScanAngle = "scanAngle";
+
+        public const string RedBandName = "red";
+        public const string GreenBandName = "green";
+        public const string BlueBandName = "blue";
+        public const string NearInfraredBandName = "nearInfrared";
+        public const string IntensityFirstReturnBandName = "intensityFirstReturn";
+        public const string IntensitySecondReturnBandName = "intensitySecondReturn";
+        public const string ScanAngleMeanAbsoluteBandName = "scanAngleMeanAbsolute";
+        public const string FirstReturnsBandName = "firstReturns";
+        public const string SecondReturnsBandName = "secondReturns";
+    }
+
     public class ImageRaster<TPixel> : Raster where TPixel : IMinMaxValue<TPixel>, INumber<TPixel>, IUnsignedNumber<TPixel>
     {
-        private const string DiagnosticDirectoryPointCounts = "nPoints";
-        private const string DiagnosticDirectoryScanAngle = "scanAngle";
-
         // since ImageRasters are persistent processing objects and tiles near infrared content may vary, ImageRaster instances may
         // have memory allocated for an NIR band that's not in use for the current tile
         // The NIR band could be newed and nulled to match the tile but doing so would partially defeat the purpose of reusing
@@ -39,16 +52,16 @@ namespace Mars.Clouds.Las
             this.nearInfraredInUse = includeNearInfrared;
 
             TPixel noDataValue = RasterBand<TPixel>.GetDefaultNoDataValue();
-            this.Red = new(this, "red", noDataValue, RasterBandInitialValue.Default);
-            this.Green = new(this, "green", noDataValue, RasterBandInitialValue.Default);
-            this.Blue = new(this, "blue", noDataValue, RasterBandInitialValue.Default);
-            this.NearInfrared = includeNearInfrared ? new(this, "nearInfrared", noDataValue, RasterBandInitialValue.Default) : null;
-            this.IntensityFirstReturn = new(this, "intensityFirstReturn", noDataValue, RasterBandInitialValue.Default);
-            this.IntensitySecondReturn = new(this, "intensitySecondReturn", noDataValue, RasterBandInitialValue.Default);
+            this.Red = new(this, ImageRaster.RedBandName, noDataValue, RasterBandInitialValue.Default);
+            this.Green = new(this, ImageRaster.GreenBandName, noDataValue, RasterBandInitialValue.Default);
+            this.Blue = new(this, ImageRaster.BlueBandName, noDataValue, RasterBandInitialValue.Default);
+            this.NearInfrared = includeNearInfrared ? new(this, ImageRaster.NearInfraredBandName, noDataValue, RasterBandInitialValue.Default) : null;
+            this.IntensityFirstReturn = new(this, ImageRaster.IntensityFirstReturnBandName, noDataValue, RasterBandInitialValue.Default);
+            this.IntensitySecondReturn = new(this, ImageRaster.IntensitySecondReturnBandName, noDataValue, RasterBandInitialValue.Default);
 
-            this.ScanAngleMeanAbsolute = new(this, "scanAngleMeanAbsolute", RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
-            this.FirstReturns = new(this, "firstReturns", RasterBandInitialValue.Default); // count of zero is valid: do not set a no data value
-            this.SecondReturns = new(this, "secondReturns", RasterBandInitialValue.Default);
+            this.ScanAngleMeanAbsolute = new(this, ImageRaster.ScanAngleMeanAbsoluteBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.Default);
+            this.FirstReturns = new(this, ImageRaster.FirstReturnsBandName, RasterBandInitialValue.Default); // count of zero is valid: do not set a no data value
+            this.SecondReturns = new(this, ImageRaster.SecondReturnsBandName, RasterBandInitialValue.Default);
         }
 
         //public void Add(LasFile lasFile, PointList<PointBatchXyirnRgbn> tilePoints)
@@ -108,16 +121,20 @@ namespace Mars.Clouds.Las
         //    }
         //}
 
-        public static ImageRaster<TPixel> CreateRecreateOrReset(ImageRaster<TPixel>? image, SpatialReference lasTileCrs, LasTile lasTile, double cellSize, int sizeX, int sizeY)
+        public static ImageRaster<TPixel> CreateRecreateOrReset(ImageRaster<TPixel>? image, SpatialReference lasTileCrs, LasTile lasTile, double cellSize, int sizeX, int sizeY, string filePath)
         {
             GridGeoTransform lasTileTransform = new(lasTile.GridExtent, cellSize, cellSize);
             bool useNearInfrared = lasTile.Header.PointsHaveNearInfrared;
             if ((image == null) || (image.SizeX != sizeX) || (image.SizeY != sizeY))
             {
-                return new(lasTileCrs, lasTileTransform, sizeX, sizeY, useNearInfrared);
+                return new(lasTileCrs, lasTileTransform, sizeX, sizeY, useNearInfrared)
+                {
+                    FilePath = filePath
+                };
             }
 
             Debug.Assert(SpatialReferenceExtensions.IsSameCrs(image.Crs, lasTileCrs));
+            image.FilePath = filePath;
             image.Transform.Copy(lasTileTransform);
 
             Array.Fill(image.Red.Data, default);
@@ -136,24 +153,6 @@ namespace Mars.Clouds.Las
             Array.Fill(image.FirstReturns.Data, default);
             Array.Fill(image.SecondReturns.Data, default);
             return image;
-        }
-
-        public override IEnumerable<RasterBand> GetBands()
-        {
-            yield return this.Red;
-            yield return this.Green;
-            yield return this.Blue;
-            if (this.nearInfraredInUse)
-            {
-                Debug.Assert(this.NearInfrared != null);
-                yield return this.NearInfrared;
-            }
-            yield return this.IntensityFirstReturn;
-            yield return this.IntensitySecondReturn;
-            yield return this.ScanAngleMeanAbsolute;
-
-            yield return this.FirstReturns;
-            yield return this.SecondReturns;
         }
 
         public override int GetBandIndex(string name)
@@ -207,6 +206,43 @@ namespace Mars.Clouds.Las
             }
 
             throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+        }
+
+        public override IEnumerable<RasterBand> GetBands()
+        {
+            yield return this.Red;
+            yield return this.Green;
+            yield return this.Blue;
+            if (this.nearInfraredInUse)
+            {
+                Debug.Assert(this.NearInfrared != null);
+                yield return this.NearInfrared;
+            }
+
+            yield return this.IntensityFirstReturn;
+            yield return this.IntensitySecondReturn;
+            yield return this.ScanAngleMeanAbsolute;
+
+            yield return this.FirstReturns;
+            yield return this.SecondReturns;
+        }
+
+        public override List<RasterBandStatistics> GetBandStatistics()
+        {
+            List<RasterBandStatistics> bandStatistics = [ this.Red.GetStatistics(), this.Green.GetStatistics(), this.Blue.GetStatistics() ];
+            if (this.nearInfraredInUse)
+            {
+                Debug.Assert(this.NearInfrared != null);
+                bandStatistics.Add(this.NearInfrared.GetStatistics());
+            }
+
+            bandStatistics.Add(this.IntensityFirstReturn.GetStatistics());
+            bandStatistics.Add(this.IntensitySecondReturn.GetStatistics());
+            bandStatistics.Add(this.ScanAngleMeanAbsolute.GetStatistics());
+
+            bandStatistics.Add(this.FirstReturns.GetStatistics());
+            bandStatistics.Add(this.SecondReturns.GetStatistics());
+            return bandStatistics;
         }
 
         /// <summary>
@@ -267,6 +303,54 @@ namespace Mars.Clouds.Las
                     this.ScanAngleMeanAbsolute[index] = floatNoDataValue;
                 }
             }
+        }
+
+        public override void ReadBandData()
+        {
+            using Dataset rasterDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
+            for (int gdalBandIndex = 1; gdalBandIndex <= rasterDataset.RasterCount; ++gdalBandIndex)
+            {
+                using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                string bandName = gdalBand.GetDescription();
+                switch (bandName)
+                {
+                    case ImageRaster.RedBandName:
+                        this.Red.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.GreenBandName:
+                        this.Green.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.BlueBandName:
+                        this.Blue.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.NearInfraredBandName:
+                        if (this.nearInfraredInUse)
+                        {
+                            Debug.Assert(this.NearInfrared != null);
+                            this.NearInfrared.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        }
+                        break;
+                    case ImageRaster.IntensityFirstReturnBandName:
+                        this.IntensityFirstReturn.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.IntensitySecondReturnBandName:
+                        this.IntensitySecondReturn.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.ScanAngleMeanAbsoluteBandName:
+                        this.ScanAngleMeanAbsolute.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.FirstReturnsBandName:
+                        this.FirstReturns.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case ImageRaster.SecondReturnsBandName:
+                        this.SecondReturns.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    default:
+                        throw new NotSupportedException("Unhandled band '" + bandName + "' in image raster '" + this.FilePath + "'.");
+                }
+            }
+
+            rasterDataset.FlushCache();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
@@ -334,6 +418,23 @@ namespace Mars.Clouds.Las
             return true;
         }
 
+        public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)
+        {
+            this.Red.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.Green.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.Blue.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            if (this.nearInfraredInUse)
+            {
+                Debug.Assert(this.NearInfrared != null);
+                this.NearInfrared.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
+            this.IntensityFirstReturn?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.IntensitySecondReturn?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ScanAngleMeanAbsolute?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.FirstReturns?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.SecondReturns?.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+        }
+
         public override void Write(string imagePath, bool compress)
         {
             this.Write(imagePath, 16, compress);
@@ -362,11 +463,11 @@ namespace Mars.Clouds.Las
             this.IntensityFirstReturn.Write(dsmDataset, 4 + nearInfraredOffset);
             this.IntensitySecondReturn.Write(dsmDataset, 5 + nearInfraredOffset);
 
-            string scanAngleTilePath = Raster.GetDiagnosticFilePath(imagePath, ImageRaster<TPixel>.DiagnosticDirectoryScanAngle, createDiagnosticDirectory: true);
+            string scanAngleTilePath = Raster.GetComponentFilePath(imagePath, ImageRaster.DiagnosticDirectoryScanAngle, createDiagnosticDirectory: true);
             using Dataset scanAngleDataset = this.CreateGdalRasterAndSetFilePath(scanAngleTilePath, 1, DataType.GDT_Float32, compress);
             this.ScanAngleMeanAbsolute.Write(scanAngleDataset, 1);
 
-            string pointCountTilePath = Raster.GetDiagnosticFilePath(imagePath, ImageRaster<TPixel>.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+            string pointCountTilePath = Raster.GetComponentFilePath(imagePath, ImageRaster.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
             DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(this.FirstReturns, this.SecondReturns);
             using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, 2, pointCountBandType, compress);
             this.FirstReturns.Write(pointCountDataset, 1);

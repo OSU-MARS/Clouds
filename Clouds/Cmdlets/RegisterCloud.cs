@@ -129,7 +129,7 @@ namespace Mars.Clouds.Cmdlets
             // set point clouds' origins, coordinate systems, and source IDs
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.MaxThreads);
+            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
 
             this.cancellationTokenSource = new();
             int cloudRegistrationsInitiated = -1;

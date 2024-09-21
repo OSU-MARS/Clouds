@@ -16,7 +16,6 @@ namespace Mars.Clouds.Cmdlets
     public class GetLocalMaxima : GdalCmdlet
     {
         private readonly CancellationTokenSource cancellationTokenSource;
-        private TileReadWriteStreaming<DigitalSurfaceModel>? maximaReadWrite;
 
         [Parameter(HelpMessage = "Whether or not to compress output rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
@@ -29,14 +28,13 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string DsmBand { get; set; }
 
-        [Parameter(Position = 2, HelpMessage = "1) path to write local maxima as a raster or a vector or 2,3) path to a directory to local maxima raster and vector tiles to.")]
+        [Parameter(Position = 2, HelpMessage = "1) path to write local maxima as a raster or a vector or 2,3) path to a directory to write local maxima raster tiles to and vector local maxima tiles within.")]
         [ValidateNotNullOrEmpty]
         public string LocalMaxima { get; set; }
 
         public GetLocalMaxima() 
         {
             this.cancellationTokenSource = new();
-            this.maximaReadWrite = null;
 
             this.CompressRasters = false;
             this.Dsm = String.Empty;
@@ -46,7 +44,7 @@ namespace Mars.Clouds.Cmdlets
 
         private int FindLocalMaxima(LocalMaximaState state)
         {
-            VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            RasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
             RasterBand<float> currentSurface = currentNeighborhood.Center;
             RasterBand<byte> currentRadii = state.CurrentRadii;
             int localMaximaFound = 0;
@@ -121,24 +119,14 @@ namespace Mars.Clouds.Cmdlets
         {
             // setup
             const string cmdletName = "Get-LocalMaxima";
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRaster<DigitalSurfaceModel>(cmdletName, this.Dsm, readData: false, this.cancellationTokenSource);
-
-            bool localMaximaPathIsDirectory = Directory.Exists(this.LocalMaxima);
-            if ((dsm.NonNullTileCount > 1) && (localMaximaPathIsDirectory == false))
+            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
-                if (File.Exists(this.LocalMaxima))
-                {
-                    throw new ParameterOutOfRangeException(nameof(this.LocalMaxima), "-" + nameof(this.LocalMaxima) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
-                }
-                else
-                {
-                    Directory.CreateDirectory(this.LocalMaxima);
-                    localMaximaPathIsDirectory = true;
-                }
-            }
+                return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary | DigitalSurfaceModelBands.SourceIDSurface);
+            }, this.cancellationTokenSource);
+            Debug.Assert(dsm.TileGrid != null);
 
-            this.maximaReadWrite = new(dsm, localMaximaPathIsDirectory);
+            bool localMaximaPathIsDirectory = GdalCmdlet.ValidateOrCreateOutputPath(this.LocalMaxima, dsm, nameof(this.Dsm), nameof(this.LocalMaxima));
+            TileReadWriteStreaming<DigitalSurfaceModel, TileStreamPosition> maximaReadWrite = TileReadWriteStreaming.Create(dsm.TileGrid, localMaximaPathIsDirectory);
 
             // find local maxima in all tiles
             // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
@@ -150,75 +138,39 @@ namespace Mars.Clouds.Cmdlets
             long dsmMaximaTotal = 0;
             long cmmMaximaTotal = 0;
             long chmMaximaTotal = 0;
-            int geopackageSqlBackgroundThreads = this.MaxThreads / 16; // based on testing up to 16 cores
-            int maxComputeThreads = this.MaxThreads - geopackageSqlBackgroundThreads;
+            int geopackageSqlBackgroundThreads = this.DataThreads / 16; // based on testing up to 16 cores
+            int maxComputeThreads = this.DataThreads - geopackageSqlBackgroundThreads;
             ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxComputeThreads, dsm.NonNullTileCount), () =>
             {
                 LocalMaximaRaster? localMaximaRaster = null; // cache for reuse to offload GC
-                for (int tileIndex = this.maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileIndex < this.maximaReadWrite.MaxTileIndex; tileIndex = this.maximaReadWrite.GetNextTileWriteIndexThreadSafe())
+                for (int tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < maximaReadWrite.MaxTileIndex; tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe())
                 {
-                    DigitalSurfaceModel? dsmTile = dsm[tileIndex];
+                    DigitalSurfaceModel? dsmTile = dsm[tileWriteIndex];
                     if (dsmTile == null) 
                     {
                         continue;
                     }
 
                     // assist in read until neighborhood complete or no more tiles left to read
-                    // If necessary, the outer while loop spin waits for other threads to complete neighborhood read.
-                    int maxNeighborhoodIndex = this.maximaReadWrite.GetMaximumIndexNeighborhood8(tileIndex);
-                    while (this.maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex) == false)
+                    if (maximaReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
                     {
-                        if (this.maximaReadWrite.TileReadIndex < this.maximaReadWrite.MaxTileIndex) // guard against integer overflow of read index if a significant amount of spin waiting occurs
-                        {
-                            for (int tileDataReadIndex = this.maximaReadWrite.GetNextTileReadIndexThreadSafe(); tileDataReadIndex < this.maximaReadWrite.MaxTileIndex; tileDataReadIndex = this.maximaReadWrite.GetNextTileReadIndexThreadSafe())
-                            {
-                                DigitalSurfaceModel? tileToRead = dsm[tileDataReadIndex];
-                                if (tileToRead == null)
-                                {
-                                    continue;
-                                }
-
-                                // must load DSM tile at given index even if it's beyond the necessary neighborhood
-                                // Otherwise some tiles would not get loaded.
-                                tileToRead.Read(DigitalSufaceModelBands.Required | DigitalSufaceModelBands.SourceIDSurface, this.maximaReadWrite.RasterBandPool);
-                                if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
-                                {
-                                    return;
-                                }
-
-                                lock (this.maximaReadWrite)
-                                {
-                                    this.maximaReadWrite.OnTileRead(tileDataReadIndex);
-                                }
-                                if (this.maximaReadWrite.IsReadCompleteTo(maxNeighborhoodIndex))
-                                {
-                                    break;
-                                }
-                            }
-                        }
+                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        return; // reading was aborted
                     }
 
                     // create local maxima raster and vector tiles
                     string tileName = Tile.GetName(dsmTile.FilePath);
-                    localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile);
-                    localMaximaRaster.FilePath = this.LocalMaxima;
-                    if (this.maximaReadWrite.OutputPathIsDirectory)
-                    {
-                        localMaximaRaster.FilePath = Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension);
-                    }
+                    string rasterTilePath = maximaReadWrite.OutputPathIsDirectory ? Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension) : this.LocalMaxima;
+                    string vectorTilePath = PathExtensions.ReplaceExtension(rasterTilePath, Constant.File.GeoPackageExtension);
 
-                    string vectorTilePath = this.LocalMaxima;
-                    if (this.maximaReadWrite.OutputPathIsDirectory)
-                    {
-                        vectorTilePath = Path.Combine(vectorTilePath, tileName + Constant.File.GeoPackageExtension);
-                    }
-                    using DataSource localMaximaVector = OgrExtensions.Open(vectorTilePath);
+                    localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile, rasterTilePath);
+                    using DataSource localMaximaVector = OgrExtensions.CreateOrOpenForWrite(vectorTilePath);
                     using LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, dsmTile, tileName);
 
                     // find DSM maxima radii and statistics
-                    LocalMaximaState state = new(tileName, dsm, tileIndex, localMaximaRaster)
+                    LocalMaximaState state = new(tileName, dsm, tileWriteIndex, localMaximaRaster)
                     {
-                        CurrentStatistics = dsmMaximaPoints
+                        CurrentStatistics = dsmMaximaPoints // transactions stream to SQL thread for write as points are added
                     };
                     int dsmMaximaFound = this.FindLocalMaxima(state);
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
@@ -248,9 +200,10 @@ namespace Mars.Clouds.Cmdlets
                     Debug.Assert(localMaximaRaster != null);
                     localMaximaRaster.Write(localMaximaRaster.FilePath, this.CompressRasters);
 
-                    lock (this.maximaReadWrite)
+                    (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileWriteIndex);
+                    lock (maximaReadWrite)
                     {
-                        this.maximaReadWrite.OnTileWritten(tileIndex);
+                        maximaReadWrite.OnTileWritten(tileIndexX, tileIndexY);
                         dsmMaximaTotal += dsmMaximaFound;
                         cmmMaximaTotal += cmmMaximaFound;
                         chmMaximaTotal += chmMaximaFound;
@@ -258,22 +211,23 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.cancellationTokenSource);
 
-            TimedProgressRecord progress = new(cmdletName, "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+ " + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)..."));
+            TimedProgressRecord progress = new(cmdletName, "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+ " + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)..."));
             this.WriteProgress(progress);
             while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Found local maxima in " + this.maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+" + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)...");
-                progress.Update(this.maximaReadWrite.TilesWritten, dsm.NonNullTileCount);
+                progress.StatusDescription = "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+" + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)...");
+                progress.Update(maximaReadWrite.TilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
 
             // processing rates are constrained by GDAL load speeds but still overload the garbage collector
-            // 5950X 16 thread read speed is ~1.8 GB/s (SN770 on CPU lanes).
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            // TODO: remove or reinstate Collect() after profiling: hopefully not needed with raster band pooling and vector transaction streaming
+            //GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            //GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
             long meanMaximaPerTile = dsmMaximaTotal / dsm.NonNullTileCount;
-            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.NonNullTileCount + " " + (dsm.NonNullTileCount > 1 ? "tiles" : "tile") + " in " + stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " DSM maxima/tile).");
+            progress.Stopwatch.Stop();
+            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.NonNullTileCount + " " + (dsm.NonNullTileCount > 1 ? "tiles" : "tile") + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " DSM maxima/tile).");
             base.ProcessRecord();
         }
 
@@ -286,7 +240,7 @@ namespace Mars.Clouds.Cmdlets
         private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, bool hasPreviousSurfaceZ, float previousSurfaceZ, float surfaceZ, bool hasNextSurfaceZ, float nextSurfaceZ, LocalMaximaState state)
         {
             // check remainder of first ring: caller has checked xOffset = ±1, yOffset = 0
-            VirtualRasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            RasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
             Span<float> maxRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
             Span<float> meanRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
             Span<float> minRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
@@ -498,11 +452,11 @@ namespace Mars.Clouds.Cmdlets
         private class LocalMaximaState
         {
             public RasterBand<byte> CurrentRadii { get; set; }
-            public VirtualRasterNeighborhood8<float> CurrentNeighborhood { get; set; }
+            public RasterNeighborhood8<float> CurrentNeighborhood { get; set; }
             public LocalMaximaVector? CurrentStatistics { get; set; }
-            public VirtualRasterNeighborhood8<float> ChmNeighborhood { get; private init; }
-            public VirtualRasterNeighborhood8<float> CmmNeighborhood { get; private init; }
-            public VirtualRasterNeighborhood8<float> DsmNeighborhood { get; private init; }
+            public RasterNeighborhood8<float> ChmNeighborhood { get; private init; }
+            public RasterNeighborhood8<float> CmmNeighborhood { get; private init; }
+            public RasterNeighborhood8<float> DsmNeighborhood { get; private init; }
             public DigitalSurfaceModel DsmTile { get; private init; }
             public LocalMaximaRaster MaximaRaster { get; private init; }
             public string TileName { get; private init; }

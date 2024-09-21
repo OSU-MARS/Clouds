@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using OSGeo.GDAL;
 using System;
 using System.Collections.Generic;
@@ -9,6 +10,10 @@ namespace Mars.Clouds.Segmentation
 {
     public class LocalMaximaRaster : Raster
     {
+        public const string ChmMaximaBandName = "chmMaximaRadiusInCells";
+        public const string CmmMaximaBandName = "cmmMaximaRadiusInCells";
+        public const string DsmMaximaBandName = "dsmMaximaRadiusInCells";
+
         public RasterBand<byte> ChmMaxima { get; private init; }
         public RasterBand<byte> CmmMaxima { get; private init; }
         public RasterBand<byte> DsmMaxima { get; private init; }
@@ -16,19 +21,23 @@ namespace Mars.Clouds.Segmentation
         public LocalMaximaRaster(Grid extent) 
             : base(extent)
         {
-            this.ChmMaxima = new(this, "chmMaximaRadiusInCells", RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
-            this.CmmMaxima = new(this, "cmmMaximaRadiusInCells", RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
-            this.DsmMaxima = new(this, "dsmMaximaRadiusInCells", RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
+            this.ChmMaxima = new(this, LocalMaximaRaster.ChmMaximaBandName, RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
+            this.CmmMaxima = new(this, LocalMaximaRaster.CmmMaximaBandName, RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
+            this.DsmMaxima = new(this, LocalMaximaRaster.DsmMaximaBandName, RasterBand.NoDataDefaultByte, RasterBandInitialValue.NoData);
         }
 
-        public static LocalMaximaRaster CreateRecreateOrReset(LocalMaximaRaster? raster, Grid extent)
+        public static LocalMaximaRaster CreateRecreateOrReset(LocalMaximaRaster? raster, Grid extent, string filePath)
         {
             if ((raster == null) || (raster.SizeX != extent.SizeX) || (raster.SizeY != extent.SizeY))
             {
-                return new(extent);
+                return new(extent)
+                {
+                    FilePath = filePath
+                };
             }
 
             Debug.Assert(SpatialReferenceExtensions.IsSameCrs(raster.Crs, extent.Crs));
+            raster.FilePath = filePath;
             raster.Transform.Copy(extent.Transform);
             Array.Fill(raster.DsmMaxima.Data, raster.DsmMaxima.NoDataValue);
             Array.Fill(raster.CmmMaxima.Data, raster.CmmMaxima.NoDataValue);
@@ -59,6 +68,37 @@ namespace Mars.Clouds.Segmentation
             yield return this.DsmMaxima; 
             yield return this.CmmMaxima; 
             yield return this.ChmMaxima;
+        }
+
+        public override List<RasterBandStatistics> GetBandStatistics()
+        {
+            return [ this.DsmMaxima.GetStatistics(), this.CmmMaxima.GetStatistics(), this.ChmMaxima.GetStatistics() ];
+        }
+
+        public override void ReadBandData()
+        {
+            using Dataset rasterDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
+            for (int gdalBandIndex = 1; gdalBandIndex <= rasterDataset.RasterCount; ++gdalBandIndex)
+            {
+                using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                string bandName = gdalBand.GetDescription();
+                switch (bandName)
+                {
+                    case LocalMaximaRaster.ChmMaximaBandName:
+                        this.ChmMaxima.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case LocalMaximaRaster.CmmMaximaBandName:
+                        this.CmmMaxima.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    case LocalMaximaRaster.DsmMaximaBandName:
+                        this.DsmMaxima.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                        break;
+                    default:
+                        throw new NotSupportedException("Unhandled band '" + bandName + "' in local maxima raster '" + this.FilePath + "'.");
+                }
+            }
+
+            rasterDataset.FlushCache();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
@@ -93,6 +133,13 @@ namespace Mars.Clouds.Segmentation
 
             band = null;
             return false;
+        }
+
+        public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)
+        {
+            this.DsmMaxima.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.CmmMaxima.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            this.ChmMaxima.TryTakeOwnershipOfDataBuffer(dataBufferPool);
         }
 
         public override void Write(string maximaPath, bool compress)

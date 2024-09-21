@@ -49,61 +49,64 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             const string cmdletName = "Get-Treetops";
-            TreetopSearch treetopSearch = this.Method switch
-            {
-                TreetopDetectionMethod.ChmRadius => new TreetopRadiusSearch(this.SurfaceBand ?? DigitalSurfaceModel.CanopyHeightBandName) { SearchInHeight = true },
-                TreetopDetectionMethod.DsmRadius => new TreetopRadiusSearch(this.SurfaceBand ?? DigitalSurfaceModel.SurfaceBandName),
-                TreetopDetectionMethod.DsmRing => new TreetopRingSearch(this.SurfaceBand ?? DigitalSurfaceModel.SurfaceBandName),
-                _ => throw new NotSupportedException("Unhandled treetop detection method " + this.Method + ".")
-            };
+            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.cancellationTokenSource);
+            Debug.Assert(dsm.TileGrid != null);
 
-            // load all DSM tiles
-            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRaster<DigitalSurfaceModel>(cmdletName, this.Dsm, readData: true, this.cancellationTokenSource);
-            if ((dsm.NonNullTileCount > 1) && (Directory.Exists(this.Treetops) == false))
+            bool treetopsPathIsDirectory = Directory.Exists(this.Treetops);
+            if ((dsm.NonNullTileCount > 1) && (treetopsPathIsDirectory == false))
             {
                 throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + nameof(this.Treetops) + " must be an existing directory when -" + nameof(this.Dsm) + " indicates multiple files.");
             }
 
+            TreetopSearch treetopSearch = this.Method switch
+            {
+                TreetopDetectionMethod.ChmRadius => TreetopRadiusSearch.Create(dsm, this.SurfaceBand, searchChm: true, treetopsPathIsDirectory),
+                TreetopDetectionMethod.DsmRadius => TreetopRadiusSearch.Create(dsm, this.SurfaceBand, searchChm: false, treetopsPathIsDirectory),
+                TreetopDetectionMethod.DsmRing => TreetopRingSearch.Create(dsm, this.SurfaceBand, treetopsPathIsDirectory),
+                _ => throw new NotSupportedException("Unhandled treetop detection method " + this.Method + ".")
+            };
+
             // find treetop candidates in all tiles
-            int maxDsmTileIndex = treetopSearch.Dsm.VirtualRasterSizeInTilesX * treetopSearch.Dsm.VirtualRasterSizeInTilesY;
             string? mostRecentDsmTileName = null;
             int treetopCandidates = 0;
-            int treetopFindsInitiated = -1;
-            int treetopFindsCompleted = 0;
-            ParallelTasks findTreetopsTasks = new(Int32.Min(this.MaxThreads, dsm.NonNullTileCount), () =>
+            ParallelTasks findTreetopsTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
-                for (int tileIndex = Interlocked.Increment(ref treetopFindsInitiated); tileIndex < maxDsmTileIndex; tileIndex = Interlocked.Increment(ref treetopFindsInitiated))
+                for (int tileWriteIndex = treetopSearch.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < treetopSearch.MaxTileIndex; tileWriteIndex = treetopSearch.GetNextTileWriteIndexThreadSafe())
                 {
-                    DigitalSurfaceModel? dsmTile = treetopSearch.Dsm[tileIndex];
+                    DigitalSurfaceModel? dsmTile = dsm[tileWriteIndex];
                     if (dsmTile == null)
                     {
                         continue;
                     }
 
-                    string dsmTilePath = dsmTile.FilePath;
-                    Debug.Assert(String.IsNullOrWhiteSpace(dsmTilePath) == false);
+                    if (treetopSearch.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
+                    {
+                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        return; // reading was aborted
+                    }
 
-                    string dsmFileName = Path.GetFileName(dsmTilePath);
-                    string dsmFileNameWithoutExtension = Path.GetFileNameWithoutExtension(dsmFileName);
-                    string treetopTilePath = Path.Combine(this.Treetops, dsmFileNameWithoutExtension + Constant.File.GeoPackageExtension);
+                    string tileName = Tile.GetName(dsmTile.FilePath);
+                    string treetopTilePath = treetopsPathIsDirectory ? Path.Combine(this.Treetops, tileName + Constant.File.GeoPackageExtension) : this.Treetops;
 
-                    (int tileIndexX, int tileIndexY) = treetopSearch.Dsm.ToGridIndices(tileIndex);
+                    (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileWriteIndex);
                     int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, treetopTilePath);
 
                     lock (treetopSearch)
                     {
+                        treetopSearch.OnTileWritten(tileIndexX, tileIndexY);
                         treetopCandidates += treetopCandidatesInTile;
-                        ++treetopFindsCompleted;
                     }
-                    mostRecentDsmTileName = dsmFileName;
+                    mostRecentDsmTileName = tileName;
                 }
             }, this.cancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = mostRecentDsmTileName != null ? "Finding treetops in " + mostRecentDsmTileName + "..." : "Finding treetops...";
-                progress.Update(treetopFindsCompleted, dsm.NonNullTileCount);
+                progress.StatusDescription = treetopSearch.TilesRead + (treetopSearch.TilesRead == 1 ? " DSM read, " : " DSMs read, ") +
+                                             treetopSearch.TilesWritten + " of " + dsm.NonNullTileCount + " treetop tiles written (" + 
+                                             findTreetopsTasks.Count + (findTreetopsTasks.Count == 1 ? " thread)..." : " threads)...");
+                progress.Update(treetopSearch.TilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
 

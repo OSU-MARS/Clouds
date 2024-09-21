@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Las
 {
-    public class GridMetricsPointLists : Grid<PointListZirnc>
+    public class GridMetricsPointLists : GridNullable<PointListZirnc>
     {
         public int NonNullCells { get; private set; }
 

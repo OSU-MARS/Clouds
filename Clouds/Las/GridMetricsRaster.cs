@@ -288,7 +288,7 @@ namespace Mars.Clouds.Las
             return bandNames;
         }
 
-        public void SetMetrics(PointListZirnc cell, VirtualRasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
+        public void SetMetrics(PointListZirnc cell, RasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
         {
             int pointCount = cell.Count;
             int cellIndex = this.ToCellIndex(cell.XIndex, cell.YIndex); // all bands are the same size and therefore have the same indexing

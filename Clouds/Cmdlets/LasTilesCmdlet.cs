@@ -19,7 +19,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public List<string> Las { get; set; }
 
-        [Parameter(HelpMessage = "Number of threads, out of -MaxThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
+        [Parameter(HelpMessage = "Number of threads, out of -ComputeThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
         [ValidateRange(1, 32)] // arbitrary upper bound
         public int ReadThreads { get; set; }
 
@@ -39,19 +39,19 @@ namespace Mars.Clouds.Cmdlets
         {
             if (this.ReadThreads != -1)
             {
-                if (this.ReadThreads > this.MaxThreads)
+                if (this.ReadThreads > this.DataThreads)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.ReadThreads), "-" + nameof(this.ReadThreads) + " is " + this.ReadThreads + " which exceeds the maximum of " + nameof(this.MaxThreads) + " threads. Set -" + nameof(this.ReadThreads) + " and -" + nameof(this.MaxThreads) + " such that the number of read threads is less than or equal to the maximum number of threads.");
+                    throw new ParameterOutOfRangeException(nameof(this.ReadThreads), "-" + nameof(this.ReadThreads) + " is " + this.ReadThreads + " which exceeds the maximum of " + nameof(this.DataThreads) + " threads. Set -" + nameof(this.ReadThreads) + " and -" + nameof(this.DataThreads) + " such that the number of read threads is less than or equal to the maximum number of threads.");
                 }
                 return this.ReadThreads; // nothing to do as user's specified the number of read threads
             }
 
-            if (this.MaxThreads < 1)
+            if (this.DataThreads < 1)
             {
-                throw new InvalidOperationException("-" + nameof(this.MaxThreads) + " is " + this.MaxThreads + ". At least one thread must be allowed. Is the caller failing to assign a default value to -" + this.MaxThreads + " when it is not user specified?");
+                throw new InvalidOperationException("-" + nameof(this.DataThreads) + " is " + this.DataThreads + ". At least one thread must be allowed. Is the caller failing to assign a default value to -" + this.DataThreads + " when it is not user specified?");
             }
             int driveBasedReadThreadEstimate = HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
-            return Int32.Min(driveBasedReadThreadEstimate, this.MaxThreads / (1 + minWorkerThreadsPerReadThread));
+            return Int32.Min(driveBasedReadThreadEstimate, this.DataThreads / (1 + minWorkerThreadsPerReadThread));
         }
 
         protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
