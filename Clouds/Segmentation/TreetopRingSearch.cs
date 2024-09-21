@@ -1,11 +1,31 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
 using System;
 using System.Diagnostics;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class TreetopRingSearch(string? dsmBandName) : TreetopSearch(dsmBandName)
+    internal class TreetopRingSearch : TreetopSearch
     {
+        protected TreetopRingSearch(VirtualRaster<DigitalSurfaceModel> dsm, string? surfaceBandName, GridNullable<DigitalSurfaceModel> dsmGrid, bool[,] unpopulatedTileMapForRead, bool[,] unpopulatedTileMapForWrite, bool outputPathIsDirectory)
+            : base(dsm, surfaceBandName, dsmGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory)
+        {
+        }
+
+        public static TreetopRingSearch Create(VirtualRaster<DigitalSurfaceModel> dsm, string? surfaceBandName, bool outputPathIsDirectory)
+        {
+            if (dsm.TileGrid == null)
+            {
+                throw new ArgumentException("DSM's grid has not been created.", nameof(dsm));
+            }
+
+            surfaceBandName ??= DigitalSurfaceModel.SurfaceBandName;
+            bool[,] unpopulatedTileMapForRead = dsm.TileGrid.GetUnpopulatedCellMap();
+            bool[,] unpopulatedTileMapForWrite = ArrayExtensions.Copy(unpopulatedTileMapForRead);
+            return new(dsm, surfaceBandName, dsm.TileGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory);
+        }
+
         protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float dtmZ, TreetopSearchState searchState)
         {
             Debug.Assert(searchState.CellHeight == searchState.CellWidth, "Rectangular DSM cells are not currently supported.");
@@ -26,7 +46,7 @@ namespace Mars.Clouds.Segmentation
             Span<float> maxRingHeight = stackalloc float[maxRingIndex];
             Span<float> minRingHeight = stackalloc float[maxRingIndex];
             int maxRingIndexEvaluated = -1;
-            VirtualRasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
+            RasterNeighborhood8<float> surfaceNeighborhood = searchState.SurfaceNeighborhood;
             for (int ringIndex = 0; ringIndex < maxRingIndex; ++ringIndex)
             {
                 Ring ring = Ring.Rings[ringIndex];

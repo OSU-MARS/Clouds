@@ -102,7 +102,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             // update CRS and transform
             this.Crs = crs;
-            this.Transform.SetTransform(rasterDataset);
+            this.Transform.CopyFrom(rasterDataset);
             // update data and no data
             this.ReadDataInSameCrsAndTransform(rasterDataset);
         }
@@ -156,8 +156,6 @@ namespace Mars.Clouds.GdalExtensions
                 dataPin.Free();
             }
         }
-
-        public abstract Array ReleaseData();
 
         public abstract void ReturnData(RasterBandPool dataBufferPool);
 
@@ -232,7 +230,7 @@ namespace Mars.Clouds.GdalExtensions
             return maxCandidateValue;
         }
 
-        public abstract bool TryTakeOwnershipOfDataBuffer(Array? buffer);
+        public abstract bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool);
     }
 
     public class RasterBand<TBand> : RasterBand where TBand : IMinMaxValue<TBand>, INumber<TBand>
@@ -572,7 +570,7 @@ namespace Mars.Clouds.GdalExtensions
         public void Read(Dataset rasterDataset, SpatialReference crs, Band gdalBand)
         {
             this.Crs = crs;
-            this.Transform.SetTransform(rasterDataset);
+            this.Transform.CopyFrom(rasterDataset);
             this.SizeX = rasterDataset.RasterXSize;
             this.SizeY = rasterDataset.RasterYSize;
             this.SetNoDataValue(gdalBand); // also update no data
@@ -693,14 +691,6 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public override Array ReleaseData()
-        {
-            Array buffer = this.Data;
-            this.Data = [];
-
-            return buffer;
-        }
-
         public override void ReturnData(RasterBandPool dataBufferPool)
         {
             if (this.Data.Length > 0)
@@ -780,19 +770,8 @@ namespace Mars.Clouds.GdalExtensions
             return this.IsNoData(value) == false;
         }
 
-        public override bool TryTakeOwnershipOfDataBuffer(Array? untypedBuffer)
-        {
-            if ((this.HasData == false) && (untypedBuffer is TBand[] buffer) && (buffer.Length == this.Cells))
-            {
-                this.Data = buffer;
-                return true;
-            }
-
-            return false;
-        }
-
         [MemberNotNullWhen(true, nameof(RasterBand<TBand>.Data))] 
-        public bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool)
+        public override bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool)
         {
             if ((this.Data != null) && (this.Data.Length > 0)) // called from constructor so this.Data may be null
             {

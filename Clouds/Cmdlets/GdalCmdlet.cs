@@ -55,23 +55,23 @@ namespace Mars.Clouds.Cmdlets
             return Path.Combine(directoryPath, tileName + Constant.File.GeoTiffExtension);
         }
 
-        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, bool readData, CancellationTokenSource cancellationTokenSource) where TTile : Raster, IRasterSerializable<TTile>
+        protected VirtualRaster<TTile> ReadVirtualRaster<TTile>(string cmdletName, string virtualRasterPath, Func<string, TTile> createTileFromMetadata, CancellationTokenSource cancellationTokenSource) where TTile : Raster
         {
             Debug.Assert(this.MaxThreads > 0);
 
-            VirtualRaster<TTile> vrt = [];
+            VirtualRaster<TTile> vrt = new();
 
             List<string> tilePaths = this.GetExistingFilePaths([ virtualRasterPath ], Constant.File.GeoTiffExtension);
             if (tilePaths.Count == 1)
             {
                 // synchronous read for single tile
-                TTile tile = TTile.Read(tilePaths[0], readData);
+                TTile tile = createTileFromMetadata(tilePaths[0]);
                 vrt.Add(tile);
             }
             else
             {
                 // multithreaded read for multiple tiles
-                // Assume read is from flash (NVMe, SSD) and there's no distinct constraint on the number of read threads or a data
+                // Assume read is from flash (NVMe, SSD) and there's no particular constraint on the number of read threads or a data
                 // locality advantage.
                 TileRead tileRead = new();
                 ParallelTasks tileReadTasks = new(Int32.Min(this.MaxThreads, tilePaths.Count), () =>
@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
                     for (int tileIndex = tileRead.GetNextTileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextTileReadIndexThreadSafe())
                     {
                         string tilePath = tilePaths[tileIndex];
-                        TTile tile = TTile.Read(tilePath, readData);
+                        TTile tile = createTileFromMetadata(tilePath);
                         lock (vrt)
                         {
                             vrt.Add(tile);
@@ -91,7 +91,7 @@ namespace Mars.Clouds.Cmdlets
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = (readData ? "Read " : "Read metadata of ") + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
+                    progress.StatusDescription = "Read metadata of " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
                     progress.Update(tileRead.TilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }
@@ -99,6 +99,25 @@ namespace Mars.Clouds.Cmdlets
 
             vrt.CreateTileGrid(); // unlike LasTileGrid, VirtualRaster<T> doesn't need snapping as it doesn't store tile sizes as doubles
             return vrt;
+        }
+
+        protected static bool ValidateOrCreateOutputPath(string outputPath, VirtualRaster vrt, string inputParameterName, string outputParameterName)
+        {
+            bool outputPathIsDirectory = Directory.Exists(outputPath);
+            if ((vrt.NonNullTileCount > 1) && (outputPathIsDirectory == false))
+            {
+                if (File.Exists(outputPath))
+                {
+                    throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when -" + inputParameterName + " indicates multiple files.");
+                }
+                else
+                {
+                    Directory.CreateDirectory(outputPath);
+                    outputPathIsDirectory = true;
+                }
+            }
+
+            return outputPathIsDirectory;
         }
     }
 }

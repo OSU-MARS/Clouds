@@ -30,7 +30,7 @@ namespace Mars.Clouds.GdalExtensions
             // https://gdal.org/api/gdaldataset_cpp.html#classGDALDataset_1a5101119705f5fa2bc1344ab26f66fd1d
             double[] padfTransform = new double[6];
             rasterDataset.GetGeoTransform(padfTransform);
-            this.SetTransform(padfTransform);
+            this.Copy(padfTransform);
         }
 
         public GridGeoTransform(double originX, double originY, double cellWidth, double cellHeight)
@@ -80,22 +80,54 @@ namespace Mars.Clouds.GdalExtensions
 
         public GridGeoTransform(GridGeoTransform other)
         {
-            this.OriginX = other.OriginX;
-            this.OriginY = other.OriginY;
-            this.CellHeight = other.CellHeight;
-            this.CellWidth = other.CellWidth;
-            this.RowRotation = other.RowRotation;
-            this.ColumnRotation = other.ColumnRotation;
+            this.Copy(other);
         }
 
         public void Copy(GridGeoTransform other)
         {
-            this.OriginX = other.OriginX;
-            this.OriginY = other.OriginY;
+            this.CopyOriginAndRotation(other);
             this.CellHeight = other.CellHeight;
             this.CellWidth = other.CellWidth;
+        }
+
+        public void CopyOriginAndRotation(GridGeoTransform other)
+        {
+            this.OriginX = other.OriginX;
+            this.OriginY = other.OriginY;
             this.RowRotation = other.RowRotation;
             this.ColumnRotation = other.ColumnRotation;
+        }
+
+        public void Copy(ReadOnlySpan<double> padfTransform)
+        {
+            if (padfTransform.Length != 6)
+            {
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform array has length " + padfTransform.Length + " rather than 6.");
+            }
+
+            this.OriginX = padfTransform[0];
+            this.CellWidth = padfTransform[1];
+            this.RowRotation = padfTransform[2];
+            this.OriginY = padfTransform[3];
+            this.ColumnRotation = padfTransform[4];
+            this.CellHeight = padfTransform[5];
+
+            if ((Double.IsFinite(this.OriginX) == false) ||
+                (Double.IsFinite(this.OriginY) == false) ||
+                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
+                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
+                (Double.IsFinite(this.ColumnRotation) == false) ||
+                (Double.IsFinite(this.RowRotation) == false))
+            {
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform contains non-finite numbers, a negative cell height, or a negative cell width.");
+            }
+        }
+
+        public void CopyFrom(Dataset dataset)
+        {
+            double[] padfTransform = new double[6]; // can't stackalloc as GDAL 3.8.3 bindings lack Span<T>
+            dataset.GetGeoTransform(padfTransform);
+            this.Copy(padfTransform);
         }
 
         public static bool Equals(GridGeoTransform transform, GridGeoTransform other)
@@ -159,48 +191,6 @@ namespace Mars.Clouds.GdalExtensions
         {
             this.OriginX = x; 
             this.OriginY = y;
-        }
-
-        public void SetTransform(Dataset dataset)
-        {
-            double[] padfTransform = new double[6]; // can't stackalloc as GDAL 3.8.3 bindings lack Span<T>
-            dataset.GetGeoTransform(padfTransform);
-            this.SetTransform(padfTransform);
-        }
-
-        public void SetTransform(GridGeoTransform other)
-        {
-            this.OriginX = other.OriginX;
-            this.CellWidth = other.CellWidth;
-            this.RowRotation = other.RowRotation;
-            this.OriginY = other.OriginY;
-            this.ColumnRotation = other.ColumnRotation;
-            this.CellHeight = other.CellHeight;
-        }
-
-        public void SetTransform(ReadOnlySpan<double> padfTransform)
-        {
-            if (padfTransform.Length != 6)
-            {
-                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform array has length " + padfTransform.Length + " rather than 6.");
-            }
-
-            this.OriginX = padfTransform[0];
-            this.CellWidth = padfTransform[1];
-            this.RowRotation = padfTransform[2];
-            this.OriginY = padfTransform[3];
-            this.ColumnRotation = padfTransform[4];
-            this.CellHeight = padfTransform[5];
-
-            if ((Double.IsFinite(this.OriginX) == false) ||
-                (Double.IsFinite(this.OriginY) == false) ||
-                (this.CellWidth <= 0.0) || (Double.IsFinite(this.CellWidth) == false) ||
-                (this.CellHeight == 0.0) || (Double.IsFinite(this.CellHeight) == false) ||
-                (Double.IsFinite(this.ColumnRotation) == false) ||
-                (Double.IsFinite(this.RowRotation) == false))
-            {
-                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform contains non-finite numbers, a negative cell height, or a negative cell width.");
-            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

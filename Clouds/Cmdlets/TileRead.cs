@@ -2,6 +2,10 @@
 
 namespace Mars.Clouds.Cmdlets
 {
+    /// <summary>
+    /// Track input tile reads for a workload whose output is either not tiled (monolithic) or modifies tiles in place rather than
+    /// writing separate tiles.
+    /// </summary>
     public class TileRead
     {
         private int tileReadIndex;

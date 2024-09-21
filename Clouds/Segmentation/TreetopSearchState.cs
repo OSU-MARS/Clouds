@@ -11,7 +11,7 @@ namespace Mars.Clouds.Segmentation
         public DigitalSurfaceModel Dsm { get; private init; }
         public float CellHeight { get; private init; }
         public float CellWidth { get; private init; }
-        public VirtualRasterNeighborhood8<float> SurfaceNeighborhood { get; private init; }
+        public RasterNeighborhood8<float> SurfaceNeighborhood { get; private init; }
 
         public float MinimumCandidateHeight { get; set; }
         public int NextTreeID { get; set; }
@@ -20,7 +20,7 @@ namespace Mars.Clouds.Segmentation
         public SimilarElevationGroup<float>? MostRecentEqualHeightPatch { get; set; }
         public List<SimilarElevationGroup<float>> TreetopEqualHeightPatches { get; private init; }
 
-        public TreetopSearchState(DigitalSurfaceModel dsmTile, VirtualRasterNeighborhood8<float> dsmNeighborhood)
+        public TreetopSearchState(DigitalSurfaceModel dsmTile, RasterNeighborhood8<float> dsmNeighborhood)
         {
             this.Dsm = dsmTile;
 

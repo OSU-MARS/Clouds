@@ -5,9 +5,14 @@ using System.Diagnostics;
 
 namespace Mars.Clouds.Segmentation
 {
-    internal class LocalMaximaVector : GdalLayer
+    internal class LocalMaximaVector : GdalVectorLayer
     {
+        public const string DsmZFieldName = "dsmZ";
+        public const string HeightFieldName = "height";
+        public const string IDFieldName = "id";
+        public const string RadiusFieldName = "radius";
         public const int RingsWithStatistics = 5;
+        public const string TileFieldName = "tile";
 
         private readonly double cellSize;
         private int nextMaximaID;
@@ -25,13 +30,13 @@ namespace Mars.Clouds.Segmentation
             this.pendingMaximaCommits = 0;
             this.tileName = tileName;
 
-            Debug.Assert((this.Definition.GetFieldIndex("tile") == 0) &&
-                         (this.Definition.GetFieldIndex("id") == 1) &&
+            Debug.Assert((this.Definition.GetFieldIndex(LocalMaximaVector.TileFieldName) == 0) &&
+                         (this.Definition.GetFieldIndex(LocalMaximaVector.IDFieldName) == 1) &&
                          (this.Definition.GetFieldIndex("sourceID") == 2) &&
-                         (this.Definition.GetFieldIndex("radius") == 3) &&
-                         (this.Definition.GetFieldIndex("dsmZ") == 4) &&
+                         (this.Definition.GetFieldIndex(LocalMaximaVector.RadiusFieldName) == 3) &&
+                         (this.Definition.GetFieldIndex(LocalMaximaVector.DsmZFieldName) == 4) &&
                          (this.Definition.GetFieldIndex("cmmZ") == 5) &&
-                         (this.Definition.GetFieldIndex("height") == 6) &&
+                         (this.Definition.GetFieldIndex(LocalMaximaVector.HeightFieldName) == 6) &&
                          (this.Definition.GetFieldIndex("ring1max") == 7) &&
                          (this.Definition.GetFieldIndex("ring1mean") == 8) &&
                          (this.Definition.GetFieldIndex("ring1min") == 9) &&
@@ -92,7 +97,7 @@ namespace Mars.Clouds.Segmentation
             this.Layer.CreateFeature(treetopCandidate);
 
             ++this.pendingMaximaCommits;
-            if (this.pendingMaximaCommits >= GdalLayer.MaximumTransactionSizeInFeatures)
+            if (this.pendingMaximaCommits >= GdalVectorLayer.MaximumTransactionSizeInFeatures)
             {
                 this.RestartTransaction();
                 this.pendingMaximaCommits = 0;
@@ -110,15 +115,15 @@ namespace Mars.Clouds.Segmentation
             gdalLayer.StartTransaction();
 
             // Add() must be kept in sync with field order
-            FieldDefn tileFieldDefinition = new("tile", FieldType.OFTString);
+            FieldDefn tileFieldDefinition = new(LocalMaximaVector.TileFieldName, FieldType.OFTString);
             tileFieldDefinition.SetWidth(tileName.Length);
             gdalLayer.CreateField(tileFieldDefinition);
-            gdalLayer.CreateField("id", FieldType.OFTInteger);
+            gdalLayer.CreateField(LocalMaximaVector.IDFieldName, FieldType.OFTInteger);
             gdalLayer.CreateField("sourceID", FieldType.OFTInteger);
-            gdalLayer.CreateField("radius", FieldType.OFTReal);
-            gdalLayer.CreateField("dsmZ", FieldType.OFTReal);
+            gdalLayer.CreateField(LocalMaximaVector.RadiusFieldName, FieldType.OFTReal);
+            gdalLayer.CreateField(LocalMaximaVector.DsmZFieldName, FieldType.OFTReal);
             gdalLayer.CreateField("cmmZ", FieldType.OFTReal);
-            gdalLayer.CreateField("height", FieldType.OFTReal);
+            gdalLayer.CreateField(LocalMaximaVector.HeightFieldName, FieldType.OFTReal);
             gdalLayer.CreateField("ring1max", FieldType.OFTReal);
             gdalLayer.CreateField("ring1mean", FieldType.OFTReal);
             gdalLayer.CreateField("ring1min", FieldType.OFTReal);

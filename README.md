@@ -1,10 +1,12 @@
 ﻿### Overview
-A research codebase with an ad hoc collection of PowerShell cmdlets for working with remotely sensed data, primarily point clouds.
+A forest biometrics research codebase with an ad hoc collection of PowerShell cmdlets for working with remotely sensed data, primarily point 
+clouds.
 
 - `Get-Dsm`: get digital surface, canopy maxima, and canopy height models from a set of point cloud tiles with supporting information
-- `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
 - `Get-Orthoimages`: get 16 bit RGB+NIR orthoimages with LiDAR intensity bands from point clouds
-- `Get-TreeTops`: find treetop candidates in a digital surface or canopy height model
+- `Get-Treetops`: simple unsupervised classification of local maxima as treetop candidates in a digital surface or canopy height model
+- `Get-Crowns`: treetop seeded segmentation of individual tree crowns from a digital surface model using path cost functions
+- `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
 
 The cmdlets are multithreaded at the tile level and attempt to self configure to reasonable defaults. The current configuration logic is 
 nascent and manually setting `-ReadThreads` and `-MaxThreads` on cmdlets which offer them may improve performance or be needed to constrain

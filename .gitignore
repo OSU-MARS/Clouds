@@ -4,7 +4,8 @@ obj/
 packages/
 TestResults/
 
-# Visual Studio cache/options directory and RStudio user profile
+# Visual Studio cache/options directory and user profiles
 .vs/
+**/*.csproj.user
 .Rhistory
 .Rproj.user

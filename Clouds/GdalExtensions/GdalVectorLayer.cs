@@ -6,7 +6,7 @@ using System.Diagnostics;
 namespace Mars.Clouds.GdalExtensions
 {
     // wrap OSGeo.OGR.Layer as GDAL classes implement IDisposable but lack the standard dispose pattern's Dispose(bool)
-    internal class GdalLayer : IDisposable
+    internal class GdalVectorLayer : IDisposable
     {
         protected static int MaximumTransactionSizeInFeatures = 10000;
 
@@ -16,7 +16,7 @@ namespace Mars.Clouds.GdalExtensions
         protected FeatureDefn Definition { get; init; }
         protected Layer Layer { get; init; }
 
-        protected GdalLayer(Layer gdalLayer)
+        protected GdalVectorLayer(Layer gdalLayer)
         {
             this.Definition = gdalLayer.GetLayerDefn();
             this.isInEditMode = false;

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.IO;
-using Mars.Clouds.Laz;
+using Mars.Clouds.Las;
 
-namespace Mars.Clouds.Las
+namespace Mars.Clouds.Laz
 {
     public class LazVariableLengthRecord : VariableLengthRecord
     {

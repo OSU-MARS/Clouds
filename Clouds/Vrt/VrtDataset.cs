@@ -100,9 +100,9 @@ namespace Mars.Clouds.Vrt
                 // add sources and combine statistics from sampled tiles
                 RasterBandStatistics vrtBandStatistics = new();
                 int tilesWithStatisticsForVrtBand = 0;
-                for (int tileIndexY = 0; tileIndexY < vrt.VirtualRasterSizeInTilesY; ++tileIndexY)
+                for (int tileIndexY = 0; tileIndexY < vrt.SizeInTilesY; ++tileIndexY)
                 {
-                    for (int tileIndexX = 0; tileIndexX < vrt.VirtualRasterSizeInTilesX; ++tileIndexX)
+                    for (int tileIndexX = 0; tileIndexX < vrt.SizeInTilesX; ++tileIndexX)
                     {
                         TTile? tile = vrt[tileIndexX, tileIndexY];
                         if (tile == null)
@@ -172,7 +172,7 @@ namespace Mars.Clouds.Vrt
             }
         }
 
-        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string subdirectory, string vrtFileName)
+        public static (string vrtFilePath, string vrtDatasetDirectoryPath) GetVrtPaths(string basePath, bool basePathIsDirectory, string? subdirectory, string vrtFileName)
         {
             string vrtBaseDirectoryPath = basePath;
             if (basePathIsDirectory == false)
@@ -186,7 +186,11 @@ namespace Mars.Clouds.Vrt
                 vrtBaseDirectoryPath = directoryPath;
             }
 
-            string vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            string vrtDatasetDirectoryPath = vrtBaseDirectoryPath;
+            if (subdirectory != null)
+            {
+                vrtDatasetDirectoryPath = Path.Combine(vrtBaseDirectoryPath, subdirectory);
+            }
             string vrtFilePath = Path.Combine(vrtDatasetDirectoryPath, vrtFileName);
             return (vrtFilePath, vrtDatasetDirectoryPath);
         }
