@@ -35,19 +35,19 @@ namespace Mars.Clouds.Segmentation
             this.heightFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.HeightFieldName);
             this.radiusFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.RadiusFieldName);
 
-            if (this.tileFieldIndex >= 0)
+            if (this.tileFieldIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.TileFieldName + " field is missing from treetop layer.");
             }
-            if (this.idFieldIndex >= 0)
+            if (this.idFieldIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(gdalLayer), "Treetop layer does not have an " + LocalMaximaVector.IDFieldName + " or treeID field.");
             }
-            if (this.heightFieldIndex >= 0)
+            if (this.heightFieldIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.HeightFieldName + " field is missing from treetop layer.");
             }
-            if (this.radiusFieldIndex >= 0)
+            if (this.radiusFieldIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.RadiusFieldName + " field is missing from treetop layer.");
             }
@@ -202,9 +202,14 @@ namespace Mars.Clouds.Segmentation
                 double y = pointBuffer[1];
                 (int gridIndexX, int gridIndexY) = treetopsGrid.ToGridIndices(x, y);
                 Treetops treetops = treetopsGrid[gridIndexX, gridIndexY];
-                (int surfaceIndexX, int surfaceIndexY) = surfaceModel.ToGridIndices(x, y);
+
+                if (treetops.Count == treetops.Capacity)
+                {
+                    treetops.Extend(treetops.Capacity + TreetopsGrid.DefaultCellCapacity);
+                }
 
                 int treetopDestinationIndex = treetops.Count;
+                (int surfaceIndexX, int surfaceIndexY) = surfaceModel.ToGridIndices(x, y);
                 treetops.ID[treetopDestinationIndex] = treetop.GetFieldAsInteger(this.idFieldIndex);
                 treetops.X[treetopDestinationIndex] = x;
                 treetops.XIndex[treetopDestinationIndex] = surfaceIndexX;
@@ -215,6 +220,8 @@ namespace Mars.Clouds.Segmentation
                 treetops.Radius[treetopDestinationIndex] = treetop.GetFieldAsDouble(this.radiusFieldIndex);
                 treetops.Count = treetopDestinationIndex + 1;
             }
+
+            treetopsGrid.Treetops = (int)this.GetFeatureCount();
         }
 
         public static TreetopVector Open(DataSource treetopFile)
@@ -224,7 +231,7 @@ namespace Mars.Clouds.Segmentation
             {
                 if (treetopFile.GetLayerCount() != 1)
                 {
-                    throw new NotSupportedException("Treetop file either contains multiple layers but does not contain a layer named treetops or contains no layers.");
+                    throw new NotSupportedException("Treetop file contains no layers or contains multiple layers, none of which are named " + TreetopVector.DefaultLayerName + ".");
                 }
 
                 gdalLayer = treetopFile.GetLayerByIndex(0);

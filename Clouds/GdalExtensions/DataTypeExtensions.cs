@@ -462,7 +462,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to sbyte data.");
             }
         }
 
@@ -498,7 +498,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int16 data.");
             }
         }
 
@@ -528,7 +528,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int32 data.");
             }
         }
 
@@ -569,7 +569,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to byte data.");
             }
         }
 
@@ -605,7 +605,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt16 data.");
             }
         }
 
@@ -635,7 +635,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt32 data.");
             }
         }
     }

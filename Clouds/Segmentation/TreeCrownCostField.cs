@@ -9,7 +9,7 @@ namespace Mars.Clouds.Segmentation
     public class TreeCrownCostField
     {
         private static readonly float[] AzimuthFromTreetop;
-        private static readonly float[] RadiusInCells;
+        //private static readonly float[] RadiusInCells;
 
         public const int CapacityRadius = 31;
         public const int CapacityXY = 2 * 31 + 1;
@@ -32,7 +32,7 @@ namespace Mars.Clouds.Segmentation
 
             // populate grid of azimuth values
             TreeCrownCostField.AzimuthFromTreetop = new float[cells];
-            for (int indexY = 0; indexY < cells; ++indexY)
+            for (int indexY = 0; indexY < TreeCrownCostField.CapacityXY; ++indexY)
             {
                 int cellIndex = indexY * TreeCrownCostField.CapacityXY;
                 int offsetY = indexY - TreeCrownCostField.CapacityRadius;
@@ -49,20 +49,20 @@ namespace Mars.Clouds.Segmentation
             }
 
             // populate grid of radius values
-            // TODO: since larger radii imply larger crowns, should the default cost be sublinear in distance?
-            TreeCrownCostField.RadiusInCells = new float[cells];
-            for (int indexY = 0; indexY < cells; ++indexY)
-            {
-                int cellIndex = indexY * TreeCrownCostField.CapacityXY;
-                int offsetY = indexY - TreeCrownCostField.CapacityRadius;
-                int offsetYsquared = offsetY * offsetY;
-                for (int indexX = 0; indexX < TreeCrownCostField.CapacityXY; ++cellIndex, ++indexX)
-                {
-                    int offsetX = indexX - TreeCrownCostField.CapacityRadius;
-                    float radiusInCells = MathF.Sqrt(offsetX * offsetX + offsetYsquared);
-                    TreeCrownCostField.RadiusInCells[cellIndex] = radiusInCells;
-                }
-            }
+            // Results in Voronoi tesselation if used as a the cost function.
+            //TreeCrownCostField.RadiusInCells = new float[cells];
+            //for (int indexY = 0; indexY < TreeCrownCostField.CapacityXY; ++indexY)
+            //{
+            //    int cellIndex = indexY * TreeCrownCostField.CapacityXY;
+            //    int offsetY = indexY - TreeCrownCostField.CapacityRadius;
+            //    int offsetYsquared = offsetY * offsetY;
+            //    for (int indexX = 0; indexX < TreeCrownCostField.CapacityXY; ++cellIndex, ++indexX)
+            //    {
+            //        int offsetX = indexX - TreeCrownCostField.CapacityRadius;
+            //        float radiusInCells = MathF.Sqrt(offsetX * offsetX + offsetYsquared);
+            //        TreeCrownCostField.RadiusInCells[cellIndex] = radiusInCells;
+            //    }
+            //}
         }
 
         public TreeCrownCostField()
@@ -81,11 +81,11 @@ namespace Mars.Clouds.Segmentation
             this.TreeID = -1;
         }
 
-        public float this[int dsmIndexX, int dsmIndexY]
-        {
-            get { return this.costField[this.DsmToCellIndex(dsmIndexX, dsmIndexY)]; }
-            set { this.costField[this.DsmToCellIndex(dsmIndexX, dsmIndexY)] = value; }
-        }
+        //public float this[int dsmIndexX, int dsmIndexY]
+        //{
+        //    get { return this.costField[this.DsmToCellIndex(dsmIndexX, dsmIndexY)]; }
+        //    set { this.costField[this.DsmToCellIndex(dsmIndexX, dsmIndexY)] = value; }
+        //}
 
         /// <summary>
         /// Check if cost field's axis aligned bounding box overlaps with another bounding box.
@@ -149,7 +149,7 @@ namespace Mars.Clouds.Segmentation
             {
                 treetopZ = dsmTreetopZ;
             }
-            float minimumCrownDsmZ = treetopZ - segmentationState.MaximumCrownRatio * (treetopZ - chmZ); // use treetop height rather than DSM height
+            float minimumCrownDsmZ = treetopZ - segmentationState.MaximumCrownRatio * chmZ; // use treetop height rather than DSM height
 
             this.DsmOriginX = dsmTreetopIndexX - TreeCrownCostField.CapacityRadius;
             this.DsmOriginY = dsmTreetopIndexY - TreeCrownCostField.CapacityRadius;
@@ -162,16 +162,18 @@ namespace Mars.Clouds.Segmentation
             int centerIndexX = TreeCrownCostField.CapacityRadius;
             int centerIndexY = TreeCrownCostField.CapacityRadius;
             int centerIndex = TreeCrownCostField.ToCellIndex(centerIndexX, centerIndexY);
-            this.costField[centerIndex] = 0; // cost at marker is defined to be zero (could also use Single.NegativeInfinity), regardless of canopy height
+            this.costField[centerIndex] = 0.0F; // cost at marker is defined to be zero (could also use Single.NegativeInfinity), regardless of canopy height
+            this.searched[centerIndex] = true;
 
             // grow crown region
-            // Currently done with 4-neighborhood connectivity. 8-neighborhood can be added if needed.
+            // Growth breadth first search as Queue<T> is FIFO.
             float dsmCellSize = (float)dsm.Transform.CellWidth;
             this.searchQueue.Enqueue((centerIndexX, centerIndexY));
             while (this.searchQueue.Count > 0)
             {
                 (int searchCellIndexX, int searchCellIndexY) = this.searchQueue.Dequeue();
-                this.SearchNeighborhood4(searchCellIndexX, searchCellIndexY, dsm, dsmCellSize, treetopZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                // this.SearchNeighborhood4(searchCellIndexX, searchCellIndexY, dsm, dsmCellSize, treetopZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                this.SearchNeighborhood8(searchCellIndexX, searchCellIndexY, dsm, dsmCellSize, treetopZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
             }
 
             // TODO: check for asymmetry and recenter cost function?
@@ -223,13 +225,7 @@ namespace Mars.Clouds.Segmentation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int DsmToCellIndex(int dsmIndexX, int dsmIndexY)
-        {
-            return dsmIndexX - this.DsmOriginX + (dsmIndexY - this.DsmOriginY) * TreeCrownCostField.CapacityXY;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SearchCell(int cellIndexX, int cellIndexY, RasterBand<float> dsm, int dsmIndexX, int dsmIndexY, float dsmCellSize, float treetopDsmZ, float minimumCrownDsmZ, RasterBand<float> chm, RasterBand<float> slope, RasterBand<float> aspect, TreeCrownSegmentationState segmentationState)
+        private void SearchCell(int cellIndexX, int cellIndexY, float baseCostInCrsUnits, float arcLengthInCrsUnits, RasterBand<float> dsm, int dsmIndexX, int dsmIndexY, float treetopDsmZ, float minimumCrownDsmZ, RasterBand<float> chm, RasterBand<float> slope, RasterBand<float> aspect, TreeCrownSegmentationState segmentationState)
         {
             int cellIndex = TreeCrownCostField.ToCellIndex(cellIndexX, cellIndexY);
             if (this.searched[cellIndex] == false)
@@ -283,57 +279,119 @@ namespace Mars.Clouds.Segmentation
                     return;
                 }
 
+                // outwards aspect => downwards slope: reduce arc cost as |relative azimuth| declines from 90° to 0°
+                // inwards aspect => upwards slope: increase arc cost as |relative azimuth| increases from 90° to 180°
                 // TODO: bound maximum connected cost by height of tree?
                 // TODO: constrain connectivity to not go too far into adjacent trees' crowns?
-                float costInCells = TreeCrownCostField.RadiusInCells[cellIndex];
+                float arcCostMultiplier = 1.0F;
                 if (hasSlopeAspect)
                 {
-                    // TODO: multiplicative rather than additive penalty?
                     float outwardAzimuth = TreeCrownCostField.AzimuthFromTreetop[cellIndex];
                     float relativeAzimuth = dsmAspect - outwardAzimuth;
-                    if (relativeAzimuth < 0)
+                    if (relativeAzimuth < 0.0F)
                     {
                         relativeAzimuth = -relativeAzimuth;
                     }
-                    costInCells += (dsmSlope / 90.0F) * (relativeAzimuth / 180.0F);
+                    if (relativeAzimuth <= 90.0F)
+                    {
+                        //arcCostMultiplier -= dsmSlope / 90.0F * (90.0F - relativeAzimuth) / 90.0F;
+                    }
+                    else
+                    {
+                        //arcCostMultiplier += dsmSlope / 90.0F * (relativeAzimuth - 90.0F) / 90.0F;
+                    }
                 }
 
-                float costInCrsUnits = dsmCellSize * costInCells;
                 if (dsmZ > treetopDsmZ)
                 {
-                    costInCrsUnits += segmentationState.AboveTopCostScaleFactor * (dsmZ - treetopDsmZ);
+                    //arcCostMultiplier += segmentationState.AboveTopCostScaleFactor * (dsmZ - treetopDsmZ) / arcLengthInCrsUnits;
                 }
 
-                this.costField[cellIndex] = costInCrsUnits;
+                this.costField[cellIndex] = baseCostInCrsUnits + arcCostMultiplier * arcLengthInCrsUnits;
                 this.searchQueue.Enqueue((cellIndexX, cellIndexY));
             }
         }
 
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //private void SearchNeighborhood4(int cellIndexX, int cellIndexY, RasterBand<float> dsm, float dsmCellSize, float treetopDsmZ, float minimumCrownDsmZ, RasterBand<float> chm, RasterBand<float> slope, RasterBand<float> aspect, TreeCrownSegmentationState segmentationState)
+        //{
+        //    int dsmIndexX = this.DsmOriginX + cellIndexX;
+        //    int dsmIndexY = this.DsmOriginY + cellIndexY;
+        //    float centerCostInCrsUnits = this.costField[TreeCrownCostField.ToCellIndex(cellIndexX, cellIndexY)];
+
+        //    // west neighbor
+        //    if (cellIndexX > 0)
+        //    {
+        //        this.SearchCell(cellIndexX - 1, cellIndexY, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+        //    }
+        //    // east neighbor
+        //    if (cellIndexX < TreeCrownCostField.CapacityXY - 1)
+        //    {
+        //        this.SearchCell(cellIndexX + 1, cellIndexY, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX + 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+        //    }
+        //    // north neighbor
+        //    if (cellIndexY > 0)
+        //    {
+        //        this.SearchCell(cellIndexX, cellIndexY - 1, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX, dsmIndexY - 1, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+        //    }
+        //    // south neighbor
+        //    if (cellIndexY < TreeCrownCostField.CapacityXY - 1)
+        //    {
+        //        this.SearchCell(cellIndexX, cellIndexY + 1, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX, dsmIndexY + 1, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+        //    }
+        //}
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SearchNeighborhood4(int cellIndexX, int cellIndexY, RasterBand<float> dsm, float dsmCellSize, float treetopDsmZ, float minimumCrownDsmZ, RasterBand<float> chm, RasterBand<float> slope, RasterBand<float> aspect, TreeCrownSegmentationState segmentationState)
+        private void SearchNeighborhood8(int cellIndexX, int cellIndexY, RasterBand<float> dsm, float dsmCellSize, float treetopDsmZ, float minimumCrownDsmZ, RasterBand<float> chm, RasterBand<float> slope, RasterBand<float> aspect, TreeCrownSegmentationState segmentationState)
         {
             int dsmIndexX = this.DsmOriginX + cellIndexX;
             int dsmIndexY = this.DsmOriginY + cellIndexY;
+            float centerCostInCrsUnits = this.costField[TreeCrownCostField.ToCellIndex(cellIndexX, cellIndexY)];
+            float diagonalArcLength = Constant.Sqrt2 * dsmCellSize;
 
+            // unlike SearchNeighborhood4(), varying arc length makes traversal order significant
+            // Two axis-aligned steps always create a different path costs than one or two diagonal steps from the same starting
+            // location to the same ending location.
             // west neighbor
             if (cellIndexX > 0)
             {
-                this.SearchCell(cellIndexX - 1, cellIndexY, dsm, dsmIndexX - 1, dsmIndexY, dsmCellSize, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                this.SearchCell(cellIndexX - 1, cellIndexY, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
             }
             // east neighbor
             if (cellIndexX < TreeCrownCostField.CapacityXY - 1)
             {
-                this.SearchCell(cellIndexX - 1, cellIndexY, dsm, dsmIndexX - 1, dsmIndexY, dsmCellSize, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                this.SearchCell(cellIndexX + 1, cellIndexY, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX + 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
             }
             // north neighbor
             if (cellIndexY > 0)
             {
-                this.SearchCell(cellIndexX - 1, cellIndexY, dsm, dsmIndexX, dsmIndexY - 1, dsmCellSize, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                this.SearchCell(cellIndexX, cellIndexY - 1, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX, dsmIndexY - 1, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
             }
             // south neighbor
             if (cellIndexY < TreeCrownCostField.CapacityXY - 1)
             {
-                this.SearchCell(cellIndexX, cellIndexY + 1, dsm, dsmIndexX, dsmIndexY + 1, dsmCellSize, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+                this.SearchCell(cellIndexX, cellIndexY + 1, centerCostInCrsUnits, dsmCellSize, dsm, dsmIndexX, dsmIndexY + 1, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+            }
+
+            // northwest neighbor
+            if ((cellIndexX > 0) && (cellIndexY > 0))
+            {
+                this.SearchCell(cellIndexX - 1, cellIndexY - 1, centerCostInCrsUnits, diagonalArcLength, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+            }
+            // northeast neighbor
+            if ((cellIndexX < TreeCrownCostField.CapacityXY - 1) && (cellIndexY > 0))
+            {
+                this.SearchCell(cellIndexX + 1, cellIndexY - 1, centerCostInCrsUnits, diagonalArcLength, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+            }
+            // southeast neighbor
+            if ((cellIndexX < TreeCrownCostField.CapacityXY - 1) && (cellIndexY < TreeCrownCostField.CapacityXY - 1))
+            {
+                this.SearchCell(cellIndexX + 1, cellIndexY + 1, centerCostInCrsUnits, diagonalArcLength, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
+            }
+            // southwest neighbor
+            if ((cellIndexX > 0) && (cellIndexY < TreeCrownCostField.CapacityXY - 1))
+            {
+                this.SearchCell(cellIndexX - 1, cellIndexY + 1, centerCostInCrsUnits, diagonalArcLength, dsm, dsmIndexX - 1, dsmIndexY, treetopDsmZ, minimumCrownDsmZ, chm, slope, aspect, segmentationState);
             }
         }
 
@@ -346,13 +404,24 @@ namespace Mars.Clouds.Segmentation
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGetValue(int dsmIndexX, int dsmIndexY, out float cost)
         {
-            int cellIndex = this.DsmToCellIndex(dsmIndexX, dsmIndexY);
-            if ((cellIndex < 0) || (cellIndex >= this.costField.Length))
+            // check if DSM coordinates lie within cost field
+            // Misses are routine. See also off grid remarks in Grid.ToCellIndex().
+            int cellIndexX = dsmIndexX - this.DsmOriginX;
+            if ((cellIndexX < 0) || (cellIndexX >= TreeCrownCostField.CapacityXY))
             {
                 cost = default;
                 return false;
             }
 
+            int cellIndexY = dsmIndexY - this.DsmOriginY;
+            if ((cellIndexY < 0) || (cellIndexY >= TreeCrownCostField.CapacityXY))
+            {
+                cost = default;
+                return false;
+            }
+
+            // check if cost field has a value at this position
+            int cellIndex = TreeCrownCostField.ToCellIndex(cellIndexX, cellIndexY);
             cost = this.costField[cellIndex];
             return cost != Single.PositiveInfinity;
         }
