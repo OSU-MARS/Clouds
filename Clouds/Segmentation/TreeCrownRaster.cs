@@ -87,7 +87,7 @@ namespace Mars.Clouds.Segmentation
                 throw new NotSupportedException("Currently, only negative DSM and treetop cell heights are supported. DSM cell height " + dsmTile.Transform.CellHeight + ", treetop cell height " + treetopsTile.Transform.CellHeight + ".");
             }
 
-            // reset values
+            // clear any previous crown segmentation
             Debug.Assert(this.TreeID.HasNoDataValue);
             Array.Fill(this.TreeID.Data, this.TreeID.NoDataValue, 0, this.TreeID.Data.Length);
 
@@ -96,12 +96,12 @@ namespace Mars.Clouds.Segmentation
             TreeCrownCostGrid crownCosts = segmentationState.TreetopCostTile;
             for (int treetopCellIndexY = 0; treetopCellIndexY < treetopsTile.SizeY; ++treetopCellIndexY)
             {
-                int cellDsmEndIndexX = 0; // exclusive, needs resetting to start of each row
+                int cellDsmEndIndexX = 0; // exclusive, needs resetting at start of each row
+                int cellDsmStartIndexY = cellDsmEndIndexY; // inclusive
                 for (int treetopCellIndexX = 0; treetopCellIndexX < treetopsTile.SizeX; ++treetopCellIndexX)
                 {
                     (double treetopCellXmin, double treetopCellXmax, double treetopCellYmin, double treetopCellYmax) = treetopsTile.Transform.GetCellExtent(treetopCellIndexX, treetopCellIndexY);
-                    int cellDsmStartIndexX = cellDsmEndIndexX;
-                    int cellDsmStartIndexY = cellDsmEndIndexY;
+                    int cellDsmStartIndexX = cellDsmEndIndexX; // inclusive
                     (cellDsmEndIndexX, cellDsmEndIndexY) = dsmTile.ToGridIndices(treetopCellXmax, treetopCellYmin);
                     if (cellDsmEndIndexX > dsmTile.SizeX)
                     {
@@ -119,6 +119,10 @@ namespace Mars.Clouds.Segmentation
                     segmentationState.DsmEndIndexY = cellDsmEndIndexY;
 
                     // evaluate DSM rows within this treetop cell
+                    if ((treetopCellIndexX == 1) && (treetopCellIndexY == 1))
+                    {
+                        int q = 0;
+                    }
                     crownCosts.EnumerateCostFields(treetopCellIndexX, treetopCellIndexY, segmentationState);
                     for (int dsmIndexY = cellDsmStartIndexY; dsmIndexY < cellDsmEndIndexY; ++dsmIndexY)
                     {
@@ -179,7 +183,7 @@ namespace Mars.Clouds.Segmentation
         public override void Write(string crownPath, bool compress)
         {
             Debug.Assert(this.TreeID.IsNoData(RasterBand.NoDataDefaultInt32));
-            using Dataset crownDataset = this.CreateGdalRasterAndSetFilePath(crownPath, 3, DataType.GDT_Byte, compress);
+            using Dataset crownDataset = this.CreateGdalRasterAndSetFilePath(crownPath, 1, DataType.GDT_Int32, compress);
             this.TreeID.Write(crownDataset, 1);
             this.FilePath = crownPath;
         }

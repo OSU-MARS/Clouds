@@ -13,7 +13,7 @@ namespace Mars.Clouds.Segmentation
         public List<TreeCrownCostField> ActiveFields { get; private init; }
 
         public TreeCrownCostGrid(TreetopsGrid treetopsTile)
-            : base(treetopsTile.Crs.Clone(), treetopsTile.Transform, treetopsTile.SizeX + 2, treetopsTile.SizeY, cloneCrsAndTransform: true)
+            : base(treetopsTile.Crs.Clone(), treetopsTile.Transform, treetopsTile.SizeX + 2, treetopsTile.SizeY + 2, cloneCrsAndTransform: true)
         {
             // since cost grid includes neighboring cells, it is one cell larger in extent than the tile it covers
             // Offset the grid's origin accordingly.

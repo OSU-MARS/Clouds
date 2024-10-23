@@ -286,6 +286,13 @@ namespace Mars.Clouds.GdalExtensions
             return emptyCopy;
         }
 
+        /// <summary>
+        /// Infers virtual raster's grid from added tiles and places tiles into the grid.
+        /// </summary>
+        /// <remarks>
+        /// Fails if two (or more tiles) fit in the same grid cell. If the grid is unexpectedly sparse, check that the added tiles' sizes 
+        /// and origins are correct.
+        /// </remarks>
         public (int[] tileIndexX, int[] tileIndexY) CreateTileGrid()
         {
             if (this.tileGrid != null)
@@ -334,15 +341,15 @@ namespace Mars.Clouds.GdalExtensions
             GridGeoTransform tileTransform = new(minimumOriginX, maximumOriginY, tileSizeInTileUnitsX, tileSizeInTileUnitsY);            
             this.tileGrid = new(this.Crs, tileTransform, this.SizeInTilesX, this.SizeInTilesY, cloneCrsAndTransform: false);
 
-            int[] tileIndexX = new int[this.ungriddedTiles.Count];
-            int[] tileIndexY = new int[this.ungriddedTiles.Count];
+            int[] tileIndicesX = new int[this.ungriddedTiles.Count];
+            int[] tileIndicesY = new int[this.ungriddedTiles.Count];
             for (int tileIndex = 0; tileIndex < this.ungriddedTiles.Count; ++tileIndex)
             {
-                (tileIndexX[tileIndex], tileIndexY[tileIndex]) = this.PlaceTileInGrid(this.ungriddedTiles[tileIndex]);
+                (tileIndicesX[tileIndex], tileIndicesY[tileIndex]) = this.PlaceTileInGrid(this.ungriddedTiles[tileIndex]);
             }
 
             this.ungriddedTiles.Clear();
-            return (tileIndexX, tileIndexY);
+            return (tileIndicesX, tileIndicesY);
         }
 
         public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)

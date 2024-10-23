@@ -98,11 +98,13 @@ namespace Mars.Clouds.Cmdlets
             long crownCount = 0;
             ParallelTasks crownTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
+                float crsLinearUnitInM = (float)dsm.Crs.GetLinearUnits();
                 TreeCrownSegmentationState segmentationState = new()
                 {
                     AboveTopCostScaleFactor = this.AboveTopPenalty,
                     MaximumCrownRatio = this.MaxCrownRatio,
-                    MinimumHeightInCrsUnits = 0.30F / (float)dsm.Crs.GetLinearUnits()
+                    MinimumHeightInCrsUnits = 1.0F / crsLinearUnitInM,
+                    PathCostLimitInCrsUnits = 40.0F / crsLinearUnitInM
                 };
                 while (crownReadWrite.TileWritesInitiated < dsm.NonNullTileCount)
                 {
@@ -138,13 +140,12 @@ namespace Mars.Clouds.Cmdlets
                             {
                                 FilePath = crownTilePath
                             };
-                            crowns.Add(tileIndexX, tileIndexY, crownTile);
                         }
 
                         // segment crowns
                         // Not currently implemented: treetop addition and removal
                         segmentationState.SetNeighborhoods(dsm, treetops, tileIndexX, tileIndexY, this.DsmBand);
-                        crownTile.SegmentCrowns(segmentationState);                        
+                        crownTile.SegmentCrowns(segmentationState);
                         if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                         {
                             return;
@@ -152,7 +153,8 @@ namespace Mars.Clouds.Cmdlets
 
                         lock (crownReadWrite)
                         {
-                            crowns.Add(crownTile);
+                            crownCount += treetopTile.Treetops;
+                            crowns.Add(tileIndexX, tileIndexY, crownTile);
                             crownReadWrite.OnTileCreated(tileIndexX, tileIndexY);
                         }
                     }
@@ -179,7 +181,7 @@ namespace Mars.Clouds.Cmdlets
 
             long meanCrownsPerTile = crownCount / dsm.NonNullTileCount;
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Found " + crownCount.ToString("n0") + " crowns within " + (dsm.NonNullTileCount > 1 ? dsm.NonNullTileCount + " tiles" : "one tile") + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanCrownsPerTile.ToString("n0") + " crowns/tile).");
+            this.WriteVerbose("Delineated " + crownCount.ToString("n0") + " crowns within " + (dsm.NonNullTileCount > 1 ? dsm.NonNullTileCount + " tiles" : "one tile") + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanCrownsPerTile.ToString("n0") + " crowns/tile).");
             base.ProcessRecord();
         }
 

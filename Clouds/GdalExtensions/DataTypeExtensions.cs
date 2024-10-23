@@ -18,7 +18,7 @@ namespace Mars.Clouds.GdalExtensions
         //    }
         //}
 
-        public static void Convert<TBand>(byte[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void Convert<TBand>(ReadOnlySpan<byte> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -57,7 +57,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static void Convert<TBand>(Int16[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void Convert<TBand>(ReadOnlySpan<Int16> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -90,7 +90,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static void Convert<TBand>(sbyte[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void Convert<TBand>(ReadOnlySpan<sbyte> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -114,7 +114,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static void Convert<TBand>(UInt16[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void Convert<TBand>(ReadOnlySpan<UInt16> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -143,7 +143,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static void Convert<TBand>(UInt32[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void Convert<TBand>(ReadOnlySpan<UInt32> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -425,7 +425,7 @@ namespace Mars.Clouds.GdalExtensions
             }; ;
         }
 
-        public static void Pack<TBand>(TBand[] source, sbyte[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<sbyte> destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -462,11 +462,11 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to sbyte data.");
             }
         }
 
-        public static void Pack<TBand>(TBand[] source, Int16[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<Int16> destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -498,11 +498,11 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int16 data.");
             }
         }
 
-        public static void Pack<TBand>(TBand[] source, Int32[] destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<Int32> destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -528,11 +528,11 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int32 data.");
             }
         }
 
-        public static void Pack<TBand>(TBand[] source, byte[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<byte> destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -569,11 +569,11 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to byte data.");
             }
         }
 
-        public static void Pack<TBand>(TBand[] source, UInt16[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<UInt16> destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -605,11 +605,11 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt16 data.");
             }
         }
 
-        public static void Pack<TBand>(TBand[] source, UInt32[] destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
+        public static void Pack<TBand>(TBand[] source, Span<UInt32> destination, bool noDataSaturatingFromAbove) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -635,7 +635,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt32 data.");
             }
         }
     }

@@ -1,6 +1,7 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using System;
 
 namespace Mars.Clouds.Segmentation
 {
@@ -16,9 +17,13 @@ namespace Mars.Clouds.Segmentation
         public int DsmEndIndexX { get; set; } // exclusive
         public int DsmEndIndexY { get; set; } // exclusive
 
+        public float[] FieldChm { get; private init; }
+        public float[] FieldDsm { get; private init; }
         public ObjectPool<TreeCrownCostField> FieldPool { get; private init; }
+        public bool[] FieldSearched { get; private init; }
         public float MaximumCrownRatio { get; init; }
         public float MinimumHeightInCrsUnits { get; init; }
+        public float PathCostLimitInCrsUnits { get; init; }
         public RasterNeighborhood8<float>? SlopeNeighborhood { get; private set; }
         public TreeCrownCostGrid? TreetopCostTile { get; private set; }
         public GridNeighborhood8<TreetopsGrid, Treetops>? TreetopNeighborhood { get; private set; }
@@ -35,9 +40,14 @@ namespace Mars.Clouds.Segmentation
             this.DsmEndIndexX = -1;
             this.DsmEndIndexY = -1;
 
+            this.FieldChm = GC.AllocateUninitializedArray<float>(TreeCrownCostField.Cells);
+            this.FieldDsm = GC.AllocateUninitializedArray<float>(TreeCrownCostField.Cells);
             this.FieldPool = new();
+            this.FieldSearched = GC.AllocateUninitializedArray<bool>(TreeCrownCostField.Cells);
+
             this.MaximumCrownRatio = 0.90F;
-            this.MinimumHeightInCrsUnits = 0.30F;
+            this.MinimumHeightInCrsUnits = 1.0F;
+            this.PathCostLimitInCrsUnits = 40.0F;
             this.SlopeNeighborhood = null;
             this.TreetopCostTile = null;
             this.TreetopNeighborhood = null;

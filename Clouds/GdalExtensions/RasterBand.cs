@@ -1,4 +1,5 @@
-﻿using OSGeo.GDAL;
+﻿using DocumentFormat.OpenXml.Presentation;
+using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -739,6 +740,25 @@ namespace Mars.Clouds.GdalExtensions
             this.HasNoDataValue = true;
             this.NoDataIsNaN = TBand.IsNaN(this.NoDataValue);
             this.NoDataValue = noDataValue;
+        }
+
+        public void Slice(int xOrigin, int yOrigin, int sizeX, int sizeY, Span<TBand> slice)
+        {
+            int xMax = xOrigin + sizeX; // exclusive
+            int yMax = yOrigin + sizeY; // exclusive
+            if ((xOrigin < 0) || (xMax > this.SizeX) || (yOrigin < 0) || (yMax > this.SizeY))
+            {
+                throw new ArgumentException("Slice origin (" + xOrigin + ", " + yOrigin + ") and dimensions (" + sizeX + " by " + sizeY + ") do not fit within raster band dimensions (" + this.SizeX + ", " + this.SizeY + ".");
+            }
+
+            int sliceDestinationIndex = 0;
+            int sliceRowStartIndex = this.ToCellIndex(xOrigin, yOrigin);
+            for (int yIndex = yOrigin; yIndex < yMax; ++yIndex)
+            {
+                this.Data.AsSpan(sliceRowStartIndex, sizeX).CopyTo(slice[sliceDestinationIndex..]);
+                sliceDestinationIndex += sizeX;
+                sliceRowStartIndex += this.SizeX;
+            }
         }
 
         public bool TryGetMaximumValue(out TBand maximumValue)

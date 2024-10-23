@@ -211,6 +211,10 @@ A few other performance details are notable.
   cache hierarchy. In such situations it's faster and more energy efficient to leave some cores idle. Note also it may not be possible to find a
   thread count fully utilizing an NVMe drive. The greater the throughput per thread, the more likely it is the optimum is a difficult to implement
   fractional number of threads.
+- Clouds' peformance is often constrained by GDAL, which saturates at ~3 GB/s throughput for raster operations and imposes single threaded 
+  vector writes (see below). GDAL access to layer metadata is also fairly high latency and, while Clouds applies numerous threads 
+  as a mitigation (`-MetadataThreads`), throughput remains low. At least on desktop hardware and as of GDAL 3.9, increasing `-MetadataThreads` 
+  beyond 24–32 somewhat reduces throughput.
 - IO througput above roughly 1 GB/s tend to be stressful to .NET memory management. Best practices are used for object pooling and large object
   heap offloading (in general, data is pooled but metadata such as .las headers and raster band structure is not) but it can take longer for the 
   garbage collector to work through tens of gigabytes of first generation, second generation, and large objects than it does to run a cmdlet. 
@@ -268,13 +272,14 @@ the nuget's. If Visual Studio Code is used for PowerShell Core execution then co
 extension are required.
 
 Clouds relies on GDAL for GIS operations. This imposes performance bottlenecks in certain situations, notably where GDAL's design forces single 
-threaded write transactions on large GeoPackages and its raster tile cache (for groups of pixels within individual, not to be confused with 
-virtual raster tiles) imposes memory and DDR bandwidth overhead. Clouds mitigates the former by regularly committing GeoPackage transactions for 
-GDAL's SQL background thread to process in parallel with the [restricted multithreading](https://gdal.org/user/multithreading.html) GDAL supports 
-(it's possible GDAL's underlying datalayers are capable of concurrent transactions on a single dataset is supported but, as of GDAL 3.9.1, it's not
-documented to be and thus has to be assumed unsafe). Wiht respect to GDAL's tile cache, specifying [`GTIFF_DIRECT_IO=YES`](https://gdal.org/drivers/raster/gtiff.html) 
-as a [GDAL option](https://gdal.org/user/configoptions.html) bypasses caching but does not appear worth using as direct GeoTIFF performance is
-consistently lower than going through cache. (GDAL's C# interface also lacks support for `Span<T>` and remains missing nullability annotations.)
+threaded write transactions on large GeoPackages and its raster tile cache (for groups of pixels within individual rasters, not to be confused 
+with virtual raster tiles) imposes memory and DDR bandwidth overhead. Clouds mitigates the former by regularly committing GeoPackage 
+transactions for GDAL's SQL background thread to process in parallel within the [restricted multithreading](https://gdal.org/user/multithreading.html) 
+GDAL supports (it's possible GDAL's underlying datalayers are capable of concurrent transactions on a single dataset is supported but, 
+as of GDAL 3.9.1, it's not documented to be and thus has to be assumed unsafe). With respect to GDAL's tile cache, specifying [`GTIFF_DIRECT_IO=YES`](https://gdal.org/drivers/raster/gtiff.html) 
+as a [GDAL option](https://gdal.org/user/configoptions.html) bypasses caching but does not appear worth using as direct GeoTIFF 
+performance is consistently lower than going through cache. (GDAL's C# interface also lacks support for `Span<T>` and remains missing 
+nullability annotations.)
 
 Clouds is developed and tested using current or near-current versions of [Visual Studio Community](https://visualstudio.microsoft.com/downloads/).
 Clouds is only tested on Windows 10 22H2 but should run on any .NET supported platform once an implementation of `HardwareCapabilities` 

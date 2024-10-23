@@ -11,7 +11,7 @@ namespace Mars.Clouds.Extensions
         /// <summary>
         /// Element by element addition of <paramref name="vector"/> to <paramref name="sum"/>.
         /// </summary>
-        public unsafe static void Accumulate(Int32[] vector, Int32[] sum)
+        public unsafe static void Accumulate(ReadOnlySpan<Int32> vector, Span<Int32> sum)
         {
             Debug.Assert(vector.Length == sum.Length);
 
@@ -108,7 +108,7 @@ namespace Mars.Clouds.Extensions
         //    return Avx2.BroadcastScalarToVector256(value128);
         //}
 
-        public static unsafe void Convert(sbyte[] source, Int16[] destination)
+        public static unsafe void Convert(ReadOnlySpan<sbyte> source, Span<Int16> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -134,7 +134,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(sbyte[] source, Int32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<sbyte> source, Span<Int32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -160,7 +160,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(sbyte[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<sbyte> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -186,7 +186,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(Int16[] source, Int32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<Int16> source, Span<Int32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -212,7 +212,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(Int16[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<Int16> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -238,7 +238,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(Int32[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<Int32> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -264,7 +264,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, Int16[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<Int16> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -290,7 +290,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, Int32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<Int32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -316,7 +316,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -342,7 +342,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, UInt16[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<UInt16> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -368,7 +368,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, UInt32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<UInt32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -394,7 +394,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(byte[] source, UInt64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<byte> source, Span<UInt64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -420,7 +420,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt16[] source, Int32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt16> source, Span<Int32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -446,7 +446,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt16[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt16> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -472,7 +472,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt16[] source, UInt32[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt16> source, Span<UInt32> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -498,7 +498,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt16[] source, UInt64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt16> source, Span<UInt64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -524,7 +524,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt32[] source, Int64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt32> source, Span<Int64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -550,7 +550,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Convert(UInt32[] source, UInt64[] destination)
+        public static unsafe void Convert(ReadOnlySpan<UInt32> source, Span<UInt64> destination)
         {
             if (source.Length != destination.Length)
             {
@@ -577,7 +577,7 @@ namespace Mars.Clouds.Extensions
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void HistogramIncrement(int[] histogram, Vector256<int> histogramIndex256)
+        public static void HistogramIncrement(Span<int> histogram, Vector256<int> histogramIndex256)
         {
             // can potentially use gather but only if multiple increments on the same index are detected
             // scatter is in AVX-512
@@ -603,7 +603,7 @@ namespace Mars.Clouds.Extensions
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void HistogramIncrement(int[] histogram, Vector256<int> histogramIndex256, int mask)
+        public static void HistogramIncrement(Span<int> histogram, Vector256<int> histogramIndex256, int mask)
         {
             Vector128<int> histogramIndexLower128 = histogramIndex256.GetLower();
             if ((mask & 0x01) == 0x00) // mask is set if value is no data
@@ -1124,7 +1124,16 @@ namespace Mars.Clouds.Extensions
             return Avx2.BlendVariable(value1, value2, Avx2.CompareGreaterThan(value1, value2));
         }
 
-        public static unsafe void Pack(Int16[] source, sbyte[] destination, bool noDataIsSaturatingFromBelow)
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Vector256<int> Not(Vector256<int> mask)
+        //{
+        //    // use integer compare to produce -1 and set all bits for xor to flip
+        //    // Float compare behaves correctly when mask values are zero but, since all bits set is NaN, CompareEqual() and CompareOrdered() return zero
+        //    // rather than an integer -1 to set all bits.
+        //    return Avx2.Xor(mask, Avx2.CompareEqual(mask, mask));
+        //}
+
+        public static unsafe void Pack(ReadOnlySpan<Int16> source, Span<sbyte> destination, bool noDataIsSaturatingFromBelow)
         {
             if (source.Length != destination.Length)
             {
@@ -1184,16 +1193,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //public static Vector256<int> Not(Vector256<int> mask)
-        //{
-        //    // use integer compare to produce -1 and set all bits for xor to flip
-        //    // Float compare behaves correctly when mask values are zero but, since all bits set is NaN, CompareEqual() and CompareOrdered() return zero
-        //    // rather than an integer -1 to set all bits.
-        //    return Avx2.Xor(mask, Avx2.CompareEqual(mask, mask));
-        //}
-
-        public static unsafe void Pack(Int32[] source, sbyte[] destination, bool noDataIsSaturatingFromAbove)
+        public static unsafe void Pack(ReadOnlySpan<Int32> source, Span<sbyte> destination, bool noDataIsSaturatingFromAbove)
         {
             if (source.Length != destination.Length)
             {
@@ -1268,7 +1268,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Pack(Int32[] source, Int16[] destination, bool noDataIsSaturatingFromBelow)
+        public static unsafe void Pack(ReadOnlySpan<Int32> source, Span<Int16> destination, bool noDataIsSaturatingFromBelow)
         {
             if (source.Length != destination.Length)
             {
@@ -1328,7 +1328,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Pack(UInt16[] source, byte[] destination, bool noDataIsSaturatingFromAbove)
+        public static unsafe void Pack(ReadOnlySpan<UInt16> source, Span<byte> destination, bool noDataIsSaturatingFromAbove)
         {
             if (source.Length != destination.Length)
             {
@@ -1388,7 +1388,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Pack(UInt32[] source, byte[] destination, bool noDataIsSaturatingFromAbove)
+        public static unsafe void Pack(ReadOnlySpan<UInt32> source, Span<byte> destination, bool noDataIsSaturatingFromAbove)
         {
             if (source.Length != destination.Length)
             {
@@ -1463,7 +1463,7 @@ namespace Mars.Clouds.Extensions
             }
         }
 
-        public static unsafe void Pack(UInt32[] source, UInt16[] destination, bool noDataIsSaturatingFromAbove)
+        public static unsafe void Pack(ReadOnlySpan<UInt32> source, Span<UInt16> destination, bool noDataIsSaturatingFromAbove)
         {
             if (source.Length != destination.Length)
             {

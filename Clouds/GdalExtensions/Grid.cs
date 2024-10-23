@@ -187,18 +187,38 @@ namespace Mars.Clouds.GdalExtensions
             return true;
         }
 
+        /// <summary>
+        /// Returns the one dimensional cell index matching an x and y position within the grid.
+        /// </summary>
+        /// <param name="xIndex">x index located within the grid</param>
+        /// <param name="yIndex">y index located within the grid</param>
+        /// <remarks>
+        /// Passing an <paramref name="xIndex"/> which is off, but reasonably close to, the grid will return a cell index within
+        /// the length of the grid's data array, possibly resulting in incorrect caller behavior. How far off the grid this can
+        /// occur depends on <paramref name="yIndex"/>. If <paramref name="yIndex"/> is zero then <paramref name="xIndex"/> up
+        /// to but not including <see cref="Cells"/> will return within length cell indices. As <paramref name="yIndex"/> increases
+        /// this caller misuable extension in the +x direction shifts to the -x direction.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ToCellIndex(int xIndex, int yIndex)
         {
+            Debug.Assert((0 <= xIndex) && (xIndex < this.SizeX) && (0 <= yIndex) && (yIndex < this.SizeY));
             return xIndex + yIndex * this.SizeX;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Int64 ToCellIndex(Int64 xIndex, Int64 yIndex)
         {
+            Debug.Assert((0 <= xIndex) && (xIndex < this.SizeX) && (0 <= yIndex) && (yIndex < this.SizeY));
             return xIndex + yIndex * this.SizeX;
         }
 
+        /// <summary>
+        /// Convert a position to a cell index that might or might not be on the grid.
+        /// </summary>
+        /// <param name="x">x coordinate in grid's CRS.</param>
+        /// <param name="y">y coordinate in grid's CRS.</param>
+        /// <returns>An (x, y) index tuple whose values will lie on the grid if <paramref name="x"/> and <paramref name="y"/> lie within the grid.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToGridIndices(double x, double y)
         {
@@ -243,6 +263,13 @@ namespace Mars.Clouds.GdalExtensions
             return (xIndex, yIndex);
         }
 
+        /// <summary>
+        /// Convert a cell index to x and y indices which might or might not be on the grid.
+        /// </summary>
+        /// <remarks>
+        /// If <paramref name="cellIndex"/> is between zero and <see cref="Cells"/> an on grid position is returned. Cell indices
+        /// beyond this range yield off grid positions.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public (int xIndex, int yIndex) ToGridIndices(int cellIndex)
         {
@@ -345,13 +372,13 @@ namespace Mars.Clouds.GdalExtensions
 
         public TCell this[int xIndex, int yIndex]
         {
-            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            get { return this.Data[this.ToCellIndex(xIndex, yIndex)]; }
             set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }
         }
 
         public TCell this[Int64 xIndex, Int64 yIndex]
         {
-            get { return this[this.ToCellIndex(xIndex, yIndex)]; }
+            get { return this.Data[this.ToCellIndex(xIndex, yIndex)]; }
             set { this.Data[this.ToCellIndex(xIndex, yIndex)] = value; }
         }
     }
