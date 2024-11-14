@@ -23,26 +23,25 @@ namespace Mars.Clouds.Segmentation
                 throw new ArgumentException("DSM's grid has not been created.", nameof(dsm));
             }
 
-            surfaceBandName ??= searchChm ? DigitalSurfaceModel.CanopyHeightBandName : DigitalSurfaceModel.SubsurfaceBandName;
+            surfaceBandName ??= searchChm ? DigitalSurfaceModel.CanopyHeightBandName : DigitalSurfaceModel.SurfaceBandName;
             bool[,] unpopulatedTileMapForRead = dsm.TileGrid.GetUnpopulatedCellMap();
             bool[,] unpopulatedTileMapForWrite = ArrayExtensions.Copy(unpopulatedTileMapForRead);
             return new(dsm, surfaceBandName, dsm.TileGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory)
             {
-                SearchCanopyHeightModel = true
+                SearchCanopyHeightModel = searchChm
             };
         }
 
-        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float surfaceZ, float dtmZ, TreetopSearchState searchState)
+        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float chmHeight, TreetopSearchState searchState)
         {
-            float heightInCrsUnits = surfaceZ - dtmZ;
-            float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
+            float heightInM = searchState.CrsLinearUnits * chmHeight;
             // float searchRadiusInM = 8.59F / (1.0F + MathF.Exp((58.72F - heightInM) / 19.42F)); // logistic regression at 0.025 quantile against boostrap crown radii estimates
             // float searchRadiusInM = 6.0F / (1.0F + MathF.Exp((49.0F - heightInM) / 18.5F)); // manual retune based on segmentation
             float searchRadiusInM = Single.Min(0.055F * heightInM + 0.4F, 5.0F); // manual retune based on segmentation
             float searchRadiusInCrsUnits = searchRadiusInM / searchState.CrsLinearUnits;
 
             // check if point is local maxima
-            float candidateZ = this.SearchCanopyHeightModel ? heightInCrsUnits : surfaceZ;
+            float candidateZ = this.SearchCanopyHeightModel ? chmHeight : dsmZ;
             bool cellInSimilarElevationGroup = false;
             bool higherCellFound = false;
             bool newEqualHeightPatchFound = false;
@@ -95,7 +94,7 @@ namespace Mars.Clouds.Segmentation
                             // OnEqualHeightPatch() |= is therefore used with newEqualHeightPatchFound to avoid potentially creating both
                             // a patch and a treetop (or possibly multiple treetops, though that's unlikely).
                             cellInSimilarElevationGroup = true;
-                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(indexX, indexY, candidateZ, searchIndexX, searchIndexY, ySearchRadiusInCells);
+                            newEqualHeightPatchFound |= searchState.OnSimilarElevation(indexX, indexY, candidateZ, searchIndexX, searchIndexY, ySearchRadiusInCells);
                         }
                     }
 
@@ -120,8 +119,8 @@ namespace Mars.Clouds.Segmentation
             {
                 if (newEqualHeightPatchFound)
                 {
-                    Debug.Assert(searchState.MostRecentEqualHeightPatch != null);
-                    searchState.TreetopEqualHeightPatches.Add(searchState.MostRecentEqualHeightPatch);
+                    Debug.Assert(searchState.MostRecentSimilarElevationGroup != null);
+                    searchState.TreetopEqualHeightPatches.Add(searchState.MostRecentSimilarElevationGroup);
                 }
 
                 return (false, localMaximaRadiusInCells);

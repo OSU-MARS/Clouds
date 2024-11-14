@@ -29,7 +29,7 @@ namespace Mars.Clouds.Segmentation
             treetopLayer.Add(treeID, centroidX, centroidY, groundElevationAtBaseOfTree, treeHeightInCrsUnits, treeRadiusInCrsUnits);
         }
 
-        public int FindTreetops(int tileIndexX, int tileIndexY, string treetopFilePath)
+        public int FindTreetops(int tileIndexX, int tileIndexY, string tileName, string treetopFilePath)
         {
             DigitalSurfaceModel? dsmTile = this.Dsm[tileIndexX, tileIndexY];
             if (dsmTile == null)
@@ -38,7 +38,12 @@ namespace Mars.Clouds.Segmentation
             }
 
             RasterNeighborhood8<float> surfaceNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.surfaceBandName);
-            TreetopSearchState tileSearch = new(dsmTile, surfaceNeighborhood);
+            RasterNeighborhood8<float> chmNeighborhood = surfaceNeighborhood;
+            if (String.Equals(this.surfaceBandName, DigitalSurfaceModel.CanopyHeightBandName) == false)
+            {
+                chmNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
+            }
+            TreetopSearchState tileSearch = new(dsmTile, surfaceNeighborhood, chmNeighborhood);
 
             // set default minimum height if one was not specified
             // Assumption here is that xy and z units match, which is not necessarily enforced.
@@ -52,7 +57,7 @@ namespace Mars.Clouds.Segmentation
             double dsmCellSize = dsm.Transform.GetCellSize();
             RasterBand<float> chm = tileSearch.Dsm.CanopyHeight;
             using DataSource treetopFile = OgrExtensions.CreateOrOpenForWrite(treetopFilePath);
-            using TreetopVector treetopLayer = TreetopVector.CreateOrOverwrite(treetopFile, dsm.Crs);
+            using TreetopVector treetopLayer = TreetopVector.CreateOrOverwrite(treetopFile, dsm.Crs, tileName.Length);
             for (int dsmIndex = 0, dsmYindex = 0; dsmYindex < dsm.SizeY; ++dsmYindex) // y for north up rasters
             {
                 for (int dsmXindex = 0; dsmXindex < dsm.SizeX; ++dsmIndex, ++dsmXindex) // x for north up rasters
@@ -69,15 +74,12 @@ namespace Mars.Clouds.Segmentation
                         continue;
                     }
 
-                    // get search radius and area for local maxima in DSM
-                    // For now, use logistic quantile regression at p = 0.025 from prior Elliott State Research Forest segmentations.
-                    float dtmZ = dsmZ - chmHeight;
-
                     // add treetop if this cell is a unique local maxima
                     (bool addTreetop, int localMaximaRadiusInCells) = this.FindTreetops(dsmXindex, dsmYindex, dsmZ, chmHeight, tileSearch);
                     if (addTreetop)
                     {
                         (double cellX, double cellY) = dsm.Transform.GetCellCenter(dsmXindex, dsmYindex);
+                        float dtmZ = dsmZ - chmHeight;
                         treetopLayer.Add(tileSearch.NextTreeID++, cellX, cellY, dtmZ, chmHeight, localMaximaRadiusInCells * dsmCellSize);
                     }
                 }

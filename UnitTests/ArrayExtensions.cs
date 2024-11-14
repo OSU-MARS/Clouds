@@ -1,10 +1,24 @@
 ﻿using System;
+using System.Numerics;
 using System.Text;
 
 namespace Mars.Clouds.UnitTests
 {
     internal static class ArrayExtensions
     {
+        public static bool AllValuesAre<T>(this T[] array, T value) where T : INumber<T>
+        {
+            for (int index = 0; index < array.Length; ++index)
+            {
+                if (array[index] != value)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         public static int[] CreateSequence(int length)
         {
             int[] array = new int[length];
@@ -16,7 +30,7 @@ namespace Mars.Clouds.UnitTests
             return array;
         }
 
-        public static string GetDeclaration<TElement>(this TElement[,] array)
+        public static string GetDeclaration<T>(this T[,] array)
         {
             StringBuilder arrayAsString = new("[ ");
             int arraySizeX = array.GetLength(0);
@@ -38,7 +52,7 @@ namespace Mars.Clouds.UnitTests
         /// <summary>
         /// Randomize order of elements in array.
         /// </summary>
-        public static void RandomizeOrder<TElement>(this TElement[] array)
+        public static void RandomizeOrder<T>(this T[] array)
         {
             // Fisher-Yates shuffle
             // https://stackoverflow.com/questions/108819/best-way-to-randomize-an-array-with-net

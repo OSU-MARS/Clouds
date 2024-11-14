@@ -55,7 +55,7 @@ namespace Mars.Clouds.Segmentation
 
         public void Add(int id, double x, double y, double elevation, double height, double radius)
         {
-            Debug.Assert(this.IsInEditMode && (this.tileFieldIndex == -1));
+            Debug.Assert(this.IsInEditMode);
 
             Feature treetopCandidate = new(this.Definition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
@@ -116,12 +116,9 @@ namespace Mars.Clouds.Segmentation
             Layer gdalLayer = source.CreateLayer(layerName, crs, wkbGeometryType.wkbPoint25D, [ "OVERWRITE=YES" ]); // https://gdal.org/drivers/vector/gpkg.html#vector-gpkg or equivalent for creation options
             gdalLayer.StartTransaction();
 
-            if (tileFieldWidth > 0)
-            {
-                FieldDefn tileFieldDefinition = new("tile", FieldType.OFTString);
-                tileFieldDefinition.SetWidth(tileFieldWidth);
-                gdalLayer.CreateField(tileFieldDefinition);
-            }
+            FieldDefn tileFieldDefinition = new("tile", FieldType.OFTString);
+            tileFieldDefinition.SetWidth(tileFieldWidth);
+            gdalLayer.CreateField(tileFieldDefinition);
 
             gdalLayer.CreateField("treeID", FieldType.OFTInteger);
             gdalLayer.CreateField("height", FieldType.OFTReal);
@@ -130,9 +127,9 @@ namespace Mars.Clouds.Segmentation
             return gdalLayer;
         }
 
-        public static TreetopVector CreateOrOverwrite(DataSource treetopFile, SpatialReference crs)
+        public static TreetopVector CreateOrOverwrite(DataSource treetopFile, SpatialReference crs, int tileFieldWidth)
         {
-            return TreetopVector.CreateOrOverwrite(treetopFile, crs, -1, Array.Empty<string>());
+            return TreetopVector.CreateOrOverwrite(treetopFile, crs, tileFieldWidth, Array.Empty<string>());
         }
 
         public static TreetopVector CreateOrOverwrite(DataSource treetopFile, SpatialReference crs, int tileFieldWidth, IList<string> classNames)

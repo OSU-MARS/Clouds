@@ -119,10 +119,6 @@ namespace Mars.Clouds.Segmentation
                     segmentationState.DsmEndIndexY = cellDsmEndIndexY;
 
                     // evaluate DSM rows within this treetop cell
-                    if ((treetopCellIndexX == 1) && (treetopCellIndexY == 1))
-                    {
-                        int q = 0;
-                    }
                     crownCosts.EnumerateCostFields(treetopCellIndexX, treetopCellIndexY, segmentationState);
                     for (int dsmIndexY = cellDsmStartIndexY; dsmIndexY < cellDsmEndIndexY; ++dsmIndexY)
                     {

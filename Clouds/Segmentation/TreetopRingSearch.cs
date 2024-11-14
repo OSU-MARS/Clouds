@@ -26,16 +26,15 @@ namespace Mars.Clouds.Segmentation
             return new(dsm, surfaceBandName, dsm.TileGrid, unpopulatedTileMapForRead, unpopulatedTileMapForWrite, outputPathIsDirectory);
         }
 
-        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float dtmZ, TreetopSearchState searchState)
+        protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float chmHeight, TreetopSearchState searchState)
         {
             Debug.Assert(searchState.CellHeight == searchState.CellWidth, "Rectangular DSM cells are not currently supported.");
 
-            double dsmCellSizeInCrsUnits = searchState.CellHeight;
-            float heightInCrsUnits = dsmZ - dtmZ;
-            float heightInM = searchState.CrsLinearUnits * heightInCrsUnits;
+            float heightInM = searchState.CrsLinearUnits * chmHeight;
             float searchRadiusInCrsUnits = Single.Min(0.045F * heightInM + 0.5F, 4.0F) / searchState.CrsLinearUnits; // max 4 m radius
 
             bool dsmCellInSimilarElevationGroup = false;
+            double dsmCellSizeInCrsUnits = searchState.CellHeight;
             bool newEqualHeightPatchFound = false;
             int maxRingIndex = Int32.Min((int)(searchRadiusInCrsUnits / dsmCellSizeInCrsUnits + 0.5F), Ring.Rings.Count);
             //int maxInnerRingIndex = Int32.Min(Int32.Max(maxRingIndex / 2, 0), 2); // tested inclusively so 1, 2, or 3 cell radius = ring index 0, 1, or 2
@@ -79,7 +78,7 @@ namespace Mars.Clouds.Segmentation
                             // has had a 2.7 m spacing.
                             // Problem: can produce a false or incorrectly placed treetop if not all cells in the patch are local maxima.
                             dsmCellInSimilarElevationGroup = true;
-                            newEqualHeightPatchFound |= searchState.OnEqualHeightPatch(indexX, indexY, dsmZ, searchXindex, searchYindex, maxRingIndex);
+                            newEqualHeightPatchFound |= searchState.OnSimilarElevation(indexX, indexY, dsmZ, searchXindex, searchYindex, maxRingIndex);
                         }
                     }
 
@@ -134,7 +133,7 @@ namespace Mars.Clouds.Segmentation
             }
             Debug.Assert((Single.IsNaN(netProminence) == false) && (netProminence > -100000.0F) && (netProminence < 10000.0F));
 
-            float netProminenceNormalized = netProminence / heightInCrsUnits;
+            float netProminenceNormalized = netProminence / chmHeight;
             if (higherCellWithinInnerRings || (netProminenceNormalized <= 0.02F))
             {
                 return (false, -1);

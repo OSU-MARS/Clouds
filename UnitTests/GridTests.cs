@@ -1,8 +1,10 @@
 ﻿using Mars.Clouds.Cmdlets;
 using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Segmentation;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using OSGeo.OSR;
 using System;
+using System.Numerics;
 
 namespace Mars.Clouds.UnitTests
 {
@@ -11,31 +13,178 @@ namespace Mars.Clouds.UnitTests
     {
         public TestContext? TestContext { get; set; }
 
-        [TestMethod]
-        public void VirtualRasterStreamReadOnly()
+        /// <summary>
+        /// Creates a dense virtual raster with tiles of the specified size.
+        /// </summary>
+        private static VirtualRaster<Raster<byte>> MockVirtualRaster(int vrtSizeX, int vrtSizeY, double cellSizeInCrsUnits, int tileSizeInCells)
         {
             // mock a virtual raster
             SpatialReference crs = new(null);
             crs.ImportFromEPSG(32610);
-            GridNullable<object> tileExtent = new(crs, new(0.0, 0.0, 1.0, -1.0), 1000, 1000);
+            GridNullable<object> tileExtent = new(crs, new(0.0, 0.0, cellSizeInCrsUnits, -cellSizeInCrsUnits), tileSizeInCells, tileSizeInCells);
 
-            Random random = new();
-            int vrtSizeX = random.Next(1, 24);
-            int vrtSizeY = random.Next(1, 24);
+            double tileSizeInCrsUnits = cellSizeInCrsUnits * tileSizeInCells;
             VirtualRaster<Raster<byte>> vrt = new();
             for (int yIndex = 0; yIndex < vrtSizeY; ++yIndex)
             {
                 for (int xIndex = 0; xIndex < vrtSizeX; ++xIndex)
                 {
-                    tileExtent.Transform.SetOrigin(1000.0 * xIndex, 1000.0 * yIndex);
-                    vrt.Add(new Raster<byte>(tileExtent, [ "band1" ], Byte.MaxValue));
+                    tileExtent.Transform.SetOrigin(tileSizeInCrsUnits * xIndex, tileSizeInCrsUnits * yIndex);
+                    vrt.Add(new Raster<byte>(tileExtent, [ "band1" ], noDataValue: Byte.MaxValue)); // clones CRS and transform
                 }
             }
 
             vrt.CreateTileGrid();
+            return vrt;
+        }
+
+        [TestMethod]
+        public void NeighborhoodSlices()
+        {
+            const int tileSizeInCells = 10;
+            VirtualRaster<Raster<byte>> vrt = GridTests.MockVirtualRaster(vrtSizeX: 3, vrtSizeY: 3, cellSizeInCrsUnits: 1.0, tileSizeInCells);
+            RasterNeighborhood8<byte> neighborhood = vrt.GetNeighborhood8<byte>(tileGridIndexX: 1, tileGridIndexY: 1, bandName: null);
+            Assert.IsTrue((neighborhood.Northwest != null) && (neighborhood.North != null) && (neighborhood.Northeast != null) &&
+                          (neighborhood.West != null) && (neighborhood.East != null) &&
+                          (neighborhood.Southwest != null) && (neighborhood.South != null) && (neighborhood.Southeast != null));
+            Array.Fill(neighborhood.Northwest.Data, (byte)RasterDirection.Northwest);
+            Array.Fill(neighborhood.North.Data, (byte)RasterDirection.North);
+            Array.Fill(neighborhood.Northeast.Data, (byte)RasterDirection.Northeast);
+            Array.Fill(neighborhood.West.Data, (byte)RasterDirection.West);
+            Array.Fill(neighborhood.Center.Data, (byte)RasterDirection.None);
+            Array.Fill(neighborhood.East.Data, (byte)RasterDirection.East);
+            Array.Fill(neighborhood.Southwest.Data, (byte)RasterDirection.Southwest);
+            Array.Fill(neighborhood.South.Data, (byte)RasterDirection.South);
+            Array.Fill(neighborhood.Southeast.Data, (byte)RasterDirection.Southeast);
+
+            byte[] wholeCenterSlice = GC.AllocateUninitializedArray<byte>(tileSizeInCells * tileSizeInCells);
+            neighborhood.Slice(xOrigin: 0, yOrigin: 0, sizeX: tileSizeInCells, sizeY: tileSizeInCells, wholeCenterSlice);
+            Assert.IsTrue(wholeCenterSlice.AllValuesAre((byte)RasterDirection.None));
+
+            Span<byte> northwestSlice = stackalloc byte[5 * 6];
+            Span<byte> northSlice = stackalloc byte[2 * 2];
+            Span<byte> northeastSlice = stackalloc byte[8 * 6];
+            Span<byte> westSlice = stackalloc byte[4 * 6];
+            Span<byte> centerSlice = stackalloc byte[4 * 4];
+            Span<byte> eastSlice = stackalloc byte[6 * 7];
+            Span<byte> southwestSlice = stackalloc byte[4 * 5];
+            Span<byte> southSlice = stackalloc byte[8 * 10];
+            Span<byte> southeastSlice = stackalloc byte[8 * 6];
+
+            northwestSlice.Fill(byte.MaxValue);
+            northSlice.Fill(byte.MaxValue);
+            northeastSlice.Fill(byte.MaxValue);
+            westSlice.Fill(byte.MaxValue);
+            centerSlice.Fill(byte.MaxValue);
+            eastSlice.Fill(byte.MaxValue);
+            southwestSlice.Fill(byte.MaxValue);
+            southSlice.Fill(byte.MaxValue);
+            southeastSlice.Fill(byte.MaxValue);
+
+            neighborhood.Slice(xOrigin: -2, yOrigin: -3, sizeX: 5, sizeY: 6, northwestSlice);
+            neighborhood.Slice(xOrigin: 8, yOrigin: -1, sizeX: 2, sizeY: 2, northSlice);
+            neighborhood.Slice(xOrigin: 7, yOrigin: -4, sizeX: 8, sizeY: 6, northeastSlice);
+
+            neighborhood.Slice(xOrigin: -1, yOrigin: 0, sizeX: 4, sizeY: 6, westSlice);
+            neighborhood.Slice(xOrigin: 3, yOrigin: 3, sizeX: 4, sizeY: 4, centerSlice);
+            neighborhood.Slice(xOrigin: 5, yOrigin: 3, sizeX: 6, sizeY: 7, eastSlice);
+
+            neighborhood.Slice(xOrigin: -3, yOrigin: 9, sizeX: 4, sizeY: 5, southwestSlice);
+            neighborhood.Slice(xOrigin: 0, yOrigin: 8, sizeX: 8, sizeY: 10, southSlice);
+            neighborhood.Slice(xOrigin: 4, yOrigin: 6, sizeX: 8, sizeY: 6, southeastSlice);
+
+            Span<RasterDirection> northwestExpected = [ RasterDirection.Northwest, RasterDirection.Northwest, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                        RasterDirection.Northwest, RasterDirection.Northwest, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                        RasterDirection.Northwest, RasterDirection.Northwest, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                        RasterDirection.West, RasterDirection.West, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                        RasterDirection.West, RasterDirection.West, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                        RasterDirection.West, RasterDirection.West, RasterDirection.None, RasterDirection.None, RasterDirection.None ];
+            Span<RasterDirection> northExpected = [ RasterDirection.North, RasterDirection.North,
+                                                    RasterDirection.None, RasterDirection.None ];
+            Span<RasterDirection> northeastExpected = [ RasterDirection.North, RasterDirection.North, RasterDirection.North, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast,
+                                                        RasterDirection.North, RasterDirection.North, RasterDirection.North, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast,
+                                                        RasterDirection.North, RasterDirection.North, RasterDirection.North, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast,
+                                                        RasterDirection.North, RasterDirection.North, RasterDirection.North, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast, RasterDirection.Northeast,
+                                                        RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                        RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East ];
+            Span<RasterDirection> westExpected = [ RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None,
+                                                   RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None,
+                                                   RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None,
+                                                   RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None,
+                                                   RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None,
+                                                   RasterDirection.West, RasterDirection.West, RasterDirection.West, RasterDirection.None ];
+            Span<RasterDirection> centerExpected = stackalloc RasterDirection[4 * 4];
+            centerExpected.Fill(RasterDirection.None);
+            Span<RasterDirection> eastExpected = [ RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East,
+                                                   RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East, RasterDirection.East, RasterDirection.East ];
+            Span<RasterDirection> southwestExpected = [ RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.None,
+                                                        RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.None,
+                                                        RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.South,
+                                                        RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.South,
+                                                        RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.Southwest, RasterDirection.South ];
+            Span<RasterDirection> southExpected = [ RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                    RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South,
+                                                    RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South ];
+            Span<RasterDirection> southeastExpected = [ RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East,
+                                                        RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East,
+                                                        RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East,
+                                                        RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.None, RasterDirection.East, RasterDirection.East,
+                                                        RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.Southeast, RasterDirection.Southeast,
+                                                        RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.South, RasterDirection.Southeast, RasterDirection.Southeast ];
+
+            GridTests.VerifyElementsEqual(northwestExpected, northwestSlice);
+            GridTests.VerifyElementsEqual(northExpected, northSlice);
+            GridTests.VerifyElementsEqual(northeastExpected, northeastSlice);
+            GridTests.VerifyElementsEqual(westExpected, westSlice);
+            GridTests.VerifyElementsEqual(centerExpected, centerSlice);
+            GridTests.VerifyElementsEqual(eastExpected, eastSlice);
+            GridTests.VerifyElementsEqual(southwestExpected, southwestSlice);
+            GridTests.VerifyElementsEqual(southExpected, southSlice);
+            GridTests.VerifyElementsEqual(southeastExpected, southeastSlice);
+        }
+
+        private static bool VerifyElementsEqual(ReadOnlySpan<RasterDirection> expected, ReadOnlySpan<byte> actual)
+        {
+            if (expected.Length != actual.Length)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < expected.Length; ++index)
+            {
+                if ((byte)expected[index] != actual[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        [TestMethod]
+        public void VirtualRasterStreamReadOnly()
+        {
+            // mock a virtual raster
+            Random random = new();
+            int vrtSizeX = random.Next(1, 24);
+            int vrtSizeY = random.Next(1, 24);
+            VirtualRaster<Raster<byte>> vrt = GridTests.MockVirtualRaster(vrtSizeX, vrtSizeY, cellSizeInCrsUnits: 1.0, tileSizeInCells: 1000);
             Assert.IsTrue((vrt.SizeInTilesX == vrtSizeX) && (vrt.SizeInTilesY == vrtSizeY) && (vrt.TileGrid != null));
             Assert.IsTrue((vrt.SizeInTilesX == vrt.TileGrid.SizeX) && (vrt.SizeInTilesY == vrt.TileGrid.SizeY));
             int tileCount = vrt.SizeInTilesX * vrt.SizeInTilesY;
+            Assert.IsTrue(vrt.NonNullTileCount == tileCount);
 
             TileStreamPosition<Raster<byte>> vrtPosition = new(vrt.TileGrid, vrt.TileGrid.GetUnpopulatedCellMap())
             {

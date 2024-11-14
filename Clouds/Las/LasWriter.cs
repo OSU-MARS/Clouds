@@ -321,14 +321,18 @@ namespace Mars.Clouds.Las
                     if (repairClassification) 
                     {
                         PointClassification classification = (PointClassification)pointBytes[classificationOffset];
-                        // workaround bugs in Trion Model v113
+                        // workaround bugs in Trion Model
                         if (classification == PointClassification.NeverClassified)
                         {
-                            classification = PointClassification.Unclassified;
+                            classification = PointClassification.Unclassified; // Trion Model v113, 115, 200, ...
                         }
                         else if (classification == PointClassification.Unclassified)
                         {
-                            classification = PointClassification.Ground;
+                            classification = PointClassification.Ground; // Trion Model v113, 115, 200, ...
+                        }
+                        else if (classification == PointClassification.HighVegetation)
+                        {
+                            classification = PointClassification.LowVegetation; // Trion Model v200...
                         }
                         pointBytes[classificationOffset] = (byte)classification;
                     }

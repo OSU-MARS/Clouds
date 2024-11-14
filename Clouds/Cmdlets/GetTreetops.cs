@@ -89,7 +89,7 @@ namespace Mars.Clouds.Cmdlets
                     string treetopTilePath = treetopsPathIsDirectory ? Path.Combine(this.Treetops, tileName + Constant.File.GeoPackageExtension) : this.Treetops;
 
                     (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileWriteIndex);
-                    int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, treetopTilePath);
+                    int treetopCandidatesInTile = treetopSearch.FindTreetops(tileIndexX, tileIndexY, tileName, treetopTilePath);
 
                     lock (treetopSearch)
                     {

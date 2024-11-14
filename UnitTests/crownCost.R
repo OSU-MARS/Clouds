@@ -15,7 +15,7 @@ costField = read_xlsx(file.path(getwd(), "UnitTests/bin/Debug/costField.xlsx")) 
 print(costField %>% filter(y == 31), n = 63)
 
 ggplot() +
-  geom_raster(aes(x = x, y = y, fill = value), costField %>% filter()) +
-  coord_equal(xlim = c(0, 19), ylim = c(0, 19)) +
+  geom_raster(aes(x = x, y = y, fill = value), costField %>% filter(value < 42)) +
+  coord_equal(xlim = c(0, 28.3), ylim = c(0, 28.3)) +
   labs(x = "x, m", y = "y, m", fill = "path\ncost, m") +
   scale_fill_viridis_c()

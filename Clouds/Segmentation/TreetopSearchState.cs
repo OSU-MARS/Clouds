@@ -11,54 +11,56 @@ namespace Mars.Clouds.Segmentation
         public DigitalSurfaceModel Dsm { get; private init; }
         public float CellHeight { get; private init; }
         public float CellWidth { get; private init; }
+        public RasterNeighborhood8<float> ChmNeighborhood { get; private init; }
         public RasterNeighborhood8<float> SurfaceNeighborhood { get; private init; }
 
         public float MinimumCandidateHeight { get; set; }
         public int NextTreeID { get; set; }
 
         public int EqualHeightPatchCommitInterval { get; set; }
-        public SimilarElevationGroup<float>? MostRecentEqualHeightPatch { get; set; }
+        public SimilarElevationGroup<float>? MostRecentSimilarElevationGroup { get; set; }
         public List<SimilarElevationGroup<float>> TreetopEqualHeightPatches { get; private init; }
 
-        public TreetopSearchState(DigitalSurfaceModel dsmTile, RasterNeighborhood8<float> dsmNeighborhood)
+        public TreetopSearchState(DigitalSurfaceModel dsmTile, RasterNeighborhood8<float> surfaceNeighborhood, RasterNeighborhood8<float> chmNeighborhood)
         {
             this.Dsm = dsmTile;
 
             this.CrsLinearUnits = (float)this.Dsm.Crs.GetLinearUnits(); // 1.0 if CRS uses meters, 0.3048 if CRS is in feet
             this.CellHeight = MathF.Abs((float)this.Dsm.Transform.CellHeight); // ensure positive cell height values
             this.CellWidth = (float)this.Dsm.Transform.CellWidth;
-            this.SurfaceNeighborhood = dsmNeighborhood;
+            this.ChmNeighborhood = chmNeighborhood;
+            this.SurfaceNeighborhood = surfaceNeighborhood;
 
             this.MinimumCandidateHeight = Single.NaN;
             this.NextTreeID = 1;
 
             this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsLinearUnits * this.CellHeight));
-            this.MostRecentEqualHeightPatch = null;
+            this.MostRecentSimilarElevationGroup = null;
             this.TreetopEqualHeightPatches = [];
         }
 
         public void AddMostRecentEqualHeightPatchAsTreetop()
         {
-            if (this.MostRecentEqualHeightPatch == null)
+            if (this.MostRecentSimilarElevationGroup == null)
             {
                 throw new InvalidOperationException("Attempt to accept the most recent equal height patch as a treetop when no patch has yet been found.");
             }
 
-            SimilarElevationGroup<float> treetop = this.MostRecentEqualHeightPatch;
+            SimilarElevationGroup<float> treetop = this.MostRecentSimilarElevationGroup;
             treetop.ID = this.NextTreeID++;
             this.TreetopEqualHeightPatches.Add(treetop);
         }
 
-        public bool OnEqualHeightPatch(int dsmXindex, int dsmYindex, float candidateZ, int searchXindex, int searchYindex, int radiusInCells)
+        public bool OnSimilarElevation(int dsmXindex, int dsmYindex, float surfaceZ, int searchXindex, int searchYindex, int radiusInCells)
         {
             // clear most recent patch if this is a different patch
-            if ((this.MostRecentEqualHeightPatch != null) && (this.MostRecentEqualHeightPatch.Height != candidateZ))
+            if ((this.MostRecentSimilarElevationGroup != null) && (this.MostRecentSimilarElevationGroup.Height != surfaceZ))
             {
-                this.MostRecentEqualHeightPatch = null;
+                this.MostRecentSimilarElevationGroup = null;
             }
 
             bool newEqualHeightPatchFound = false;
-            if (this.MostRecentEqualHeightPatch == null)
+            if (this.MostRecentSimilarElevationGroup == null)
             {
                 // check for existing patch
                 // Since patches are added sequentially, the patches adjacent to the current search point will be
@@ -66,53 +68,48 @@ namespace Mars.Clouds.Segmentation
                 for (int patchIndex = this.TreetopEqualHeightPatches.Count - 1; patchIndex >= 0; --patchIndex)
                 {
                     SimilarElevationGroup<float> candidatePatch = this.TreetopEqualHeightPatches[patchIndex];
-                    if (candidatePatch.Height != candidateZ)
+                    if (candidatePatch.Height != surfaceZ)
                     {
                         continue;
                     }
                     if (candidatePatch.Contains(searchXindex, searchYindex))
                     {
-                        this.MostRecentEqualHeightPatch = candidatePatch;
+                        this.MostRecentSimilarElevationGroup = candidatePatch;
                         break;
                     }
                     else if (candidatePatch.Contains(dsmXindex, dsmYindex))
                     {
-                        this.TryGetCanopyHeight(searchXindex, searchYindex, out float dtmSearchZ);
-
-                        this.MostRecentEqualHeightPatch = candidatePatch;
-                        this.MostRecentEqualHeightPatch.Add(searchXindex, searchYindex, dtmSearchZ);
+                        if (this.SurfaceNeighborhood.TryGetValue(searchXindex, searchYindex, out float surfaceSearchZ) && this.ChmNeighborhood.TryGetValue(searchXindex, searchYindex, out float chmSearchZ))
+                        {
+                            float dtmSearchZ = surfaceSearchZ - chmSearchZ;
+                            this.MostRecentSimilarElevationGroup = candidatePatch;
+                            this.MostRecentSimilarElevationGroup.Add(searchXindex, searchYindex, dtmSearchZ);
+                        }
                         break;
                     }
                 }
-                if (this.MostRecentEqualHeightPatch == null)
+                if (this.MostRecentSimilarElevationGroup == null)
                 {
-                    float dtmElevation = candidateZ = this.Dsm.CanopyHeight[dsmXindex, dsmYindex];
-                    this.TryGetCanopyHeight(searchXindex, searchYindex, out float dtmSearchZ);
-                    this.MostRecentEqualHeightPatch = new(candidateZ, dsmYindex, dsmXindex, dtmElevation, searchYindex, searchXindex, dtmSearchZ, radiusInCells);
+                    if (this.SurfaceNeighborhood.TryGetValue(searchXindex, searchYindex, out float surfaceSearchZ) && this.ChmNeighborhood.TryGetValue(searchXindex, searchYindex, out float chmSearchZ))
+                    {
+                        float dtmElevation = surfaceZ - this.Dsm.CanopyHeight[dsmXindex, dsmYindex];
+                        float dtmSearchZ = surfaceSearchZ - chmSearchZ;
+                        this.MostRecentSimilarElevationGroup = new(surfaceZ, dsmYindex, dsmXindex, dtmElevation, searchYindex, searchXindex, dtmSearchZ, radiusInCells);
 
-                    newEqualHeightPatchFound = true;
+                        newEqualHeightPatchFound = true;
+                    }
                 }
             }
             else
             {
-                if (this.MostRecentEqualHeightPatch.Contains(dsmXindex, dsmYindex) == false)
+                if (this.MostRecentSimilarElevationGroup.Contains(dsmXindex, dsmYindex) == false)
                 {
-                    this.TryGetCanopyHeight(dsmXindex, dsmYindex, out float dtmSearchZ);
-                    this.MostRecentEqualHeightPatch.Add(dsmXindex, dsmYindex, dtmSearchZ);
+                    float dtmElevation = surfaceZ - this.Dsm.CanopyHeight[dsmXindex, dsmYindex];
+                    this.MostRecentSimilarElevationGroup.Add(dsmXindex, dsmYindex, dtmElevation);
                 }
             }
 
             return newEqualHeightPatchFound;
-        }
-
-        private bool TryGetCanopyHeight(int searchXindex, int searchYindex, out float chmZ)
-        {
-            if (this.Dsm.CanopyHeight.TryGetValue(searchXindex, searchYindex, out chmZ) == false)
-            {
-                chmZ = Single.NaN;
-            }
-
-            return true;
         }
     }
 }
