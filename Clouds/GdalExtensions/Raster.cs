@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.InkML;
-using OSGeo.GDAL;
+﻿using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -27,13 +26,18 @@ namespace Mars.Clouds.GdalExtensions
             this.FilePath = rasterDataset.GetFirstFile(); // for now, assume primary source file is always the first file in the raster's sources
         }
 
-        protected Raster(Grid extent)
-            : this(extent.Crs, extent.Transform, extent.SizeX, extent.SizeY)
+        protected Raster(Grid transformAndExtent)
+            : this(transformAndExtent.Crs, transformAndExtent.Transform, transformAndExtent.SizeX, transformAndExtent.SizeY)
         {
         }
 
         protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
-            : base(crs, transform, xSize, ySize, cloneCrsAndTransform: true)
+            : this(crs, transform, xSize, ySize, cloneCrsAndTransform: true)
+        {
+        }
+
+        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, bool cloneCrsAndTransform)
+            : base(crs, transform, xSize, ySize, cloneCrsAndTransform)
         {
             this.FilePath = String.Empty;
         }
@@ -177,7 +181,7 @@ namespace Mars.Clouds.GdalExtensions
 
         public abstract void Reset(string filePath, Dataset rasterDataset, bool readData);
 
-        public abstract void ReturnBands(RasterBandPool dataBufferPool);
+        public abstract void ReturnBandData(RasterBandPool dataBufferPool);
 
         public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
 
@@ -249,8 +253,8 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public Raster(Grid extent, string[] bandNames, TBand noDataValue)
-            : base(extent)
+        public Raster(Grid transformAndExtent, string[] bandNames, TBand noDataValue)
+            : base(transformAndExtent)
         {
             if (bandNames.Length < 1)
             {
@@ -314,6 +318,16 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             throw new NotSupportedException("Raster does not contain a band named '" + name + "'.");
+        }
+
+        public new RasterBand<TBand> GetBand(string? name)
+        {
+            if (this.TryGetBand(name, out RasterBand<TBand>? band) == false)
+            {
+                throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+            }
+
+            return band;
         }
 
         public override IEnumerable<RasterBand<TBand>> GetBands()
@@ -395,7 +409,7 @@ namespace Mars.Clouds.GdalExtensions
             //}
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
@@ -480,7 +494,7 @@ namespace Mars.Clouds.GdalExtensions
             // all bands have the same type, so no need for type conversion to meet GDAL (and GeoTIFF) single type constraints
             DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
             using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, this.Bands.Length, gdalDataType, compress);
-            for (int bandIndex = 0; bandIndex< this.Bands.Length; ++bandIndex)
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
                 RasterBand<TBand> band = this.Bands[bandIndex];
                 int gdalbandIndex = bandIndex + 1;

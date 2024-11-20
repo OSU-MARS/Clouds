@@ -2,7 +2,6 @@
 using Mars.Clouds.GdalExtensions;
 using System.Threading;
 using System.Collections.Generic;
-using System;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -43,9 +42,9 @@ namespace Mars.Clouds.Cmdlets
             return Interlocked.Increment(ref this.tileCreateIndex);
         }
 
-        protected virtual void OnCreatedTileUnreferenced(int tileCreateIndexX, int tileCreateIndexY, TCreatedTile tile) 
+        protected virtual void OnCreatedTileUnreferenced(int unreferencedTileIndexX, int unreferencedTileIndexY, TCreatedTile tile) 
         {
-            tile.ReturnBands(this.RasterBandPool);
+            tile.ReturnBandData(this.WriteBandPool);
         }
 
         protected override void OnSourceTileRead(int tileReadIndexX, int tileReadIndexY)

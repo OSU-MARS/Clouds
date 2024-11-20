@@ -37,10 +37,11 @@ namespace Mars.Clouds.Cmdlets
 
         public GetDsm()
         {
+            // leave this.DataThreads at default
             this.Dsm = String.Empty;
             this.Dtm = String.Empty;
             this.DtmBand = null;
-            // leave this.MaxThreads at default
+            // leave this.MetadataThreads at default
             this.SlopeAspect = false;
             this.SubsurfaceGap = Single.NaN;
         }
@@ -60,10 +61,10 @@ namespace Mars.Clouds.Cmdlets
 
             const string cmdletName = "Get-Dsm";
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
-            bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
             VirtualRaster<DigitalSurfaceModel> dsm = new(lasGrid);
+            bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
             DsmReadCreateWrite dsmReadCreateWrite = DsmReadCreateWrite.Create(lasGrid, dsm, this.SlopeAspect, dsmPathIsDirectory, dtmPathIsDirectory, this.NoWrite);
             DigitalSurfaceModelBands dsmBands = DigitalSurfaceModelBands.Default;
             if (Single.IsNaN(this.SubsurfaceGap))
@@ -86,10 +87,10 @@ namespace Mars.Clouds.Cmdlets
 
             int preferredCompletionThreadsAsymptotic = Int32.Min(this.DataThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
-            int preferredCompletionThreadsLWithFewTiles = Int32.Min(this.DataThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles
+            int preferredCompletionThreadsWithFewTiles = Int32.Min(this.DataThreads, 25 - (int)(1.5F * lasGrid.NonNullCells)); // negative for 17+ tiles
             // default number of workers is the number of tiles or the asymptotic limit with large number of tiles, whichever is less
             // No value in more than one worker per tile.
-            int tileCompletionThreads = Int32.Min(lasGrid.NonNullCells, Int32.Max(preferredCompletionThreadsLWithFewTiles, preferredCompletionThreadsAsymptotic));
+            int tileCompletionThreads = Int32.Min(lasGrid.NonNullCells, Int32.Max(preferredCompletionThreadsWithFewTiles, preferredCompletionThreadsAsymptotic));
             Debug.Assert(readThreads + tileCompletionThreads <= this.DataThreads);
 
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
@@ -111,15 +112,15 @@ namespace Mars.Clouds.Cmdlets
                         readSemaphore.Wait(this.CancellationTokenSource.Token);
                         if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
-                            // task is cancelled so point in looking for a tile to read
-                            // Also not valid to continue if the read semaphore wasn't entered due to cancellation.
+                            // cmdlet is stopping (or, as an edge case, task is cancelled) so point in looking for a tile to read
+                            readSemaphore.Release();
                             return;
                         }
 
                         LasTile? lasTile = null;
-                        for (int tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileReadIndex < dsmReadCreateWrite.MaxTileIndex; tileReadIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
+                        for (int tileIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileIndex < dsmReadCreateWrite.MaxTileIndex; tileIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
                         {
-                            lasTile = lasGrid[tileReadIndex];
+                            lasTile = lasGrid[tileIndex];
                             if (lasTile == null)
                             {
                                 continue; // nothing to do as no tile is present at this grid position
@@ -148,7 +149,7 @@ namespace Mars.Clouds.Cmdlets
                             // possible until the DTM has been read and Reset() of an object pooled DTM tile is inexpensive compared to the .las
                             // read cost.
                             string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
-                            DigitalSurfaceModel dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile, dsmReadCreateWrite.RasterBandPool);
+                            DigitalSurfaceModel dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile, dsmReadCreateWrite.WriteBandPool);
 
                             // assertions for fully tiled cases
                             // Unlikely to hold for untiled cases, such as UAV flights or handheld scans.
@@ -161,11 +162,13 @@ namespace Mars.Clouds.Cmdlets
                             readSemaphore.Release(); // exit semaphore as DTM and .las file have both been read
 
                             dsmTile.OnPointAdditionComplete(dtmTile, this.SubsurfaceGap, dsmSubsurfaceBuffer);
+
+                            (int tileIndexX, int tileIndexY) = lasGrid.ToGridIndices(tileIndex);
                             lock (dsmReadCreateWrite) // all DSM create and write operations lock on DSM virtual raster
                             {
-                                (int dsmTileIndexX, int dsmTileIndexY) = dsmReadCreateWrite.Dsm.Add(dsmTile);
-                                dsmReadCreateWrite.OnTileRead(dsmTileIndexX, dsmTileIndexY);
-                                dsmReadCreateWrite.OnTileCreated(dsmTileIndexX, dsmTileIndexY);
+                                dsmReadCreateWrite.Dsm.Add(tileIndexX, tileIndexY, dsmTile);
+                                dsmReadCreateWrite.OnTileRead(tileIndexX, tileIndexY);
+                                dsmReadCreateWrite.OnTileCreated(tileIndexX, tileIndexY);
                             }
 
                             // a tile has been read and its DSM created so exit creation loop to check for completable tiles
@@ -174,7 +177,8 @@ namespace Mars.Clouds.Cmdlets
 
                         if (lasTile == null)
                         {
-                            // all input tiles have been read but semaphore 
+                            // end of input tiles has been reached but semaphore was taken and still needs to be released
+                            // If semaphore is not released any other worker threads blocked on it can't enter it and thus can't return.
                             readSemaphore.Release();
                         }
                     }

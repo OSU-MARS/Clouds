@@ -12,13 +12,15 @@ namespace Mars.Clouds.GdalExtensions
         public int SizeX { get; protected set; } // cells
         public int SizeY { get; protected set; } // cells
 
-        protected Grid(Grid extent, bool cloneCrsAndTransform)
-            : this(extent.Crs, extent.Transform, extent.SizeX, extent.SizeY, cloneCrsAndTransform)
+        protected Grid(Grid transformAndExtent, bool cloneCrsAndTransform)
+            : this(transformAndExtent.Crs, transformAndExtent.Transform, transformAndExtent.SizeX, transformAndExtent.SizeY, cloneCrsAndTransform)
         {
         }
 
         protected Grid(SpatialReference crs, GridGeoTransform transform, int xSizeInCells, int ySizeInCells, bool cloneCrsAndTransform)
         {
+            Debug.Assert((xSizeInCells > 0) && (ySizeInCells > 0), "Grid must contain at least one cell.");
+
             if (cloneCrsAndTransform)
             {
                 this.Crs = crs.Clone();

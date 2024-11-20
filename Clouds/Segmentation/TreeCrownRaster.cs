@@ -62,7 +62,7 @@ namespace Mars.Clouds.Segmentation
             throw new NotImplementedException(); // TODO when needed
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             this.TreeID.ReturnData(dataBufferPool);
         }
@@ -88,8 +88,7 @@ namespace Mars.Clouds.Segmentation
             }
 
             // clear any previous crown segmentation
-            Debug.Assert(this.TreeID.HasNoDataValue);
-            Array.Fill(this.TreeID.Data, this.TreeID.NoDataValue, 0, this.TreeID.Data.Length);
+            this.TreeID.FillNoData();
 
             // find minimum cost path for each DSM cell and mark tree IDs into cells
             int cellDsmEndIndexY = 0; // exclusive

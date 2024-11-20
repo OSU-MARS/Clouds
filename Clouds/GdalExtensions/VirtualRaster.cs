@@ -70,7 +70,7 @@ namespace Mars.Clouds.GdalExtensions
             this.tileGrid = new(lasGrid, cloneCrsAndTransform: true);
             this.Crs = this.tileGrid.Crs;
 
-            // no DTM information available, so no cell size information yet
+            // no virtual raster information provided, so not possible to set this.TileCellSizeX or TileCellSizeY
             this.SizeInTilesX = lasGrid.SizeX;
             this.SizeInTilesY = lasGrid.SizeY;
         }
@@ -116,7 +116,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (this.tileGrid == null)
                 {
-                    throw new InvalidOperationException("Virtual raster's tile grid has not yet been created. Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TileTransform) + ".");
+                    throw new InvalidOperationException("Virtual raster's tile grid has not yet been created. Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TileTransform) + "().");
                 }
                 return this.tileGrid.Transform; 
             }
@@ -126,7 +126,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.TileGrid == null)
             {
-                throw new InvalidOperationException("Virtual raster's tile grid has not yet been created. Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TileTransform) + ".");
+                throw new InvalidOperationException("Virtual raster's tile grid has not yet been created. Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.TileTransform) + "().");
             }
 
             TTile? existingTile = this.TileGrid[tileIndexX, tileIndexY];
@@ -135,69 +135,22 @@ namespace Mars.Clouds.GdalExtensions
                 throw new InvalidOperationException("Tile cannot be added at (" + tileIndexX + ", " + tileIndexY + ") because a tile is already present at that location.");
             }
 
+            this.ValidateAndCaptureTileCrsSizeAndBands(tile);
             this.TileGrid[tileIndexX, tileIndexY] = tile;
             ++this.NonNullTileCount;
         }
 
-        public (int tileIndexX, int tileIndexY) Add(TTile tile)
+        public void Add(TTile tile)
         {
-            if ((this.tileGrid == null) && (this.ungriddedTiles.Count == 0))
-            {
-                // if no CRS information was specified at construction, latch CRS of first tile added
-                Debug.Assert(this.HasCrs == false);
-                this.Crs = tile.Crs;
-            }
-            else if (SpatialReferenceExtensions.IsSameCrs(tile.Crs, this.Crs) == false) // throws if this.crs is null
-            {
-                // all tiles must be in the same CRS
-                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have varying coordinate systems. Expected tile '" + tile.FilePath + "' to have CRS " + this.Crs.GetName() + " but it is in " + tile.Crs.GetName() + ".");
-            }
-
-            this.AddBandMetadata(tile);
-
-            if (this.TileSizeInCellsX == -1)
-            {
-                // latch cell size of first tile added
-                Debug.Assert(Double.IsNaN(this.TileCellSizeX) && Double.IsNaN(this.TileCellSizeY) && (this.TileSizeInCellsY == -1));
-                this.TileCellSizeX = tile.Transform.CellWidth;
-                this.TileCellSizeY = tile.Transform.CellHeight;
-                if ((this.TileCellSizeX <= 0.0) || (Double.Abs(this.TileCellSizeY) == 0.0))
-                {
-                    throw new ArgumentOutOfRangeException(nameof(tile), "Tile '" + tile.FilePath + "' has cell size of " + this.TileCellSizeX + " by " + this.TileCellSizeY + " has zero or negative width or zero or positive height. Tiles are expected to have negative heights such that raster indices increase with southing.");
-                }
-
-                this.TileSizeInCellsX = tile.SizeX;
-                this.TileSizeInCellsY = tile.SizeY;
-                if ((tile.SizeX <= 0) || (tile.SizeY <= 0))
-                {
-                    throw new ArgumentOutOfRangeException(nameof(tile), "Tile '" + tile.FilePath + "' has  size of " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsX + " cells is zero or negative.");
-                }
-            }
-            else if ((this.TileCellSizeX != tile.Transform.CellWidth) || (this.TileCellSizeY != tile.Transform.CellHeight))
-            {
-                // cell size must be the same across all tiles
-                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have cells of differing size. Expected " + this.TileCellSizeX + " by " + this.TileCellSizeY + " cells but tile '" + tile.FilePath + "' has " + tile.Transform.CellWidth + " by " + tile.Transform.CellHeight + " cells.");
-            }
-
-            if ((tile.SizeX != this.TileSizeInCellsX) || (tile.SizeY != this.TileSizeInCellsY))
-            {
-                // tile size must be the same across all tiles => tile size in cells must be the same
-                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles are of varying size. Expected " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsY + " cells but tile '" + tile.FilePath + "' is " + tile.SizeX + " by " + tile.SizeY + " cells.");
-            }
-
-            int tileIndexX = -1;
-            int tileIndexY = -1;
             if (this.tileGrid != null)
             {
-                (tileIndexX, tileIndexY) = this.PlaceTileInGrid(tile);
-            }
-            else
-            {
-                this.ungriddedTiles.Add(tile);
+                throw new InvalidOperationException("Call the other overload of " + nameof(this.Add) + "() after a virtual raster's tile grid has been created.");
             }
 
+            this.ValidateAndCaptureTileCrsSizeAndBands(tile);
+            this.ungriddedTiles.Add(tile);
+
             ++this.NonNullTileCount;
-            return (tileIndexX, tileIndexY);
         }
 
         private void AddBandMetadata(TTile tile)
@@ -386,6 +339,30 @@ namespace Mars.Clouds.GdalExtensions
             return "unknown (virtual raster tile grid has not yet been created)";
         }
 
+        public TTile GetMatchingOrEncompassingTile(LasTile lasTile)
+        {
+            if (this.tileGrid == null)
+            {
+                throw new InvalidOperationException("Virtual raster's tile grid has not yet been created. Call " + nameof(this.CreateTileGrid) + "() before calling " + nameof(this.GetMatchingOrEncompassingTile) + "().");
+            }
+
+            (double lasCentroidX, double lasCentroidY) = lasTile.GridExtent.GetCentroid();
+            (int vrtIndexX, int vrtIndexY) = this.tileGrid.ToGridIndices(lasCentroidX, lasCentroidY);
+            (double vrtTileXmin, double vrtTileXmax, double vrtTileYmin, double vrtTileYmax) = this.tileGrid.Transform.GetCellExtent(vrtIndexX, vrtIndexY);
+            if (lasTile.GridExtent.IsSameOrWithin(vrtTileXmin, vrtTileXmax, vrtTileYmin, vrtTileYmax) == false)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lasTile), "Point cloud tile with coordinate extent (" + lasTile.GridExtent.GetExtentString() + ") does not match or fit within virtual raster tile with extent (" + vrtTileXmin + ", " + vrtTileXmax + ", " + vrtTileYmin + ", " + vrtTileYmax + "). Since the point cloud spans multiple tiles no single raster tile contains the point cloud.");
+            }
+
+            TTile? tile = this[vrtIndexX, vrtIndexY];
+            if (tile == null)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lasTile), "Point cloud tile with coordinate extent (" + lasTile.GridExtent.GetExtentString() + ") corresponds to virtual raster tile with extent (" + vrtTileXmin + ", " + vrtTileXmax + ", " + vrtTileYmin + ", " + vrtTileYmax + "). However, no tile is present in the virtual raster at this location.");
+            }
+
+            return tile;
+        }
+
         public RasterNeighborhood8<TBand> GetNeighborhood8<TBand>(int tileGridIndexX, int tileGridIndexY, string? bandName) where TBand : struct, IMinMaxValue<TBand>, INumber<TBand>
         {
             Debug.Assert(this.tileGrid != null);
@@ -534,6 +511,52 @@ namespace Mars.Clouds.GdalExtensions
 
             tileBand = (RasterBand<TBand>)untypedTileBand;
             return true;
+        }
+
+        private void ValidateAndCaptureTileCrsSizeAndBands(TTile tile)
+        {
+            if ((this.tileGrid == null) && (this.ungriddedTiles.Count == 0))
+            {
+                // if no CRS information was specified at construction, latch CRS of first tile added
+                Debug.Assert(this.HasCrs == false);
+                this.Crs = tile.Crs;
+            }
+            else if (SpatialReferenceExtensions.IsSameCrs(tile.Crs, this.Crs) == false) // throws if this.crs is null
+            {
+                // all tiles must be in the same CRS
+                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have varying coordinate systems. Expected tile '" + tile.FilePath + "' to have CRS " + this.Crs.GetName() + " but it is in " + tile.Crs.GetName() + ".");
+            }
+
+            if (this.TileSizeInCellsX == -1)
+            {
+                // latch cell size of first tile added
+                Debug.Assert(Double.IsNaN(this.TileCellSizeX) && Double.IsNaN(this.TileCellSizeY) && (this.TileSizeInCellsY == -1));
+                this.TileCellSizeX = tile.Transform.CellWidth;
+                this.TileCellSizeY = tile.Transform.CellHeight;
+                if ((this.TileCellSizeX <= 0.0) || (Double.Abs(this.TileCellSizeY) == 0.0))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(tile), "Tile '" + tile.FilePath + "' has cell size of " + this.TileCellSizeX + " by " + this.TileCellSizeY + " has zero or negative width or zero or positive height. Tiles are expected to have negative heights such that raster indices increase with southing.");
+                }
+
+                this.TileSizeInCellsX = tile.SizeX;
+                this.TileSizeInCellsY = tile.SizeY;
+                if ((tile.SizeX <= 0) || (tile.SizeY <= 0))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(tile), "Tile '" + tile.FilePath + "' has  size of " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsX + " cells is zero or negative.");
+                }
+            }
+            else if ((this.TileCellSizeX != tile.Transform.CellWidth) || (this.TileCellSizeY != tile.Transform.CellHeight))
+            {
+                // cell size must be the same across all tiles
+                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles have cells of differing size. Expected " + this.TileCellSizeX + " by " + this.TileCellSizeY + " cells but tile '" + tile.FilePath + "' has " + tile.Transform.CellWidth + " by " + tile.Transform.CellHeight + " cells.");
+            }
+            else if ((tile.SizeX != this.TileSizeInCellsX) || (tile.SizeY != this.TileSizeInCellsY))
+            {
+                // tile size must be the same across all tiles => tile size in cells must be the same
+                throw new ArgumentOutOfRangeException(nameof(tile), "Tiles are of varying size. Expected " + this.TileSizeInCellsX + " by " + this.TileSizeInCellsY + " cells but tile '" + tile.FilePath + "' is " + tile.SizeX + " by " + tile.SizeY + " cells.");
+            }
+
+            this.AddBandMetadata(tile);
         }
     }
 }

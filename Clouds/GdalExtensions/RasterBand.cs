@@ -394,6 +394,23 @@ namespace Mars.Clouds.GdalExtensions
             return band;
         }
 
+        // syntactic sugar convenient to Raster implementations with optional bands
+        public void Fill(TBand value)
+        {
+            // TBD if this.HasData should be checked but filling an empty array is a no op
+            Array.Fill(this.Data, value);
+        }
+
+        public void FillNoData()
+        {
+            if (this.HasNoDataValue == false)
+            {
+                throw new InvalidOperationException("Raster band lacks a no data value. Call " + nameof(this.SetNoDataValue) + "() to enable no data filling.");
+            }
+
+            this.Fill(this.NoDataValue);
+        }
+
         public static TBand GetDefaultNoDataValue()
         {
             return Type.GetTypeCode(typeof(TBand)) switch

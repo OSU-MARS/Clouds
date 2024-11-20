@@ -57,12 +57,13 @@ namespace Mars.Clouds.Cmdlets
             this.cancellationTokenSource = null;
 
             this.Bands = [];
+            // leave this.DataThreads at default
             this.EnumerationOptions = new()
             {
                 BufferSize = 16 * 1024,
                 IgnoreInaccessible = true
             };
-            // leave this.MaxThreads at default
+            // leave this.MetadataThreads at default
             this.MinSamplingFraction = 1.0F / 3.0F;
             this.MinTilesSampled = 10;
             this.ProgressInterval = TimeSpan.FromSeconds(1.0);

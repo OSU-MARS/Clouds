@@ -30,7 +30,7 @@ namespace Mars.Clouds.Cmdlets
         protected TWritePosition TileWritePosition { get; private init; }
 
         public int MaxTileIndex { get; private init; }
-        public RasterBandPool RasterBandPool { get; private init; }
+        public RasterBandPool WriteBandPool { get; private init; }
 
         public TileReadWriteStreaming(GridNullable<TSourceTile> sourceGrid, bool[,] unpopulatedTileMapForRead, TWritePosition tileWritePosition, bool outputPathIsDirectory)
             : base(outputPathIsDirectory)
@@ -39,7 +39,7 @@ namespace Mars.Clouds.Cmdlets
             this.TileWritePosition = tileWritePosition;
 
             this.MaxTileIndex = sourceGrid.Cells; // could be elided by retaining a pointer to sourceGrid
-            this.RasterBandPool = new();
+            this.WriteBandPool = new();
         }
 
         public int GetMaximumIndexNeighborhood8(int tileCreateOrWriteIndex)
@@ -78,7 +78,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 Raster? sourceRaster = sourceTile as Raster;
                 Debug.Assert(sourceRaster != null);
-                sourceRaster.ReturnBands(this.RasterBandPool);
+                sourceRaster.ReturnBandData(this.WriteBandPool);
             }
         }
 
@@ -118,11 +118,11 @@ namespace Mars.Clouds.Cmdlets
 
                 // must load tile at given index even if it's beyond the necessary neighborhood
                 // Otherwise some tiles would not get loaded.
-                if (this.RasterBandPool.FloatPool.Count > 0)
+                if (this.WriteBandPool.FloatPool.Count > 0)
                 {
                     lock (this)
                     {
-                        tileToRead.TryTakeOwnershipOfDataBuffers(this.RasterBandPool);
+                        tileToRead.TryTakeOwnershipOfDataBuffers(this.WriteBandPool);
                     }
                 }
 

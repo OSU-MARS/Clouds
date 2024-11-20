@@ -59,5 +59,10 @@
             bool noIntersection = (this.XMax < other.XMin) || (this.XMin > other.XMax) || (this.YMax < other.YMin) || (this.YMin > other.YMax);
             return noIntersection == false;
         }
+
+        public bool IsSameOrWithin(double xMin, double xMax, double yMin, double yMax)
+        {
+            return (this.XMin >= xMin) && (this.XMax <= xMax) && (this.YMin >= yMin) && (this.YMax <= yMax);
+        }
     }
 }

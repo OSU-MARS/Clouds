@@ -47,15 +47,15 @@ namespace Mars.Clouds.UnitTests
             Assert.IsTrue((neighborhood.Northwest != null) && (neighborhood.North != null) && (neighborhood.Northeast != null) &&
                           (neighborhood.West != null) && (neighborhood.East != null) &&
                           (neighborhood.Southwest != null) && (neighborhood.South != null) && (neighborhood.Southeast != null));
-            Array.Fill(neighborhood.Northwest.Data, (byte)RasterDirection.Northwest);
-            Array.Fill(neighborhood.North.Data, (byte)RasterDirection.North);
-            Array.Fill(neighborhood.Northeast.Data, (byte)RasterDirection.Northeast);
-            Array.Fill(neighborhood.West.Data, (byte)RasterDirection.West);
-            Array.Fill(neighborhood.Center.Data, (byte)RasterDirection.None);
-            Array.Fill(neighborhood.East.Data, (byte)RasterDirection.East);
-            Array.Fill(neighborhood.Southwest.Data, (byte)RasterDirection.Southwest);
-            Array.Fill(neighborhood.South.Data, (byte)RasterDirection.South);
-            Array.Fill(neighborhood.Southeast.Data, (byte)RasterDirection.Southeast);
+            neighborhood.Northwest.Fill((byte)RasterDirection.Northwest);
+            neighborhood.North.Fill((byte)RasterDirection.North);
+            neighborhood.Northeast.Fill((byte)RasterDirection.Northeast);
+            neighborhood.West.Fill((byte)RasterDirection.West);
+            neighborhood.Center.Fill((byte)RasterDirection.None);
+            neighborhood.East.Fill((byte)RasterDirection.East);
+            neighborhood.Southwest.Fill((byte)RasterDirection.Southwest);
+            neighborhood.South.Fill((byte)RasterDirection.South);
+            neighborhood.Southeast.Fill((byte)RasterDirection.Southeast);
 
             byte[] wholeCenterSlice = GC.AllocateUninitializedArray<byte>(tileSizeInCells * tileSizeInCells);
             neighborhood.Slice(xOrigin: 0, yOrigin: 0, sizeX: tileSizeInCells, sizeY: tileSizeInCells, wholeCenterSlice);
@@ -198,7 +198,7 @@ namespace Mars.Clouds.UnitTests
             for (int index = 0; index < tileCompletionOrder.Length; ++index)
             {
                 (int xIndex, int yIndex) = vrt.ToGridIndices(tileCompletionOrder[index]);
-                vrtPosition.OnTileCompleted(xIndex, yIndex, (_, _, tile) => tile.ReturnBands(dataBufferPool));
+                vrtPosition.OnTileCompleted(xIndex, yIndex, (_, _, tile) => tile.ReturnBandData(dataBufferPool));
 
                 int firstRetainedRowIndex = vrtPosition.CompletedRowIndex;
                 if (vrtPosition.TileReturnDoesNotRequirePreviousRow || (vrtPosition.CompletedRowIndex == vrtSizeY - 1))

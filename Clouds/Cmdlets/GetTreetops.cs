@@ -38,8 +38,9 @@ namespace Mars.Clouds.Cmdlets
         {
             this.cancellationTokenSource = new();
 
+            // leave this.DataThreads at default
             this.Dsm = String.Empty; // mandatory
-            // leave this.MaxThreads at default
+            // leave this.MetadataThreads at default
             this.Method = TreetopDetectionMethod.DsmRing;
             this.MinimumHeight = Single.NaN;
             this.SurfaceBand = null;

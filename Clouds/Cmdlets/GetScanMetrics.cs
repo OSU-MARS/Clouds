@@ -1,7 +1,9 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using Mars.Clouds.Segmentation;
 using OSGeo.GDAL;
+using System;
 using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
@@ -18,15 +20,23 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
+            if (String.IsNullOrWhiteSpace(this.Cells))
+            {
+                throw new NotSupportedException("-Cells is currently a mandatory parameter.");
+            }
+
             using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
-            Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: true);
+            Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: false);
             gridCellDefinitionDataset.FlushCache();
 
             const string cmdletName = "Get-ScanMetrics";
-            int gridEpsg = cellDefinitions.Crs.ParseEpsg();
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, gridEpsg);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
+            if (SpatialReferenceExtensions.IsSameCrs(cellDefinitions.Crs, lasGrid.Crs) == false)
+            {
+                throw new NotSupportedException("Cell definition raster '" + this.Cells + "' is not in the same coordinate system ('" + cellDefinitions.Crs.GetName() + "') as the input point clouds ('" + lasGrid.Crs.GetName() + "').");
+            }
 
-            ScanMetricsRaster scanMetrics = new(cellDefinitions); // metrics grid inherits cellDefinitions's CRS, grid CRS can differ from LAS tiles' CRS
+            ScanMetricsRaster scanMetrics = new(cellDefinitions);
 
             // TODO: multithreaded read
             this.tileRead = new();
@@ -45,6 +55,7 @@ namespace Mars.Clouds.Cmdlets
 
                         using LasReader pointReader = tile.CreatePointReader();
                         pointReader.ReadPointsToGrid(tile, scanMetrics);
+                        this.tileRead.IncrementTilesReadThreadSafe();
 
                         // check for cancellation before queing tile for metrics calculation
                         // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
@@ -52,15 +63,8 @@ namespace Mars.Clouds.Cmdlets
                         // entirely, but currently seems unnecessary as this appears to be an edge case.)
                         if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
-                            break;
+                            return;
                         }
-
-                        this.tileRead.IncrementTilesReadThreadSafe();
-                    }
-
-                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
-                    {
-                        break;
                     }
                 }
             }, this.CancellationTokenSource);

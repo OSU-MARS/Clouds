@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             const string cmdletName = "Repair-NoisePoints";
-            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, requiredEpsg: null);
+            LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             double lasGridUnits = lasGrid.Crs.GetLinearUnits();
             if (Single.IsNaN(this.HighNoise))
             {

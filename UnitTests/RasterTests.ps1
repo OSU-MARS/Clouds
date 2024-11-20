@@ -9,4 +9,8 @@ Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 Get-DsmSlopeAspect -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta\s04200w06840.tif" -Verbose
 
 # slope and aspect generation from DSM, all tiles
-Get-DsmSlopeAspect -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -Smooth -Vrt -Verbose
+# Most recent perf data: 9900X + DDR5-5600, SN850X on CPU lanes, 561 DSM tiles totaling 25 GB, .NET 8
+# data threads    slope-aspect + .vrt time, s    DDR bandwidth, GB/s read + write
+# 12              16                             15 + 7.5
+# 24              11                             23 + 11
+Get-DsmSlopeAspect -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -Vrt -Verbose

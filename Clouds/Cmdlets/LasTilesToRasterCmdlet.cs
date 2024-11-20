@@ -1,17 +1,16 @@
-﻿using System;
-using System.Management.Automation;
+﻿using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
 {
     public class LasTilesToRasterCmdlet : LasTilesCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Raster with a band defining the grid over which point cloud metrics are calculated. Metrics are not calculated for cells outside the point cloud or which have a no data value in the first band. The raster must be in the same CRS as the point cloud tiles specified by -Las.")]
+        [Parameter(HelpMessage = "If specified, a raster defining the grid over which a monolithic grid or scan metrics raster is calculated. Metrics are not calculated for cells outside the point cloud and grid metrics are not calculated for cells with no data values.")]
         [ValidateNotNullOrEmpty]
-        public string Cells { get; set; }
+        public string? Cells { get; set; }
 
         protected LasTilesToRasterCmdlet() 
         {
-            this.Cells = String.Empty;
+            this.Cells = null;
         }
     }
 }

@@ -1210,7 +1210,7 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadPointsToGrid(LasTile openedFile, GridNullable<PointListZirnc> metricsGrid)
+        public void ReadPointsToGrid(LasTile openedFile, Grid<PointListZirnc> metricsGrid)
         {
             LasHeader10 lasHeader = openedFile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
@@ -1224,12 +1224,12 @@ namespace Mars.Clouds.Las
             {
                 for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
                 {
-                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
-                    if (abaCell != null)
+                    PointListZirnc? metricsCell = metricsGrid[abaXindex, abaYindex];
+                    if (metricsCell != null)
                     {
-                        if (abaCell.Capacity == 0) // if cell already has some allocation, assume it's overlapped by another tile and do nothing
+                        if (metricsCell.Capacity == 0) // if cell already has allocated arrays leave them in place
                         {
-                            abaCell.Capacity = cellInitialPointCapacity;
+                            metricsCell.Capacity = cellInitialPointCapacity;
                         }
                     }
                 }

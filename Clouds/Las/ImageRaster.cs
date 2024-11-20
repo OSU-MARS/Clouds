@@ -25,7 +25,7 @@ namespace Mars.Clouds.Las
         public const string SecondReturnsBandName = "secondReturns";
     }
 
-    public class ImageRaster<TPixel> : Raster where TPixel : IMinMaxValue<TPixel>, INumber<TPixel>, IUnsignedNumber<TPixel>
+    public class ImageRaster<TPixel> : Raster where TPixel : struct, IMinMaxValue<TPixel>, INumber<TPixel>, IUnsignedNumber<TPixel>
     {
         // since ImageRasters are persistent processing objects and tiles near infrared content may vary, ImageRaster instances may
         // have memory allocated for an NIR band that's not in use for the current tile
@@ -137,21 +137,21 @@ namespace Mars.Clouds.Las
             image.FilePath = filePath;
             image.Transform.Copy(lasTileTransform);
 
-            Array.Fill(image.Red.Data, default);
-            Array.Fill(image.Green.Data, default);
-            Array.Fill(image.Blue.Data, default);
+            image.Red.Fill(default);
+            image.Green.Fill(default);
+            image.Blue.Fill(default);
             image.nearInfraredInUse = useNearInfrared;
             if (useNearInfrared)
             {
                 image.NearInfrared ??= new(image, "nearInfrared", RasterBand<TPixel>.GetDefaultNoDataValue(), RasterBandInitialValue.Default);
-                Array.Fill(image.NearInfrared.Data, default);
+                image.NearInfrared.Fill(default);
             }
-            Array.Fill(image.IntensityFirstReturn.Data, default);
-            Array.Fill(image.IntensitySecondReturn.Data, default);
+            image.IntensityFirstReturn.Fill(default);
+            image.IntensitySecondReturn.Fill(default);
 
-            Array.Fill(image.ScanAngleMeanAbsolute.Data, default);
-            Array.Fill(image.FirstReturns.Data, default);
-            Array.Fill(image.SecondReturns.Data, default);
+            image.ScanAngleMeanAbsolute.Fill(default);
+            image.FirstReturns.Fill(default);
+            image.SecondReturns.Fill(default);
             return image;
         }
 
@@ -358,7 +358,7 @@ namespace Mars.Clouds.Las
             throw new NotImplementedException(); // TODO when needed
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             this.Red.ReturnData(dataBufferPool);
             this.Green.ReturnData(dataBufferPool);

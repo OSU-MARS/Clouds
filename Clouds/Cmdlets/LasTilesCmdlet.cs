@@ -54,7 +54,7 @@ namespace Mars.Clouds.Cmdlets
             return Int32.Min(driveBasedReadThreadEstimate, this.DataThreads / (1 + minWorkerThreadsPerReadThread));
         }
 
-        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName, int? requiredEpsg)
+        protected LasTileGrid ReadLasHeadersAndFormGrid(string cmdletName)
         {
             List<string> lasTilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             List<LasTile> lasTiles = new(lasTilePaths.Count);
@@ -65,7 +65,7 @@ namespace Mars.Clouds.Cmdlets
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetHeaderBandwidth();
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
             int tileReadsInitiated = -1;
-            ParallelTasks readLasHeaders = new(Int32.Min(readThreads, lasTilePaths.Count), () =>
+            ParallelTasks readLasHeaders = new(Int32Extensions.Min(readThreads, lasTilePaths.Count, this.MetadataThreads), () =>
             {
                 for (int tileIndex = Interlocked.Increment(ref tileReadsInitiated); tileIndex < lasTilePaths.Count; tileIndex = Interlocked.Increment(ref tileReadsInitiated))
                 {
@@ -85,17 +85,17 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, new());
 
-            TimedProgressRecord tileIndexProgress = new(cmdletName, "Forming grid of point clouds..."); // can't pass null or empty statusDescription
+            TimedProgressRecord tileIndexProgress = new(cmdletName, "Forming grid of point clouds (" + readLasHeaders.Count + " threads)..."); // can't pass null or empty statusDescription
             this.WriteProgress(tileIndexProgress);
             while (readLasHeaders.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                tileIndexProgress.StatusDescription = "Reading point cloud tile header " + tileReadsInitiated + " of " + lasTilePaths.Count + "...";
+                tileIndexProgress.StatusDescription = "Reading point cloud tile header " + tileReadsInitiated + " of " + lasTilePaths.Count + " (" + readLasHeaders.Count + " threads)...";
                 tileIndexProgress.Update(tileReadsInitiated, lasTilePaths.Count);
                 this.WriteProgress(tileIndexProgress);
             }
 
             tileIndexProgress.Stopwatch.Stop();
-            LasTileGrid lasGrid = LasTileGrid.Create(lasTiles, this.Snap, requiredEpsg);
+            LasTileGrid lasGrid = LasTileGrid.Create(lasTiles, this.Snap);
             return lasGrid;
         }
 

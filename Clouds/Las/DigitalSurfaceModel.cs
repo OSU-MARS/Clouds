@@ -1171,57 +1171,24 @@ namespace Mars.Clouds.Las
             // Fills are no ops if the band's data hasn't been loaded or if the data buffers have been returned to pool.
             Debug.Assert(this.Surface.HasNoDataValue && this.CanopyMaxima3.HasNoDataValue && this.CanopyHeight.HasNoDataValue);
 
-            Array.Fill(this.Surface.Data, this.Surface.NoDataValue);
-            Array.Fill(this.CanopyMaxima3.Data, this.CanopyMaxima3.NoDataValue);
-            Array.Fill(this.CanopyHeight.Data, this.CanopyHeight.NoDataValue);
+            this.Surface.FillNoData();
+            this.CanopyMaxima3.FillNoData();
+            this.CanopyHeight.FillNoData();
 
-            if (this.DsmSlope != null)
-            {
-                Array.Fill(this.DsmSlope.Data, this.DsmSlope.NoDataValue);
-            }
-            if (this.DsmAspect != null)
-            {
-                Array.Fill(this.DsmAspect.Data, this.DsmAspect.NoDataValue);
-            }
-            if (this.CmmSlope3 != null)
-            {
-                Array.Fill(this.CmmSlope3.Data, this.CmmSlope3.NoDataValue);
-            }
-            if (this.CmmAspect3 != null)
-            {
-                Array.Fill(this.CmmAspect3.Data, this.CmmAspect3.NoDataValue);
-            }
+            this.DsmSlope?.FillNoData();
+            this.DsmAspect?.FillNoData();
+            this.CmmSlope3?.FillNoData();
+            this.CmmAspect3?.FillNoData();
 
-            if (this.Subsurface != null)
-            {
-                Array.Fill(this.Subsurface.Data, this.Subsurface.NoDataValue);
-            }
-            if (this.AerialMean != null)
-            {
-                Array.Fill(this.AerialMean.Data, this.AerialMean.NoDataValue);
-            }
-            if (this.GroundMean != null)
-            {
-                Array.Fill(this.GroundMean.Data, this.GroundMean.NoDataValue);
-            }
+            this.Subsurface?.FillNoData();
+            this.AerialMean?.FillNoData();
+            this.GroundMean?.FillNoData();
 
-            if (this.AerialPoints != null)
-            {
-                Array.Fill(this.AerialPoints.Data, 0U);
-            }
-            if (this.GroundPoints != null)
-            {
-                Array.Fill(this.GroundPoints.Data, 0U);
-            }
+            this.AerialPoints?.Fill(0U);
+            this.GroundPoints?.Fill(0U);
 
-            if (this.ReturnNumberSurface != null)
-            {
-                Array.Fill(this.ReturnNumberSurface.Data, this.ReturnNumberSurface.NoDataValue);
-            }
-            if (this.SourceIDSurface != null)
-            {
-                Array.Fill(this.SourceIDSurface.Data, this.SourceIDSurface.NoDataValue);
-            }
+            this.ReturnNumberSurface?.FillNoData();
+            this.SourceIDSurface?.FillNoData();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
@@ -1229,13 +1196,13 @@ namespace Mars.Clouds.Las
             throw new NotImplementedException(); // TODO when needed
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             // default to returning all bands present
-            this.ReturnBands(this.Bands, dataBufferPool);
+            this.ReturnBandData(this.Bands, dataBufferPool);
         }
 
-        public void ReturnBands(DigitalSurfaceModelBands bands, RasterBandPool dataBufferPool)
+        public void ReturnBandData(DigitalSurfaceModelBands bands, RasterBandPool dataBufferPool)
         {
             if ((bands & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
             {

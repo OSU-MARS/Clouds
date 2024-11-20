@@ -1,4 +1,5 @@
 ﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Segmentation;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -36,58 +37,48 @@ namespace Mars.Clouds.Las
             this.NonNullCells = tiles.Count;
         }
 
-        public static LasTileGrid Create(IList<LasTile> tiles, bool snap, int? requiredEpsg)
+        public static LasTileGrid Create(IList<LasTile> tiles, bool snap)
         {
             if (tiles.Count < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(tiles));
             }
 
-            LasTile tile = tiles[0];
-            SpatialReference gridCrs = tile.GetSpatialReference();
-            int tileEpsg = tile.GetProjectedCoordinateSystemEpsg();
-            if (requiredEpsg.HasValue == false)
-            {
-                requiredEpsg = tileEpsg;
-            }
-            else if (tileEpsg != requiredEpsg)
-            {
-                throw new ArgumentOutOfRangeException(nameof(tiles), "Tile EPSG:" + tileEpsg + " does not match the tile grid's required EPSG of " + requiredEpsg + ".");
-            }
+            LasTile firstTile = tiles[0];
+            SpatialReference firstTileCrs = firstTile.GetSpatialReference();
 
-            Extent tileExtent = tile.GridExtent;
-            double gridMinX = tileExtent.XMin;
-            double gridMaxMinX = tileExtent.XMin;
-            double gridMaxX = tileExtent.XMax;
-            double gridMinY = tileExtent.YMin;
-            double gridMaxMinY = tileExtent.YMin;
-            double gridMaxY = tileExtent.YMax;
-            double tileReportedWidth = tileExtent.Width; // since small variations are allowed, could possibly be useful to track min and max width and height?
-            double tileReportedHeight = tileExtent.Height;
+            Extent firstTileExtent = firstTile.GridExtent;
+            double gridMinX = firstTileExtent.XMin;
+            double gridMaxMinX = firstTileExtent.XMin;
+            double gridMaxX = firstTileExtent.XMax;
+            double gridMinY = firstTileExtent.YMin;
+            double gridMaxMinY = firstTileExtent.YMin;
+            double gridMaxY = firstTileExtent.YMax;
+            double tileReportedWidth = firstTileExtent.Width; // since small variations are allowed, could possibly be useful to track min and max width and height?
+            double tileReportedHeight = firstTileExtent.Height;
 
             // best effort validation for consistency within a grid of tiles
             for (int tileIndex = 1; tileIndex < tiles.Count; ++tileIndex)
             {
-                tile = tiles[tileIndex];
-                tileEpsg = tile.GetProjectedCoordinateSystemEpsg();
-                if (tileEpsg != requiredEpsg)
+                LasTile tile = tiles[tileIndex];
+                SpatialReference tileCrs = tile.GetSpatialReference();
+                if (SpatialReferenceExtensions.IsSameCrs(firstTileCrs, tileCrs) == false)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile EPSG:" + tileEpsg + " does not match the tile grid's required EPSG of " + requiredEpsg + ".");
+                    throw new NotSupportedException("Tile '" + tile.FilePath + "'s coordinate system ('" + tileCrs.GetName() + "') does not match the first tile's coordinate system ('" + firstTileCrs.GetName() + "').");
                 }
 
-                tileExtent = tile.GridExtent;
+                Extent tileExtent = tile.GridExtent;
                 double tileXextentInCrsUnits = tileExtent.Width;
                 double tileYextentInCrsUnits = tileExtent.Height;
                 if ((Double.Abs(tileXextentInCrsUnits / tileReportedWidth - 1.0) > 0.000001) ||
                     (Double.Abs(tileYextentInCrsUnits / tileReportedHeight - 1.0) > 0.000001))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile " + tileIndex + " has extents (" + tileExtent.XMin + ", " + tileExtent.XMax + ", " + tileExtent.YMin + ", " + tileExtent.YMax + ") in EPSG:" + tileEpsg + " with a width of " + tileXextentInCrsUnits + " and height of " + tileYextentInCrsUnits + ".  This does not match the expected width " + tileReportedWidth + " and height " + tileReportedHeight + ".");
+                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile " + tileIndex + " has extents (" + tileExtent.XMin + ", " + tileExtent.XMax + ", " + tileExtent.YMin + ", " + tileExtent.YMax + ") in CRS " + tileCrs.GetName() + " with a width of " + tileXextentInCrsUnits + " and height of " + tileYextentInCrsUnits + ".  This does not match the expected width " + tileReportedWidth + " and height " + tileReportedHeight + ".");
                 }
 
                 // LAS files have only a bounding box, so no way to check whether tile is in fact a rectangle (or square) aligned to its
                 // coordinate system, if it's rotated with respect to the coordinate system, or if it's some more complex shape without
                 // loading and inspecting all of its points.
-
                 if (tileExtent.XMin < gridMinX)
                 {
                     gridMinX = tileExtent.XMin;
@@ -142,7 +133,7 @@ namespace Mars.Clouds.Las
             }
 
             GridGeoTransform gridTransform = new(gridMinX, gridOriginY, gridCellWidth, -gridCellHeight);
-            return new LasTileGrid(gridCrs, gridTransform, gridXsizeInCells, gridYSizeInCells, tiles);
+            return new LasTileGrid(firstTileCrs, gridTransform, gridXsizeInCells, gridYSizeInCells, tiles);
         }
     }
 }

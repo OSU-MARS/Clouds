@@ -10,7 +10,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // TODO: drop tile requirement
-            LasTileGrid lasTileGrid = this.ReadLasHeadersAndFormGrid("Get-LasInfo", requiredEpsg: null);
+            LasTileGrid lasTileGrid = this.ReadLasHeadersAndFormGrid("Get-LasInfo");
             List<LasTile> tiles = new(lasTileGrid.NonNullCells);
             for (int tileIndex = 0; tileIndex < lasTileGrid.Cells; ++tileIndex)
             {

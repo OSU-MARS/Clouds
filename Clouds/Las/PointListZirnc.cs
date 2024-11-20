@@ -9,30 +9,24 @@ namespace Mars.Clouds.Las
     /// </summary>
     public class PointListZirnc
     {
-        public int TilesLoaded { get; set; }
-        public int TilesIntersected { get; private init; }
-
         // values of points in cell
-        public List<PointClassification> Classification { get; set; }
+        public List<PointClassification> Classification { get; private init; }
         public List<UInt16> Intensity { get; private init; }
         public List<byte> ReturnNumber { get; private init; }
         public List<float> Z { get; private init; }
 
-        // x and y indices in destination raster (grid metrics or DSM tile)
-        public int XIndex { get; private init; }
-        public int YIndex { get; private init; }
+        public int TilesLoaded { get; set; }
+        public int TilesIntersected { get; set; }
 
-        public PointListZirnc(int xIndex, int yIndex, int tilesIntersected)
+        public PointListZirnc()
         {
-            this.XIndex = xIndex;
-            this.YIndex = yIndex;
-            this.TilesLoaded = 0;
-            this.TilesIntersected = tilesIntersected;
-
             this.Classification = [];
             this.Intensity = [];
             this.ReturnNumber = [];
             this.Z = [];
+
+            this.TilesLoaded = 0;
+            this.TilesIntersected = 1;
         }
 
         public int Capacity
@@ -60,19 +54,27 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ClearAndRelease()
+        public bool AddPointsFromTile(PointListZirnc other)
         {
-            this.TilesLoaded = 0;
+            this.Classification.AddRange(other.Classification);
+            this.Intensity.AddRange(other.Intensity);
+            this.ReturnNumber.AddRange(other.ReturnNumber);
+            this.Z.AddRange(other.Z);
 
+            ++this.TilesLoaded;
+            Debug.Assert(this.TilesLoaded <= this.TilesIntersected);
+            return this.TilesLoaded == this.TilesIntersected;
+        }
+
+        public void Reset()
+        {
             this.Classification.Clear();
-            this.Classification.Capacity = 0;
             this.Intensity.Clear();
-            this.Intensity.Capacity = 0;
             this.ReturnNumber.Clear();
-            this.ReturnNumber.Capacity = 0;
             this.Z.Clear();
-            this.Z.Capacity = 0;
-            // no changes to this.TilesIntersected, XMax, XMin, YMax, YMin
+
+            this.TilesIntersected = 1;
+            this.TilesLoaded = 0;
         }
     }
 }

@@ -136,7 +136,7 @@ namespace Mars.Clouds.Cmdlets
                         TreeCrownRaster? crownTile;
                         lock (crownReadWrite)
                         {
-                            crownTile = new(dsmTile, crownReadWrite.RasterBandPool)
+                            crownTile = new(dsmTile, crownReadWrite.WriteBandPool)
                             {
                                 FilePath = crownTilePath
                             };
@@ -231,13 +231,13 @@ namespace Mars.Clouds.Cmdlets
                 };
             }
 
-            protected override void OnCreatedTileUnreferenced(int tileCreateIndexX, int tileCreateIndexY, TreeCrownRaster tile)
+            protected override void OnCreatedTileUnreferenced(int unreferencedTileIndexX, int unreferencedTileIndexY, TreeCrownRaster tile)
             {
                 // return raster bands as usual
-                base.OnCreatedTileUnreferenced(tileCreateIndexX, tileCreateIndexY, tile);
+                base.OnCreatedTileUnreferenced(unreferencedTileIndexX, unreferencedTileIndexY, tile);
 
                 // also return gridded vector lists of treetops
-                if (this.Treetops.TryRemoveAt(tileCreateIndexX, tileCreateIndexY, out TreetopsGrid? treetopsTile))
+                if (this.Treetops.TryRemoveAt(unreferencedTileIndexX, unreferencedTileIndexY, out TreetopsGrid? treetopsTile))
                 {
                     this.TreetopPool.Return(treetopsTile);
                 }

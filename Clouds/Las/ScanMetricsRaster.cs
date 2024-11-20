@@ -35,8 +35,8 @@ namespace Mars.Clouds.Las
         public RasterBand<float> ScanAngleMax { get; private init; }
         public RasterBand<float> ScanDirectionMean { get; private init; }
 
-        public ScanMetricsRaster(Raster cellDefinitions)
-            : base(cellDefinitions)
+        public ScanMetricsRaster(Grid extent)
+            : base(extent)
         {
             // no data for min and max scan angles and GPS times should arguably be Double.MaxValue and Double.MinValue
             // However, GDAL's default TIFFTAG_GDAL_NODATA profile supports only one no data value per raster.
@@ -197,7 +197,7 @@ namespace Mars.Clouds.Las
             throw new NotImplementedException(); // TODO when needed
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             this.AcceptedPoints.ReturnData(dataBufferPool);
             this.EdgeOfFlightLine.ReturnData(dataBufferPool);

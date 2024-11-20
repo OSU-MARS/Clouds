@@ -1,6 +1,7 @@
 ﻿using OSGeo.OSR;
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
@@ -69,6 +70,18 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return cellMap;
+        }
+
+        public bool TryGetValue(int xIndex, int yIndex, [NotNullWhen(true)] out TCell? value)
+        {
+            if ((xIndex < 0) || (xIndex >= this.SizeX) || (yIndex < 0) || (yIndex >= this.SizeY))
+            {
+                value = default;
+                return false;
+            }
+
+            value = this[xIndex, yIndex];
+            return value != null;
         }
     }
 }

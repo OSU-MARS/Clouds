@@ -39,9 +39,9 @@ namespace Mars.Clouds.Segmentation
             Debug.Assert(SpatialReferenceExtensions.IsSameCrs(raster.Crs, extent.Crs));
             raster.FilePath = filePath;
             raster.Transform.Copy(extent.Transform);
-            Array.Fill(raster.DsmMaxima.Data, raster.DsmMaxima.NoDataValue);
-            Array.Fill(raster.CmmMaxima.Data, raster.CmmMaxima.NoDataValue);
-            Array.Fill(raster.ChmMaxima.Data, raster.ChmMaxima.NoDataValue);
+            raster.DsmMaxima.FillNoData();
+            raster.CmmMaxima.FillNoData();
+            raster.ChmMaxima.FillNoData();
             return raster;
         }
 
@@ -106,7 +106,7 @@ namespace Mars.Clouds.Segmentation
             throw new NotImplementedException(); // TODO when needed
         }
 
-        public override void ReturnBands(RasterBandPool dataBufferPool)
+        public override void ReturnBandData(RasterBandPool dataBufferPool)
         {
             this.DsmMaxima.ReturnData(dataBufferPool);
             this.CmmMaxima.ReturnData(dataBufferPool);

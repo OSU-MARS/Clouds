@@ -14,13 +14,13 @@ namespace Mars.Clouds.Cmdlets
         public List<string> Las { get; set; }
 
         [Parameter(HelpMessage = "Maximum number of threads to use for processing point clouds in parallel. Default is the procesor's thread count.")]
-        public int MaxThreads { get; set; }
+        public int DataThreads { get; set; }
 
         protected LasCmdlet()
         {
             this.DiscardOverrunningVlrs = false;
             this.Las = [];
-            this.MaxThreads = Environment.ProcessorCount; // for now, assume IO thread limit is more likely binding
+            this.DataThreads = Environment.ProcessorCount; // for now, assume IO thread limit is more likely binding
         }
     }
 }
