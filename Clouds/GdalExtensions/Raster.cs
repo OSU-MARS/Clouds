@@ -117,8 +117,6 @@ namespace Mars.Clouds.GdalExtensions
             return band;
         }
 
-        public abstract int GetBandIndex(string name);
-
         public abstract IEnumerable<RasterBand> GetBands();
 
         /// <summary>
@@ -184,6 +182,8 @@ namespace Mars.Clouds.GdalExtensions
         public abstract void ReturnBandData(RasterBandPool dataBufferPool);
 
         public abstract bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band);
+
+        public abstract bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile);
 
         public abstract void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool);
 
@@ -305,20 +305,6 @@ namespace Mars.Clouds.GdalExtensions
 
         //    return raster;
         //}
-
-        public override int GetBandIndex(string name)
-        {
-            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
-            {
-                RasterBand<TBand> candidateBand = this.Bands[bandIndex];
-                if (String.Equals(candidateBand.Name, name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-            }
-
-            throw new NotSupportedException("Raster does not contain a band named '" + name + "'.");
-        }
 
         public new RasterBand<TBand> GetBand(string? name)
         {
@@ -449,6 +435,23 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             band = null;
+            return false;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            bandFilePath = this.FilePath;
+            for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
+            {
+                RasterBand<TBand> candidateBand = this.Bands[bandIndex];
+                if (String.Equals(candidateBand.Name, name, StringComparison.Ordinal))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+            }
+
+            bandIndexInFile = -1;
             return false;
         }
 

@@ -450,116 +450,6 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public override int GetBandIndex(string name)
-        {
-            if (String.Equals(name, this.Surface.Name, StringComparison.Ordinal))
-            {
-                return 0;
-            }
-            if (String.Equals(name, this.CanopyMaxima3.Name, StringComparison.Ordinal))
-            {
-                return 1;
-            }
-            if (String.Equals(name, this.CanopyHeight.Name, StringComparison.Ordinal))
-            {
-                return 2;
-            }
-
-            int bandIndex = 3;
-            if (this.DsmSlope != null)
-            {
-                if (String.Equals(name, this.DsmSlope.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.DsmAspect != null)
-            {
-                if (String.Equals(name, this.DsmAspect.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.CmmSlope3 != null)
-            {
-                if (String.Equals(name, this.CmmSlope3.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.CmmAspect3 != null)
-            {
-                if (String.Equals(name, this.CmmAspect3.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-
-            if (this.Subsurface != null)
-            {
-                if (String.Equals(name, this.Subsurface.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.AerialMean != null)
-            {
-                if (String.Equals(name, this.AerialMean.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.GroundMean != null)
-            {
-                if (String.Equals(name, this.GroundMean.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-
-            if (this.AerialPoints != null)
-            {
-                if (String.Equals(name, this.AerialPoints.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.GroundPoints != null)
-            {
-                if (String.Equals(name, this.GroundPoints.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-
-            if (this.ReturnNumberSurface != null)
-            {
-                if (String.Equals(name, this.ReturnNumberSurface.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.SourceIDSurface != null)
-            {
-                if (String.Equals(name, this.SourceIDSurface.Name, StringComparison.Ordinal))
-                {
-                    return bandIndex;
-                }
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
-        }
-
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.Surface;
@@ -1464,6 +1354,135 @@ namespace Mars.Clouds.Las
             }
 
             return true;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            if (String.Equals(name, this.Surface.Name, StringComparison.Ordinal))
+            {
+                bandFilePath = this.FilePath;
+                bandIndexInFile = 0;
+                return true;
+            }
+            if (String.Equals(name, this.CanopyMaxima3.Name, StringComparison.Ordinal))
+            {
+                bandFilePath = this.FilePath;
+                bandIndexInFile = 1;
+                return true;
+            }
+            if (String.Equals(name, this.CanopyHeight.Name, StringComparison.Ordinal))
+            {
+                bandFilePath = this.FilePath;
+                bandIndexInFile = 2;
+                return true;
+            }
+
+            if (this.DsmSlope != null)
+            {
+                if (String.Equals(name, this.DsmSlope.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandIndexInFile = 0;
+                    return true;
+                }
+            }
+            if (this.DsmAspect != null)
+            {
+                if (String.Equals(name, this.DsmAspect.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandIndexInFile = 1;
+                    return true;
+                }
+            }
+            if (this.CmmSlope3 != null)
+            {
+                if (String.Equals(name, this.CmmSlope3.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandIndexInFile = 2;
+                    return true;
+                }
+            }
+            if (this.CmmAspect3 != null)
+            {
+                if (String.Equals(name, this.CmmAspect3.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandIndexInFile = 3;
+                    return true;
+                }
+            }
+
+            if (this.Subsurface != null)
+            {
+                if (String.Equals(name, this.Subsurface.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandIndexInFile = 0;
+                    return true;
+                }
+            }
+            if (this.AerialMean != null)
+            {
+                if (String.Equals(name, this.AerialMean.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandIndexInFile = 1;
+                    return true;
+                }
+            }
+            if (this.GroundMean != null)
+            {
+                if (String.Equals(name, this.GroundMean.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandIndexInFile = 2;
+                    return true;
+                }
+            }
+
+            if (this.AerialPoints != null)
+            {
+                if (String.Equals(name, this.AerialPoints.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, false);
+                    bandIndexInFile = 0;
+                    return true;
+                }
+            }
+            if (this.GroundPoints != null)
+            {
+                if (String.Equals(name, this.GroundPoints.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, false);
+                    bandIndexInFile = 1;
+                    return true;
+                }
+            }
+
+            if (this.ReturnNumberSurface != null)
+            {
+                if (String.Equals(name, this.ReturnNumberSurface.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, false);
+                    bandIndexInFile = 0;
+                    return true;
+                }
+            }
+            if (this.SourceIDSurface != null)
+            {
+                if (String.Equals(name, this.SourceIDSurface.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, false);
+                    bandIndexInFile = 1;
+                    return true;
+                }
+            }
+
+            bandFilePath = null;
+            bandIndexInFile = -1;
+            return false;
         }
 
         public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)

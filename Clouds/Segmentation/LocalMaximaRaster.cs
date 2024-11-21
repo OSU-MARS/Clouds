@@ -45,24 +45,6 @@ namespace Mars.Clouds.Segmentation
             return raster;
         }
 
-        public override int GetBandIndex(string name)
-        {
-            if (String.Equals(this.DsmMaxima.Name, name, StringComparison.Ordinal))
-            {
-                return 0;
-            }
-            if (String.Equals(this.CmmMaxima.Name, name, StringComparison.Ordinal))
-            {
-                return 1;
-            }
-            if (String.Equals(this.ChmMaxima.Name, name, StringComparison.Ordinal))
-            {
-                return 2;
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(name), "Band '" + name + "' is not present in a local maxima raster.");
-        }
-
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.DsmMaxima; 
@@ -133,6 +115,30 @@ namespace Mars.Clouds.Segmentation
 
             band = null;
             return false;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            bandFilePath = this.FilePath;
+            if (String.Equals(this.DsmMaxima.Name, name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 0;
+            }
+            else if (String.Equals(this.CmmMaxima.Name, name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 1;
+            }
+            else if (String.Equals(this.ChmMaxima.Name, name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 2;
+            }
+            else
+            {
+                bandIndexInFile = -1;
+                return false;
+            }
+
+            return true;
         }
 
         public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)

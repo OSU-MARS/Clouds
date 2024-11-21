@@ -117,17 +117,18 @@ namespace Mars.Clouds.Vrt
                         }
 
                         // sources for virtual raster band
+                        // Since the .vrt references primary and secondary files directly the source band number it uses needs to reflect the
+                        // raster tile's internal band structure on disk.
                         if (tile.TryGetBand(vrtBandName, out RasterBand? tileBand) == false)
                         {
                             continue; // tile doesn't contain this band and thus isn't a source for it
                         }
-                        int tileBandIndex = tile.GetBandIndex(vrtBandName);
-                        if (tileBandIndex == -1)
+                        if (tile.TryGetBandLocation(vrtBandName, out string? sourceBandFilePath, out int sourceBandIndexOnDisk) == false)
                         {
                             throw new ArgumentOutOfRangeException(nameof(vrtBandNames), "Band '" + vrtBandNames[vrtBandIndex] + "' is not present in virtual raster.");
                         }
 
-                        string relativePathToTile = Path.GetRelativePath(vrtDatasetDirectory, tile.FilePath);
+                        string relativePathToTile = Path.GetRelativePath(vrtDatasetDirectory, sourceBandFilePath);
                         if (Path.DirectorySeparatorChar == '\\')
                         {
                             relativePathToTile = relativePathToTile.Replace(Path.DirectorySeparatorChar, '/');
@@ -135,7 +136,7 @@ namespace Mars.Clouds.Vrt
                         ComplexSource tileSource = new()
                         {
                             SourceFilename = { RelativeToVrt = true, Filename = relativePathToTile },
-                            SourceBand = tileBandIndex + 1,
+                            SourceBand = sourceBandIndexOnDisk + 1, // convert from zero based to GDAL's ones based band index
                             SourceProperties = { RasterXSize = (UInt32)tile.SizeX, RasterYSize = (UInt32)tile.SizeY, DataType = tileBand.GetGdalDataType() },
                             SourceRectangle = { XOffset = 0.0, YOffset = 0.0, XSize = tile.SizeX, YSize = tile.SizeY },
                             DestinationRectangle = { XOffset = tileIndexX * vrt.TileSizeInCellsX, YOffset = tileIndexY * vrt.TileSizeInCellsY, XSize = tile.SizeX,YSize = tile.SizeY },
@@ -153,7 +154,7 @@ namespace Mars.Clouds.Vrt
                             List<RasterBandStatistics>? bandStatisticsForTile = tileBandStatisticsByIndex[tileIndexX, tileIndexY];
                             if (bandStatisticsForTile != null)
                             {
-                                RasterBandStatistics tileStatisticsForBand = bandStatisticsForTile[tileBandIndex];
+                                RasterBandStatistics tileStatisticsForBand = bandStatisticsForTile[sourceBandIndexOnDisk];
                                 vrtBandStatistics.Add(tileStatisticsForBand);
                                 ++tilesWithStatisticsForVrtBand;
                             }

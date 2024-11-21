@@ -155,59 +155,6 @@ namespace Mars.Clouds.Las
             return image;
         }
 
-        public override int GetBandIndex(string name)
-        {
-            if (String.Equals(name, this.Red.Name, StringComparison.Ordinal))
-            {
-                return 0;
-            }
-            if (String.Equals(name, this.Green.Name, StringComparison.Ordinal))
-            {
-                return 1;
-            }
-            if (String.Equals(name, this.Blue.Name, StringComparison.Ordinal))
-            {
-                return 2;
-            }
-
-            int nearInfraredOffset = 0;
-            if (this.nearInfraredInUse)
-            {
-                Debug.Assert(this.NearInfrared != null);
-                if (String.Equals(name, this.NearInfrared.Name, StringComparison.Ordinal))
-                {
-                    return 3;
-                }
-
-                nearInfraredOffset = 1;
-            }
-
-            if (String.Equals(name, this.IntensityFirstReturn.Name, StringComparison.Ordinal))
-            {
-                return 3 + nearInfraredOffset;
-            }
-            if (String.Equals(name, this.IntensitySecondReturn.Name, StringComparison.Ordinal))
-            {
-                return 4 + nearInfraredOffset;
-            }
-
-            if (String.Equals(name, this.ScanAngleMeanAbsolute.Name, StringComparison.Ordinal))
-            {
-                return 5 + nearInfraredOffset;
-            }
-
-            if (String.Equals(name, this.FirstReturns.Name, StringComparison.Ordinal))
-            {
-                return 6 + nearInfraredOffset;
-            }
-            if (String.Equals(name, this.SecondReturns.Name, StringComparison.Ordinal))
-            {
-                return 7 + nearInfraredOffset;
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
-        }
-
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.Red;
@@ -416,6 +363,70 @@ namespace Mars.Clouds.Las
             }
 
             return true;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            bandFilePath = this.FilePath;
+            if (String.Equals(name, this.Red.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 0;
+                return true;
+            }
+            if (String.Equals(name, this.Green.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 1;
+                return true;
+            }
+            if (String.Equals(name, this.Blue.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 2;
+                return true;
+            }
+
+            int nearInfraredOffset = 0;
+            if (this.nearInfraredInUse)
+            {
+                Debug.Assert(this.NearInfrared != null);
+                if (String.Equals(name, this.NearInfrared.Name, StringComparison.Ordinal))
+                {
+                    bandIndexInFile = 3;
+                    return true;
+                }
+
+                nearInfraredOffset = 1;
+            }
+
+            if (String.Equals(name, this.IntensityFirstReturn.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 3 + nearInfraredOffset;
+                return true;
+            }
+            if (String.Equals(name, this.IntensitySecondReturn.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 4 + nearInfraredOffset;
+                return true;
+            }
+
+            if (String.Equals(name, this.ScanAngleMeanAbsolute.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 5 + nearInfraredOffset;
+                return true;
+            }
+
+            if (String.Equals(name, this.FirstReturns.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 6 + nearInfraredOffset;
+                return true;
+            }
+            if (String.Equals(name, this.SecondReturns.Name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 7 + nearInfraredOffset;
+                return true;
+            }
+
+            bandIndexInFile = -1;
+            return false;
         }
 
         public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)

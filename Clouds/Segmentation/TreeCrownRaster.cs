@@ -17,16 +17,6 @@ namespace Mars.Clouds.Segmentation
             this.TreeID = new(this, TreetopVector.TreeIDFieldName, RasterBand.NoDataDefaultInt32, RasterBandInitialValue.NoData, dataBufferPool);
         }
 
-        public override int GetBandIndex(string name)
-        {
-            if (String.Equals(this.TreeID.Name, name, StringComparison.Ordinal))
-            {
-                return 0;
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(name), "Band '" + name + "' is not present in a local maxima raster.");
-        }
-
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.TreeID;
@@ -168,6 +158,22 @@ namespace Mars.Clouds.Segmentation
 
             band = null;
             return false;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            bandFilePath = this.FilePath;
+            if (String.Equals(this.TreeID.Name, name, StringComparison.Ordinal))
+            {
+                bandIndexInFile = 0;
+            }
+            else
+            {
+                bandIndexInFile = -1;
+                return false;
+            }
+
+            return true;
         }
 
         public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)

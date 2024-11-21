@@ -456,430 +456,6 @@ namespace Mars.Clouds.Las
             return bandCount;
         }
 
-        public override int GetBandIndex(string name)
-        {
-            if ((name == null) || String.Equals(name, this.AcceptedPoints.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 0;
-            }
-            if (String.Equals(name, this.ZMax.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 1;
-            }
-            if (String.Equals(name, this.ZMean.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 2;
-            }
-            if (String.Equals(name, this.ZGroundMean.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 3;
-            }
-            if (String.Equals(name, this.ZStandardDeviation.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 4;
-            }
-            if (String.Equals(name, this.ZSkew.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 5;
-            }
-            if (String.Equals(name, this.ZNormalizedEntropy.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 6;
-            }
-            if (String.Equals(name, this.PZAboveZMean.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 7;
-            }
-            if (String.Equals(name, this.PZAboveThreshold.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return 8;
-            }
-
-            int bandIndex = 9;
-            if (this.ZQuantile05 != null)
-            {
-                if (String.Equals(name, this.ZQuantile05.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile10.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile15 != null)
-            {
-                if (String.Equals(name, this.ZQuantile15.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile20.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile25 != null)
-            {
-                if (String.Equals(name, this.ZQuantile25.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile30.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile35 != null)
-            {
-                if (String.Equals(name, this.ZQuantile35.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile40.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile45 != null)
-            {
-                if (String.Equals(name, this.ZQuantile45.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile50.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile55 != null)
-            {
-                if (String.Equals(name, this.ZQuantile55.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile60.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile65 != null)
-            {
-                if (String.Equals(name, this.ZQuantile65.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile70.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile75 != null)
-            {
-                if (String.Equals(name, this.ZQuantile75.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile80.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile85 != null)
-            {
-                if (String.Equals(name, this.ZQuantile85.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.ZQuantile90.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (this.ZQuantile95 != null)
-            {
-                if (String.Equals(name, this.ZQuantile95.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (String.Equals(name, this.IntensityFirstReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityMean.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityMeanAboveMedianZ.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityMeanBelowMedianZ.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityMax.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityStandardDeviation.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensitySkew.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile10.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile20.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile30.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile40.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile50.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile60.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile70.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile80.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.IntensityQuantile90.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PFirstReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PSecondReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PThirdReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PFourthReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PFifthReturn.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-            if (String.Equals(name, this.PGround.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return bandIndex;
-            }
-            ++bandIndex;
-
-            if (this.IntensityPCumulativeZQ10 != null)
-            {
-                if (String.Equals(name, this.IntensityPCumulativeZQ10.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityPCumulativeZQ30 != null)
-            {
-                if (String.Equals(name, this.IntensityPCumulativeZQ30.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityPCumulativeZQ50 != null)
-            {
-                if (String.Equals(name, this.IntensityPCumulativeZQ50.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityPCumulativeZQ70 != null)
-            {
-                if (String.Equals(name, this.IntensityPCumulativeZQ70.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityPCumulativeZQ90 != null)
-            {
-                if (String.Equals(name, this.IntensityPCumulativeZQ90.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityPGround != null)
-            {
-                if (String.Equals(name, this.IntensityPGround.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityTotal != null)
-            {
-                if (String.Equals(name, this.IntensityTotal.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.IntensityKurtosis != null)
-            {
-                if (String.Equals(name, this.IntensityKurtosis.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZKurtosis != null)
-            {
-                if (String.Equals(name, this.ZKurtosis.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-
-            if (this.ZPCumulative10 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative10.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative20 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative20.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative30 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative30.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative40 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative40.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative50 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative50.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative60 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative60.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative70 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative70.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative80 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative80.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-                ++bandIndex;
-            }
-            if (this.ZPCumulative90 != null)
-            {
-                if (String.Equals(name, this.ZPCumulative90.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return bandIndex;
-                }
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
-        }
-
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.AcceptedPoints;
@@ -2580,6 +2156,500 @@ namespace Mars.Clouds.Las
             }
 
             return true;
+        }
+
+        public override bool TryGetBandLocation(string name, [NotNullWhen(true)] out string? bandFilePath, out int bandIndexInFile)
+        {
+            bandFilePath = this.FilePath;
+            if ((name == null) || String.Equals(name, this.AcceptedPoints.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 0;
+                return true;
+            }
+            if (String.Equals(name, this.ZMax.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 1;
+                return true;
+            }
+            if (String.Equals(name, this.ZMean.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 2;
+                return true;
+            }
+            if (String.Equals(name, this.ZGroundMean.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 3;
+                return true;
+            }
+            if (String.Equals(name, this.ZStandardDeviation.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 4;
+                return true;
+            }
+            if (String.Equals(name, this.ZSkew.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 5;
+                return true;
+            }
+            if (String.Equals(name, this.ZNormalizedEntropy.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 6;
+                return true;
+            }
+            if (String.Equals(name, this.PZAboveZMean.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 7;
+                return true;
+            }
+            if (String.Equals(name, this.PZAboveThreshold.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = 8;
+                return true;
+            }
+
+            int bandIndex = 9;
+            if (this.ZQuantile05 != null)
+            {
+                if (String.Equals(name, this.ZQuantile05.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile10.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile15 != null)
+            {
+                if (String.Equals(name, this.ZQuantile15.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile20.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile25 != null)
+            {
+                if (String.Equals(name, this.ZQuantile25.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile30.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile35 != null)
+            {
+                if (String.Equals(name, this.ZQuantile35.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile40.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile45 != null)
+            {
+                if (String.Equals(name, this.ZQuantile45.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile50.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile55 != null)
+            {
+                if (String.Equals(name, this.ZQuantile55.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile60.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile65 != null)
+            {
+                if (String.Equals(name, this.ZQuantile65.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile70.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile75 != null)
+            {
+                if (String.Equals(name, this.ZQuantile75.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile80.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile85 != null)
+            {
+                if (String.Equals(name, this.ZQuantile85.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.ZQuantile90.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (this.ZQuantile95 != null)
+            {
+                if (String.Equals(name, this.ZQuantile95.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (String.Equals(name, this.IntensityFirstReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityMean.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityMeanAboveMedianZ.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityMeanBelowMedianZ.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityMax.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityStandardDeviation.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensitySkew.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile10.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile20.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile30.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile40.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile50.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile60.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile70.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile80.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.IntensityQuantile90.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PFirstReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PSecondReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PThirdReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PFourthReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PFifthReturn.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+            if (String.Equals(name, this.PGround.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                bandIndexInFile = bandIndex;
+                return true;
+            }
+            ++bandIndex;
+
+            if (this.IntensityPCumulativeZQ10 != null)
+            {
+                if (String.Equals(name, this.IntensityPCumulativeZQ10.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityPCumulativeZQ30 != null)
+            {
+                if (String.Equals(name, this.IntensityPCumulativeZQ30.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityPCumulativeZQ50 != null)
+            {
+                if (String.Equals(name, this.IntensityPCumulativeZQ50.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityPCumulativeZQ70 != null)
+            {
+                if (String.Equals(name, this.IntensityPCumulativeZQ70.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityPCumulativeZQ90 != null)
+            {
+                if (String.Equals(name, this.IntensityPCumulativeZQ90.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityPGround != null)
+            {
+                if (String.Equals(name, this.IntensityPGround.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityTotal != null)
+            {
+                if (String.Equals(name, this.IntensityTotal.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.IntensityKurtosis != null)
+            {
+                if (String.Equals(name, this.IntensityKurtosis.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZKurtosis != null)
+            {
+                if (String.Equals(name, this.ZKurtosis.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+
+            if (this.ZPCumulative10 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative10.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative20 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative20.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative30 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative30.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative40 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative40.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative50 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative50.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative60 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative60.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative70 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative70.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative80 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative80.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+                ++bandIndex;
+            }
+            if (this.ZPCumulative90 != null)
+            {
+                if (String.Equals(name, this.ZPCumulative90.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    bandIndexInFile = bandIndex;
+                    return true;
+                }
+            }
+
+            bandIndexInFile = -1;
+            return false;
         }
 
         public override void TryTakeOwnershipOfDataBuffers(RasterBandPool dataBufferPool)
