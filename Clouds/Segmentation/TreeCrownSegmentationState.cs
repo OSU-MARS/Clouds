@@ -12,6 +12,7 @@ namespace Mars.Clouds.Segmentation
         public RasterNeighborhood8<float>? ChmNeighborhood { get; private set; }
         public RasterNeighborhood8<float>? DsmNeighborhood { get; private set; }
 
+        public float DsmCellSizeInCrsUnits { get; private set; }
         public int DsmStartIndexX { get; set; } // inclusive
         public int DsmStartIndexY { get; set; } // inclusive
         public int DsmEndIndexX { get; set; } // exclusive
@@ -32,6 +33,7 @@ namespace Mars.Clouds.Segmentation
         {
             this.AboveTopCostScaleFactor = 2.0F;
             this.AspectNeighborhood = null;
+            this.DsmCellSizeInCrsUnits = Single.NaN;
             this.ChmNeighborhood = null;
             this.DsmNeighborhood = null;
 
@@ -53,8 +55,13 @@ namespace Mars.Clouds.Segmentation
             this.TreetopNeighborhood = null;
         }
 
-        public void SetNeighborhoods(VirtualRaster<DigitalSurfaceModel> dsm, VirtualVector<TreetopsGrid> treetops, int tileIndexX, int tileIndexY, string dsmBand)
+        public void SetNeighborhoodsAndCellSize(VirtualRaster<DigitalSurfaceModel> dsm, VirtualVector<TreetopsGrid> treetops, int tileIndexX, int tileIndexY, string dsmBand)
         {
+            if (dsm.TileCellSizeX != Double.Abs(dsm.TileCellSizeY))
+            {
+                throw new NotSupportedException("Rectangular DSM cells are not currently supported. DSM cell size is " + dsm.TileCellSizeX + " by " + dsm.TileCellSizeY + ".");
+            }
+
             this.AspectNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.DsmAspectBandName);
             this.ChmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
             this.DsmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, dsmBand);
@@ -78,6 +85,8 @@ namespace Mars.Clouds.Segmentation
             {
                 this.TreetopCostTile.Reset(treetopsTile);
             }
+
+            this.DsmCellSizeInCrsUnits = (float)dsm.TileCellSizeX;
         }
     }
 }

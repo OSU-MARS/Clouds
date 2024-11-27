@@ -63,7 +63,7 @@ namespace Mars.Clouds.Segmentation
                 (segmentationState.SlopeNeighborhood == null) || (segmentationState.AspectNeighborhood == null) ||
                 (segmentationState.TreetopCostTile == null) || (segmentationState.TreetopNeighborhood == null))
             {
-                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state is missing one or more neighborhoods. Call " + nameof(segmentationState.SetNeighborhoods) + "() before calling " + nameof(this.SegmentCrowns) + "().");
+                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state is missing one or more neighborhoods. Call " + nameof(segmentationState.SetNeighborhoodsAndCellSize) + "() before calling " + nameof(this.SegmentCrowns) + "().");
             }
 
             RasterBand<float> dsmTile = segmentationState.DsmNeighborhood.Center;
@@ -117,7 +117,7 @@ namespace Mars.Clouds.Segmentation
                             int treeID = this.TreeID.NoDataValue;
                             foreach (TreeCrownCostField treetopField in crownCosts.ActiveFields)
                             {
-                                if (treetopField.TryGetValue(dsmIndexX, dsmIndexY, out float treetopCost))
+                                if (treetopField.TryGetCellCost(dsmIndexX, dsmIndexY, out float treetopCost))
                                 {
                                     if (treetopCost < minimumCost)
                                     {

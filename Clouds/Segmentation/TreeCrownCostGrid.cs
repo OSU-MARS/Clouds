@@ -81,7 +81,7 @@ namespace Mars.Clouds.Segmentation
             GridNeighborhood8<TreetopsGrid, Treetops>? treetopsNeighborhood = segmentationState.TreetopNeighborhood;
             if (treetopsNeighborhood == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state's treetop neighborhood is missing. Call " + nameof(segmentationState.SetNeighborhoods) + "() before calling " + nameof(this.EnumerateCostFields) + "().");
+                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state's treetop neighborhood is missing. Call " + nameof(segmentationState.SetNeighborhoodsAndCellSize) + "() before calling " + nameof(this.EnumerateCostFields) + "().");
             }
 
             int cellIndexX = treetopCellIndexX + 1;

@@ -1701,9 +1701,7 @@ namespace Mars.Clouds.Las
                 }
             }
 
-            //float zGroundMean = groundPoints > 0 ? (float)(zGroundSum / groundPoints) : Single.NaN;
-            //this.ZGroundMean[cellIndex] = zGroundSum;
-
+            // should skew and kurtosis be left as NaN rather than going to ±Inf if there aren't enough points in the cell to calculate them?
             double pointCountAsDouble = (double)pointCount;
             double zMean = zSum / pointCountAsDouble;
             this.ZMean[cellIndex] = (float)zMean;

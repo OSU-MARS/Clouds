@@ -1219,18 +1219,15 @@ namespace Mars.Clouds.Las
             // set cell capacity to a reasonable fraction of the tile's average density
             // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
             int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(openedFile, metricsGrid);
-            (int abaXindexMin, int abaXindexMaxInclusive, int abaYindexMin, int abaYindexMaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
-            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            (int metricsIndexXmin, int metricsIndexXmaxInclusive, int metricsIndexYmin, int metricsIndexYmaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
+            for (int metricsIndexY = metricsIndexYmin; metricsIndexY <= metricsIndexYmaxInclusive; ++metricsIndexY)
             {
-                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                for (int metricsIndexX = metricsIndexXmin; metricsIndexX <= metricsIndexXmaxInclusive; ++metricsIndexX)
                 {
-                    PointListZirnc? metricsCell = metricsGrid[abaXindex, abaYindex];
-                    if (metricsCell != null)
+                    PointListZirnc metricsCell = metricsGrid[metricsIndexX, metricsIndexY];
+                    if (metricsCell.Capacity == 0) // if cell already has allocated arrays leave them in place
                     {
-                        if (metricsCell.Capacity == 0) // if cell already has allocated arrays leave them in place
-                        {
-                            metricsCell.Capacity = cellInitialPointCapacity;
-                        }
+                        metricsCell.Capacity = cellInitialPointCapacity;
                     }
                 }
             }
@@ -1290,9 +1287,9 @@ namespace Mars.Clouds.Las
 
             // increment ABA cell tile load counts
             // Could include this in the initial loop, though that's not strictly proper.
-            for (int abaYindex = abaYindexMin; abaYindex <= abaYindexMaxInclusive; ++abaYindex)
+            for (int abaYindex = metricsIndexYmin; abaYindex <= metricsIndexYmaxInclusive; ++abaYindex)
             {
-                for (int abaXindex = abaXindexMin; abaXindex <= abaXindexMaxInclusive; ++abaXindex)
+                for (int abaXindex = metricsIndexXmin; abaXindex <= metricsIndexXmaxInclusive; ++abaXindex)
                 {
                     PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
                     if (abaCell != null)

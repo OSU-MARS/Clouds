@@ -150,6 +150,8 @@ namespace Mars.Clouds.Cmdlets
             Debug.Assert(metrics.TileGrid != null);
             GridNullable<List<RasterBandStatistics>>? metricsStatistics = this.Vrt ? new(metrics.TileGrid, cloneCrsAndTransform: false) : null;
 
+            // TODO: constain number of data threads based on physical DDR and estimated memory consumption per thread
+            // 24 threads @ ~3 GB .las tiles (point format 8; 37 bytes -> 4+2+1+1 = 8 bytes zirnc) + 200x200x40 metrics = ~60 GB => 2.5 GB/thread
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToGridMetricsBandwidth();
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 1);
             int maxUsefulThreads = Int32.Min(lasGrid.NonNullCells, 3 * readThreads);
@@ -238,6 +240,7 @@ namespace Mars.Clouds.Cmdlets
                         lock (metricsReadCreateWrite)
                         {
                             metricsReadCreateWrite.MetricsCellsCompleted += metricsCellsCompleted;
+                            metricsReadCreateWrite.PointsCompleted += lasTile.Header.GetNumberOfPoints();
                             if (metricsRasterMonolithic == null)
                             {
                                 metrics.Add(tileIndexX, tileIndexY, metricsRaster);
@@ -300,7 +303,7 @@ namespace Mars.Clouds.Cmdlets
             gridMetricsProgress.Stopwatch.Stop();
             double cellsPerSecond = metricsReadCreateWrite.MetricsCellsCompleted / gridMetricsProgress.Stopwatch.Elapsed.TotalSeconds;
             string cellsPerSecondFormat = cellsPerSecond >= 9999.5 ? "n0" : "0";
-            this.WriteVerbose("Calculated metrics for " + metricsReadCreateWrite.MetricsCellsCompleted.ToString("n0") + " grid cells from " + metricsReadCreateWrite.TilesRead + " tiles in " + gridMetricsProgress.Stopwatch.ToElapsedString() + ": " + cellsPerSecond.ToString(cellsPerSecondFormat) + " cells/s.");
+            this.WriteVerbose("Calculated metrics for " + metricsReadCreateWrite.MetricsCellsCompleted.ToString("n0") + " grid cells from " + metricsReadCreateWrite.PointsCompleted.ToString("n0") + " points in " + metricsReadCreateWrite.TilesRead + (metricsReadCreateWrite.TilesRead == 1 ? " tile in " : " tiles in ") + gridMetricsProgress.Stopwatch.ToElapsedString() + ": " + cellsPerSecond.ToString(cellsPerSecondFormat) + " cells/s.");
             base.ProcessRecord();
         }
 
@@ -310,6 +313,7 @@ namespace Mars.Clouds.Cmdlets
             public RasterBandPool DtmBandPool { get; private init; }
             public int MetricsCellsCompleted { get; set; }
             public GridNullable<GridMetricsRaster> MetricsGrid { get; private init; }
+            public UInt64 PointsCompleted { get; set; }
 
             protected GridMetricsTileReadCreateWrite(LasTileGrid lasGrid, VirtualRaster<Raster<float>> dtm, bool[,] unpopulatedTileMapForRead, GridNullable<GridMetricsRaster> metricsGrid, bool[,] unpopulatedTileMapForCreate, bool[,] unpopulatedTileMapForWrite, bool metricsPathIsDirectory) 
                 : base(lasGrid, unpopulatedTileMapForRead, metricsGrid, unpopulatedTileMapForCreate, unpopulatedTileMapForWrite, metricsPathIsDirectory)
@@ -318,6 +322,7 @@ namespace Mars.Clouds.Cmdlets
                 this.DtmBandPool = new();
                 this.MetricsCellsCompleted = 0;
                 this.MetricsGrid = metricsGrid;
+                this.PointsCompleted = 0;
             }
 
             public static GridMetricsTileReadCreateWrite Create(LasTileGrid lasGrid, VirtualRaster<Raster<float>> dtm, VirtualRaster<GridMetricsRaster> metrics, GridMetricsRaster? metricsRasterMonolithic, bool metricsPathIsDirectory, bool bypassOutputRasterWriteToDisk, bool compressRasters)

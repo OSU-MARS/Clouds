@@ -39,6 +39,14 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(0.0F, 1.0F)]
         public float MaxCrownRatio { get; set; }
 
+        [Parameter(HelpMessage = "Maximum path cost in CRS units. Default is 40 m.")]
+        [ValidateRange(0.0F, 200.0F)] // arbitrary upper bound
+        public float MaxPath { get; set; }
+
+        [Parameter(HelpMessage = "Minimum height, in CRS units, for tree crown connectivity. Default is 1.0 m.")]
+        [ValidateRange(0.0F, 1.0F)]
+        public float MinHeight { get; set; }
+
         [Parameter(HelpMessage = "Scale factor for cost increase applied when digital surface model height exceeds treetop height. Default is 2.0.")]
         [ValidateRange(0.0F, 1000.0F)] // arbitrary upper bound, could also allow negative
         public float AboveTopPenalty { get; set; }
@@ -62,6 +70,8 @@ namespace Mars.Clouds.Cmdlets
             this.Dsm = String.Empty;
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
             this.MaxCrownRatio = 0.9F;
+            this.MaxPath = Single.NaN;
+            this.MinHeight = Single.NaN;
             this.NoWrite = false;
             this.Treetops = String.Empty;
             this.Vrt = false;
@@ -96,15 +106,17 @@ namespace Mars.Clouds.Cmdlets
             GridNullable<List<RasterBandStatistics>>? crownStatistics = this.Vrt ? new(crowns.TileGrid, cloneCrsAndTransform: false) : null;
 
             long crownCount = 0;
+            float crsLinearUnitInM = (float)dsm.Crs.GetLinearUnits();
+            float minimumHeightInCrsUnits = Single.IsNaN(this.MinHeight) ? 1.0F / crsLinearUnitInM : this.MinHeight;
+            float pathCostLimitInCrsUnits = Single.IsNaN(this.MaxPath) ? 40.0F / crsLinearUnitInM : this.MaxPath;
             ParallelTasks crownTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
-                float crsLinearUnitInM = (float)dsm.Crs.GetLinearUnits();
                 TreeCrownSegmentationState segmentationState = new()
                 {
                     AboveTopCostScaleFactor = this.AboveTopPenalty,
                     MaximumCrownRatio = this.MaxCrownRatio,
-                    MinimumHeightInCrsUnits = 1.0F / crsLinearUnitInM,
-                    PathCostLimitInCrsUnits = 40.0F / crsLinearUnitInM
+                    MinimumHeightInCrsUnits = minimumHeightInCrsUnits,
+                    PathCostLimitInCrsUnits = pathCostLimitInCrsUnits
                 };
                 while (crownReadWrite.TileWritesInitiated < dsm.NonNullTileCount)
                 {
@@ -144,7 +156,7 @@ namespace Mars.Clouds.Cmdlets
 
                         // segment crowns
                         // Not currently implemented: treetop addition and removal
-                        segmentationState.SetNeighborhoods(dsm, treetops, tileIndexX, tileIndexY, this.DsmBand);
+                        segmentationState.SetNeighborhoodsAndCellSize(dsm, treetops, tileIndexX, tileIndexY, this.DsmBand);
                         crownTile.SegmentCrowns(segmentationState);
                         if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                         {
