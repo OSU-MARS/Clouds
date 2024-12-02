@@ -35,11 +35,15 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string DsmBand { get; set; }
 
-        [Parameter(HelpMessage = "Maximum crown ratio. Default is 0.9.")]
+        [Parameter(HelpMessage = "Maximum crown ratio. Default is 0.75.")]
         [ValidateRange(0.0F, 1.0F)]
         public float MaxCrownRatio { get; set; }
 
-        [Parameter(HelpMessage = "Maximum path cost in CRS units. Default is 40 m.")]
+        [Parameter(HelpMessage = "Scaling factor for the image foresting transform's maximum path length as a function of tree height. Default is 1.0, meaning the path length is equal to the tree height. Hardwoods may sometimes exceed 1.0, conifers are likely 0.33 or below. Path lengths will not, however, exceed -MaxPath.")]
+        [ValidateRange(0.0F, 20.0F)] // arbitrary upper bound
+        public float PathScale { get; set; }
+
+        [Parameter(HelpMessage = "Nominal upper bound of path cost in CRS units, rounded up to the next largest number of DSM cell steps (either on axis or diagonally) internally. Default is 20 m. Paths less than this length are controlled by -PathScale.")]
         [ValidateRange(0.0F, 200.0F)] // arbitrary upper bound
         public float MaxPath { get; set; }
 
@@ -69,10 +73,11 @@ namespace Mars.Clouds.Cmdlets
             this.Crowns = String.Empty;
             this.Dsm = String.Empty;
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
-            this.MaxCrownRatio = 0.9F;
+            this.MaxCrownRatio = 0.75F;
             this.MaxPath = Single.NaN;
             this.MinHeight = Single.NaN;
             this.NoWrite = false;
+            this.PathScale = 1.0F;
             this.Treetops = String.Empty;
             this.Vrt = false;
         }
@@ -108,7 +113,7 @@ namespace Mars.Clouds.Cmdlets
             long crownCount = 0;
             float crsLinearUnitInM = (float)dsm.Crs.GetLinearUnits();
             float minimumHeightInCrsUnits = Single.IsNaN(this.MinHeight) ? 1.0F / crsLinearUnitInM : this.MinHeight;
-            float pathCostLimitInCrsUnits = Single.IsNaN(this.MaxPath) ? 40.0F / crsLinearUnitInM : this.MaxPath;
+            float pathCostLimitInCrsUnits = Single.IsNaN(this.MaxPath) ? 20.0F / crsLinearUnitInM : this.MaxPath;
             ParallelTasks crownTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
                 TreeCrownSegmentationState segmentationState = new()
@@ -116,7 +121,8 @@ namespace Mars.Clouds.Cmdlets
                     AboveTopCostScaleFactor = this.AboveTopPenalty,
                     MaximumCrownRatio = this.MaxCrownRatio,
                     MinimumHeightInCrsUnits = minimumHeightInCrsUnits,
-                    PathCostLimitInCrsUnits = pathCostLimitInCrsUnits
+                    PathCostLimitInCrsUnits = pathCostLimitInCrsUnits,
+                    PathCostScalingFactor = this.PathScale
                 };
                 while (crownReadWrite.TileWritesInitiated < dsm.NonNullTileCount)
                 {

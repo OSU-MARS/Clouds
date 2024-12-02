@@ -25,6 +25,7 @@ namespace Mars.Clouds.Segmentation
         public float MaximumCrownRatio { get; init; }
         public float MinimumHeightInCrsUnits { get; init; }
         public float PathCostLimitInCrsUnits { get; init; }
+        public float PathCostScalingFactor { get; init; }
         public RasterNeighborhood8<float>? SlopeNeighborhood { get; private set; }
         public TreeCrownCostGrid? TreetopCostTile { get; private set; }
         public GridNeighborhood8<TreetopsGrid, Treetops>? TreetopNeighborhood { get; private set; }
@@ -50,6 +51,7 @@ namespace Mars.Clouds.Segmentation
             this.MaximumCrownRatio = 0.90F;
             this.MinimumHeightInCrsUnits = 1.0F;
             this.PathCostLimitInCrsUnits = 40.0F;
+            this.PathCostScalingFactor = 1.0F;
             this.SlopeNeighborhood = null;
             this.TreetopCostTile = null;
             this.TreetopNeighborhood = null;

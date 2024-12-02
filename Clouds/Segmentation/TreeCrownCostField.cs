@@ -264,7 +264,7 @@ namespace Mars.Clouds.Segmentation
             }
 
             this.costField[fieldIndex] = minPathCost;
-            if (minPathCost < segmentationState.PathCostLimitInCrsUnits)
+            if ((minPathCost < segmentationState.PathCostScalingFactor * chmHeight) && (minPathCost < segmentationState.PathCostLimitInCrsUnits))
             {
                 this.searchQueue.Enqueue(((byte)fieldIndexX, (byte)fieldIndexY));
             }
@@ -443,10 +443,10 @@ namespace Mars.Clouds.Segmentation
             this.DsmMinimumY = this.DsmOriginY + minimumIndexY;
 
             // useful for debugging cost field generation
-            if (treetopID == 7003)
-            {
-                int q = 0;
-            }
+            //if (treetopID == 7003)
+            //{
+            //    int q = 0;
+            //}
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
