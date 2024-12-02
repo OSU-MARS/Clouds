@@ -119,7 +119,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.cancellationTokenSource?.Cancel();
+            this.cancellationTokenSource.Cancel();
             base.StopProcessing();
         }
     }

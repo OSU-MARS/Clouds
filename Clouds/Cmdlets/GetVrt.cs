@@ -17,7 +17,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Vrt")]
     public class GetVrt : GdalCmdlet
     {
-        private CancellationTokenSource? cancellationTokenSource;
+        private readonly CancellationTokenSource cancellationTokenSource;
 
         [Parameter(Mandatory = true, HelpMessage = "List of directory paths, including wildcards, to search for virtual raster tiles. Each directory is assumed to contain a distinct set of tiles.")]
         [ValidateNotNullOrEmpty]
@@ -54,7 +54,7 @@ namespace Mars.Clouds.Cmdlets
 
         public GetVrt()
         {
-            this.cancellationTokenSource = null;
+            this.cancellationTokenSource = new();
 
             this.Bands = [];
             // leave this.DataThreads at default
@@ -313,7 +313,6 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // read tile metadata, checking inputs for spatial and band data type consistency
-            this.cancellationTokenSource = new();
             VirtualRasterBandsAndStatistics vrtBandsAndStats = this.AssembleVrts();
             if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
             {
@@ -388,7 +387,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.cancellationTokenSource?.Cancel();
+            this.cancellationTokenSource.Cancel();
             base.StopProcessing();
         }
 

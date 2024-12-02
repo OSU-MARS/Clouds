@@ -33,6 +33,11 @@ namespace Mars.Clouds.Cmdlets
             this.MetadataThreads = Environment.ProcessorCount; // actually thread count
         }
 
+        protected static int EstimateGeopackageSqlBackgroundThreads()
+        {
+            return 1; // GDAL seems to always use only a single SQL thread
+        }
+
         protected static (string? directoryPath, string? searchPattern) ExtractTileDirectoryPathAndSearchPattern(string cmdletTilePath, string defaultSearchPattern)
         {
             string? directoryPath = null;

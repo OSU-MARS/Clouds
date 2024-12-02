@@ -83,7 +83,7 @@ namespace Mars.Clouds.Cmdlets
                         lasTiles.Add(lasTile);
                     }
                 }
-            }, new());
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord tileIndexProgress = new(cmdletName, "Forming grid of point clouds (" + readLasHeaders.Count + " threads)..."); // can't pass null or empty statusDescription
             this.WriteProgress(tileIndexProgress);

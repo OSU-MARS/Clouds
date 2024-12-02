@@ -2,7 +2,6 @@
 using Mars.Clouds.GdalExtensions;
 using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
@@ -99,7 +98,7 @@ namespace Mars.Clouds.Cmdlets
             ++this.TilesWritten;
         }
 
-        public bool TryEnsureNeighborhoodRead<TRasterSourceTile>(int tileIndex, VirtualRaster<TRasterSourceTile> vrt, CancellationTokenSource cancellationTokenSource) where TRasterSourceTile : Raster
+        public bool TryEnsureNeighborhoodRead<TRasterSourceTile>(int tileIndex, VirtualRaster<TRasterSourceTile> vrtMatchingReadPosition, CancellationTokenSource cancellationTokenSource) where TRasterSourceTile : Raster
         {
             // if necessary, the outer while loop spin waits for other threads to complete neighborhood read
             int maxNeighborhoodIndex = this.GetMaximumIndexNeighborhood8(tileIndex);
@@ -110,7 +109,7 @@ namespace Mars.Clouds.Cmdlets
 
             for (int tileReadIndex = this.GetNextTileReadIndexThreadSafe(); tileReadIndex < this.MaxTileIndex; tileReadIndex = this.GetNextTileReadIndexThreadSafe())
             {
-                TRasterSourceTile? tileToRead = vrt[tileReadIndex];
+                TRasterSourceTile? tileToRead = vrtMatchingReadPosition[tileReadIndex];
                 if (tileToRead == null)
                 {
                     continue;
@@ -118,12 +117,9 @@ namespace Mars.Clouds.Cmdlets
 
                 // must load tile at given index even if it's beyond the necessary neighborhood
                 // Otherwise some tiles would not get loaded.
-                if (this.WriteBandPool.FloatPool.Count > 0)
+                lock (this)
                 {
-                    lock (this)
-                    {
-                        tileToRead.TryTakeOwnershipOfDataBuffers(this.WriteBandPool);
-                    }
+                    tileToRead.TryTakeOwnershipOfDataBuffers(this.WriteBandPool);
                 }
 
                 tileToRead.ReadBandData();
@@ -131,7 +127,7 @@ namespace Mars.Clouds.Cmdlets
                 // for some derived classes it might be useful to pass tileToRead here
                 // However, this is impractical as TRasterSourceTile is a special case of TSourceTile necessary for this class
                 // to support .las (and other non-raster) source tiles.
-                (int tileReadIndexX, int tileReadIndexY) = vrt.ToGridIndices(tileReadIndex);
+                (int tileReadIndexX, int tileReadIndexY) = vrtMatchingReadPosition.ToGridIndices(tileReadIndex);
                 this.OnSourceTileRead(tileReadIndexX, tileReadIndexY);
 
                 lock (this)

@@ -233,7 +233,7 @@ namespace Mars.Clouds.Cmdlets
                         (double tileCentroidX, double tileCentroidY) = tilePoints.GetCentroid();
                         if (dtm.TryGetNeighborhood8(tileCentroidX, tileCentroidY, this.DtmBand, out RasterNeighborhood8<float>? dtmNeighborhood) == false)
                         {
-                            throw new InvalidOperationException("Could not find DTM tile for metrics grid cell at (" + tileCentroidX + ", " + tileCentroidY + ").");
+                            throw new InvalidOperationException("Could not form DTM neighborhood for metrics grid cell at (" + tileCentroidX + ", " + tileCentroidY + ").");
                         }
 
                         int metricsCellsCompleted = tilePoints.EvaluateCompleteAndAccumulateIncompleteCells(metricsRaster, dtmNeighborhood, oneMeterHeightClass, twoMeterHeightThreshold, pointListPool);

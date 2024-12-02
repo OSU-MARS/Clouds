@@ -14,7 +14,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Convert, "CloudCrs")]
     public class ConvertCloudCrs : GdalCmdlet
     {
-        private CancellationTokenSource? cancellationTokenSource;
+        private readonly CancellationTokenSource cancellationTokenSource;
 
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
         [ValidateNotNullOrEmpty]
@@ -30,7 +30,7 @@ namespace Mars.Clouds.Cmdlets
 
         public ConvertCloudCrs() 
         {
-            this.cancellationTokenSource = null;
+            this.cancellationTokenSource = new();
 
             this.Las = [];
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
@@ -53,7 +53,6 @@ namespace Mars.Clouds.Cmdlets
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
             int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
 
-            this.cancellationTokenSource = new();
             int cloudReprojectionsInitiated = -1;
             int cloudReprojectionsCompleted = 0;
             ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
@@ -142,7 +141,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.cancellationTokenSource?.Cancel();
+            this.cancellationTokenSource.Cancel();
             base.StopProcessing();
         }
     }

@@ -7,7 +7,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
-using System.Runtime;
 using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
@@ -118,6 +117,12 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // setup
+            int geopackageSqlBackgroundThreads = GdalCmdlet.EstimateGeopackageSqlBackgroundThreads();
+            if (this.DataThreads <= geopackageSqlBackgroundThreads)
+            {
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least " + (geopackageSqlBackgroundThreads + 1) + " to allow for local maxima to be identified concurrent with " + geopackageSqlBackgroundThreads + (geopackageSqlBackgroundThreads == 1 ? " SQL thread." : " SQL threads."));
+            }
+
             const string cmdletName = "Get-LocalMaxima";
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
@@ -138,9 +143,8 @@ namespace Mars.Clouds.Cmdlets
             long dsmMaximaTotal = 0;
             long cmmMaximaTotal = 0;
             long chmMaximaTotal = 0;
-            int geopackageSqlBackgroundThreads = this.DataThreads / 16; // based on testing up to 16 cores
-            int maxComputeThreads = this.DataThreads - geopackageSqlBackgroundThreads;
-            ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxComputeThreads, dsm.NonNullTileCount), () =>
+            int maxDataThreads = this.DataThreads - geopackageSqlBackgroundThreads;
+            ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxDataThreads, dsm.NonNullTileCount), () =>
             {
                 LocalMaximaRaster? localMaximaRaster = null; // cache for reuse to offload GC
                 for (int tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < maximaReadWrite.MaxTileIndex; tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe())

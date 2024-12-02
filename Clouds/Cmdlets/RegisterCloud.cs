@@ -14,7 +14,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsLifecycle.Register, "Cloud")]
     public class RegisterCloud : GdalCmdlet
     {
-        private CancellationTokenSource? cancellationTokenSource;
+        private readonly CancellationTokenSource cancellationTokenSource;
 
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to set origin and coordinate system of.")]
         [ValidateNotNullOrEmpty]
@@ -69,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
 
         public RegisterCloud()
         {
-            this.cancellationTokenSource = null;
+            this.cancellationTokenSource = new();
 
             this.Las = [];
             this.Lat = Double.NaN;
@@ -131,7 +131,6 @@ namespace Mars.Clouds.Cmdlets
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
             int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
 
-            this.cancellationTokenSource = new();
             int cloudRegistrationsInitiated = -1;
             int cloudRegistrationsCompleted = 0;
             ParallelTasks cloudRegistrationTasks = new(Int32.Min(readThreads, cloudPaths.Count), () =>
@@ -197,7 +196,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.cancellationTokenSource?.Cancel();
+            this.cancellationTokenSource.Cancel();
             base.StopProcessing();
         }
     }

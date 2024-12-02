@@ -271,11 +271,8 @@ namespace Mars.Clouds.GdalExtensions
         public static Raster<TBand> CreateFromBandMetadata(string rasterPath)
         {
             using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly);
-            Raster<TBand> raster = new(rasterDataset, readData: false)
-            {
-                FilePath = rasterPath
-            };
-
+            Raster<TBand> raster = new(rasterDataset, readData: false);
+            Debug.Assert(String.Equals(raster.FilePath, rasterPath));
             rasterDataset.FlushCache();
             return raster;
         }

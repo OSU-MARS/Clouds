@@ -12,7 +12,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Remove, "Points")]
     public class RemovePoints : LasCmdlet
     {
-        private CancellationTokenSource? cancellationTokenSource;
+        private readonly CancellationTokenSource cancellationTokenSource;
 
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "Output locations of filtered point clouds.")]
         [ValidateNotNullOrEmpty]
@@ -20,7 +20,7 @@ namespace Mars.Clouds.Cmdlets
 
         public RemovePoints() 
         {
-            this.cancellationTokenSource = null;
+            this.cancellationTokenSource = new();
             this.Filtered = String.Empty;
         }
 
@@ -44,7 +44,6 @@ namespace Mars.Clouds.Cmdlets
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
             int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
 
-            this.cancellationTokenSource = new();
             int cloudFiltrationsInitiated = -1;
             int cloudFiltrationsCompleted = 0;
             UInt64 pointsRemoved = 0;
@@ -97,7 +96,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void StopProcessing()
         {
-            this.cancellationTokenSource?.Cancel();
+            this.cancellationTokenSource.Cancel();
             base.StopProcessing();
         }
     }

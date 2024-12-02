@@ -147,14 +147,15 @@ namespace Mars.Clouds.Segmentation
             return treetopLayer;
         }
 
-        public (double xCentroid, double yCentroid) GetCentroid()
+        public Extent GetExtent()
         {
-            Envelope extent = new();
-            if (this.Layer.GetExtent(extent, force: 1) != OgrError.NONE)
+            Envelope envelope = new();
+            if (this.Layer.GetExtent(envelope, force: 1) != OgrError.NONE)
             {
                 throw new InvalidOperationException("Getting layer extent failed.");
             }
-            return (0.5 * (extent.MaxX + extent.MinX), 0.5 * (extent.MaxY + extent.MinY));
+            Extent extent = new(envelope.MinX, envelope.MaxX, envelope.MinY, envelope.MaxY);
+            return extent;
         }
 
         public Treetops GetTreetops(int classCapacity, [NotNull] ref Treetops? treetops)
@@ -164,6 +165,8 @@ namespace Mars.Clouds.Segmentation
             if ((treetops == null) || (treetops.Capacity < treetopCount))
             {
                 // no need to retain any existing data, so just reallocate rather than extending
+                // Could extend but cost of extending is cost of array reallocation plus cost of copying, which is probably greater than
+                // cost of class allocation plus cost of array allocation.
                 treetops = new(treetopCapacity, xyIndices: false, classCapacity);
             }
 

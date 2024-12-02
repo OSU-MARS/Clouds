@@ -11,10 +11,31 @@ namespace Mars.Clouds.Segmentation
     {
         public RasterBand<int> TreeID { get; private init; }
 
+        protected TreeCrownRaster(Dataset crownDataset, bool readData)
+            : base(crownDataset) 
+        {
+            if (crownDataset.RasterCount != 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(crownDataset), "Raster '" + this.FilePath + "' has " + crownDataset.RasterCount + " bands. Currently only single band rasters are supported.");
+            }
+            
+            this.TreeID = new(crownDataset, crownDataset.GetRasterBand(1), readData);
+            // should band name be tested against TreetopVector.TreeIDFieldName?
+        }
+
         public TreeCrownRaster(Grid extent, RasterBandPool? dataBufferPool)
             : base(extent)
         {
             this.TreeID = new(this, TreetopVector.TreeIDFieldName, RasterBand.NoDataDefaultInt32, RasterBandInitialValue.NoData, dataBufferPool);
+        }
+
+        public static TreeCrownRaster CreateFromBandMetadata(string crownRasterPath)
+        {
+            using Dataset crownDataset = Gdal.Open(crownRasterPath, Access.GA_ReadOnly);
+            TreeCrownRaster crownRaster = new(crownDataset, readData: false);
+            Debug.Assert(String.Equals(crownRaster.FilePath, crownRasterPath));
+            crownDataset.FlushCache();
+            return crownRaster;
         }
 
         public override IEnumerable<RasterBand> GetBands()
@@ -29,10 +50,10 @@ namespace Mars.Clouds.Segmentation
 
         public override void ReadBandData()
         {
-            using Dataset rasterDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
-            for (int gdalBandIndex = 1; gdalBandIndex <= rasterDataset.RasterCount; ++gdalBandIndex)
+            using Dataset crownDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
+            for (int gdalBandIndex = 1; gdalBandIndex <= crownDataset.RasterCount; ++gdalBandIndex)
             {
-                using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
+                using Band gdalBand = crownDataset.GetRasterBand(gdalBandIndex);
                 string bandName = gdalBand.GetDescription();
                 switch (bandName)
                 {
@@ -44,7 +65,7 @@ namespace Mars.Clouds.Segmentation
                 }
             }
 
-            rasterDataset.FlushCache();
+            crownDataset.FlushCache();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)

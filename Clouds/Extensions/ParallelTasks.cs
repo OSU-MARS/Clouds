@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 
 namespace Mars.Clouds.Extensions
 {
-    // fixed thread count alternative to Parallel.For(), currently unused
     internal class ParallelTasks : IDisposable
     {
         private bool isDisposed;
@@ -15,6 +14,11 @@ namespace Mars.Clouds.Extensions
 
         public ParallelTasks(int taskCount, Action taskBody, CancellationTokenSource cancellationTokenSource)
         {
+            if (taskCount < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(taskCount), "Creation of at least one task must be requested. A " + nameof(taskCount) + " of " + taskCount + " was requested.");
+            }
+
             this.cancellationTokenSource = cancellationTokenSource;
             this.taskExceptions = [];
             this.tasks = new Task[taskCount];

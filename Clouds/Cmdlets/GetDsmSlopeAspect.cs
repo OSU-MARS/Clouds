@@ -66,8 +66,7 @@ namespace Mars.Clouds.Cmdlets
 
                     // assist in read until neighborhood complete or no more tiles left to read
                     // Tiles are created with only primary DSM bands so that only primary band data is read.
-                    bool neighborhoodRead = slopeAspectReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource);
-                    if (neighborhoodRead == false)
+                    if (slopeAspectReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
                     {
                         Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
                         return; // reading was aborted

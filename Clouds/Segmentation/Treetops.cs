@@ -1,14 +1,15 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Mars.Clouds.Segmentation
 {
     public class Treetops
     {
         public int Count { get; set; }
-        public int[] ID { get; private set; } 
+        public int[] ID { get; private set; }
         public double[] X { get; private set; }
         public int[] XIndex { get; private set; }
         public double[] Y { get; private set; }
@@ -83,40 +84,87 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        public void GetClassCounts(RasterNeighborhood8<byte> classificationNeighborhood)
+        public void GetClassCounts(RasterNeighborhood8<int> crownNeighborhood, RasterNeighborhood8<byte> classificationNeighborhood)
         {
-            double classificationCellSize = 0.5 * (classificationNeighborhood.Center.Transform.CellWidth + Double.Abs(classificationNeighborhood.Center.Transform.CellHeight));
+            Queue<(int, int)> searchQueue = new(6 * TreeCrownCostField.CapacityXY);
+            Span<int> counts = stackalloc int[(int)LandCoverClassification.MaxValue];
             for (int treetopIndex = 0; treetopIndex < this.Count; ++treetopIndex)
             {
-                (int treetopXindex, int treetopYindex) = classificationNeighborhood.Center.ToGridIndices(this.X[treetopIndex], this.Y[treetopIndex]);
-                // verify treetop is on tile
-                // In edge cases where a treetop lies on the tile's boundary its indices might be in an adjacent tile.
-                Debug.Assert((treetopXindex >= -1) && (treetopXindex <= classificationNeighborhood.Center.SizeX) && (treetopYindex >= -1) && (treetopYindex <= classificationNeighborhood.Center.SizeY), "Treetop at (" + this.X[treetopIndex] + ", " + this.Y[treetopIndex] + ") is not located over center tile (extents " + classificationNeighborhood.Center.GetExtentString() + ").");
-                if (classificationNeighborhood.TryGetValue(treetopXindex, treetopYindex, out byte classification))
+                int treeID = this.ID[treetopIndex];
+                (int treetopIndexX, int treetopIndexY) = classificationNeighborhood.Center.ToGridIndices(this.X[treetopIndex], this.Y[treetopIndex]);
+                if ((crownNeighborhood.TryGetValue(treetopIndexX, treetopIndexY, out int crownID) == false) || (crownID != treeID))
                 {
-                    ++this.ClassCounts[treetopIndex, classification - 1]; // count classification of treetop
+                    throw new InvalidOperationException("Tree " + treetopIndex + " at indices (" + treetopIndexX + ", " + treetopIndexY + ") has ID " + treeID + " but crown raster has ID " + crownID + " at that cell.");
                 }
 
-                // count classification of rings up to tree radius
-                int maxRadiusInCells = Int32.Min((int)(this.Radius[treetopIndex] / classificationCellSize + 0.5), Ring.Rings.Count - 1);
-                for (int ringIndex = 0; ringIndex <= maxRadiusInCells; ++ringIndex)
+                searchQueue.Enqueue((treetopIndexX, treetopIndexY));
+                while (searchQueue.Count > 0)
                 {
-                    Ring ring = Ring.Rings[ringIndex];
-                    for (int cellIndex = 0; cellIndex < ring.Count; ++cellIndex)
-                    {
-                        int treeXindex = treetopXindex + ring.XIndices[cellIndex];
-                        int treeYindex = treetopYindex + ring.YIndices[cellIndex];
-                        if (classificationNeighborhood.TryGetValue(treeXindex, treeYindex, out classification))
-                        {
-                            // count classification of cell in tree's assumed canopy
-                            // This could, presumably, be made more accurate if trees were segmented. For now, the assumption is areas
-                            // of overlap between adjacent treetop radii are ambiguous and contribute to all trees whose idealized
-                            // circular crowns overlap a cell. Weights or other adjustments could be included but, for now, only a
-                            // simple count is used.
-                            ++this.ClassCounts[treetopIndex, classification - 1];
-                        }
-                    }
+                    (int searchCellIndexX, int searchCellIndexY) = searchQueue.Dequeue();
+                    Treetops.SearchNeighborhood(searchCellIndexX, searchCellIndexY, treeID, crownNeighborhood, classificationNeighborhood, counts, searchQueue);
                 }
+
+                for (int classIndex = 0; classIndex < counts.Length; ++classIndex)
+                {
+                    this.ClassCounts[treetopIndex, classIndex] = counts[classIndex];
+                    counts[classIndex] = 0;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void SearchNeighborhood(int cellIndexX, int cellIndexY, int treeID, RasterNeighborhood8<int> crownNeighborhood, RasterNeighborhood8<byte> classificationNeighborhood, Span<int> counts, Queue<(int, int)> searchQueue)
+        {
+            // west neighbor
+            int westIndex = cellIndexX - 1;
+            if (crownNeighborhood.TryGetValue(westIndex, cellIndexY, out int westCrownID) && (westCrownID == treeID))
+            {
+                if (classificationNeighborhood.TryGetValue(westIndex, cellIndexY, out byte classification) == false)
+                {
+                    throw new InvalidOperationException("Tree " + treeID + "'s canopy extends to (" + westIndex + ", " + cellIndexY + ") but a classification is not available at this position.");
+                }
+
+                ++counts[classification];
+                searchQueue.Enqueue((westIndex, cellIndexY));
+            }
+
+            // east neighbor
+            int eastIndex = cellIndexX + 1;
+            if (crownNeighborhood.TryGetValue(eastIndex, cellIndexY, out int eastCrownID) && (eastCrownID == treeID))
+            {
+                if (classificationNeighborhood.TryGetValue(eastIndex, cellIndexY, out byte classification) == false)
+                {
+                    throw new InvalidOperationException("Tree " + treeID + "'s canopy extends to (" + eastIndex + ", " + cellIndexY + ") but a classification is not available at this position.");
+                }
+
+                ++counts[classification];
+                searchQueue.Enqueue((eastIndex, cellIndexY));
+            }
+
+            // north neighbor
+            int northIndex = cellIndexY - 1;
+            if (crownNeighborhood.TryGetValue(cellIndexX, northIndex, out int northCrownID) && (northCrownID == treeID))
+            {
+                if (classificationNeighborhood.TryGetValue(cellIndexX, northIndex, out byte classification) == false)
+                {
+                    throw new InvalidOperationException("Tree " + treeID + "'s canopy extends to (" + cellIndexX + ", " + northIndex + ") but a classification is not available at this position.");
+                }
+
+                ++counts[classification];
+                searchQueue.Enqueue((cellIndexX, northIndex));
+            }
+
+            // south neighbor
+            int southIndex = cellIndexY + 1;
+            if (crownNeighborhood.TryGetValue(cellIndexX, southIndex, out int southCrownID) && (southCrownID == treeID))
+            {
+                if (classificationNeighborhood.TryGetValue(cellIndexX, southIndex, out byte classification) == false)
+                {
+                    throw new InvalidOperationException("Tree " + treeID + "'s canopy extends to (" + cellIndexX + ", " + southIndex + ") but a classification is not available at this position.");
+                }
+
+                ++counts[classification];
+                searchQueue.Enqueue((cellIndexX, southIndex));
             }
         }
     }
