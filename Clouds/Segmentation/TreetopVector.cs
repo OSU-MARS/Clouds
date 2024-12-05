@@ -205,7 +205,7 @@ namespace Mars.Clouds.Segmentation
 
                 if (treetops.Count == treetops.Capacity)
                 {
-                    treetops.Extend(treetops.Capacity + TreetopsGrid.DefaultCellCapacity);
+                    treetops.Extend(treetops.Capacity + TreetopsGrid.DefaultCellCapacityInTreetops);
                 }
 
                 int treetopDestinationIndex = treetops.Count;

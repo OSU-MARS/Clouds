@@ -42,6 +42,7 @@ namespace Mars.Clouds.Cmdlets
             this.tileRead = new();
             ParallelTasks readPoints = new(1, () =>
             {
+                byte[]? pointReadBuffer = null;
                 Extent scanMetricsExtent = new(scanMetrics);
                 for (int tileYindex = 0; tileYindex < lasGrid.SizeY; ++tileYindex)
                 {
@@ -54,7 +55,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         using LasReader pointReader = tile.CreatePointReader();
-                        pointReader.ReadPointsToGrid(tile, scanMetrics);
+                        pointReader.ReadPointsToGrid(tile, scanMetrics, ref pointReadBuffer);
                         this.tileRead.IncrementTilesReadThreadSafe();
 
                         // check for cancellation before queing tile for metrics calculation

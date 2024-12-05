@@ -28,7 +28,8 @@ Get-Treetops -Method ChmRadius -Dsm "$dataPath\DSM v3 beta\*.tif" -Treetops ([Sy
 Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM v3 beta\*.tif" -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "$dataPath\treetops DSM ring")) -Verbose
 
 # crown segmentation, all tiles
-Get-Crowns -Dsm "$dataPath\DSM v3 beta" -Treetops "$dataPath\treetops\rf" -Crowns "$dataPath\treetops\crowns" -Verbose
+# 9900X, 561 tiles: 12 threads -> 2.5 minutes, 25 GB DDR, 24 threads -> 1.6 minutes, 27 GB DDR, ~19 GB/s DDR bandwidth
+Get-Crowns -Dsm "$dataPath\DSM v3 beta" -Treetops "$dataPath\treetops\rf" -Crowns "$dataPath\treetops\crowns" -Vrt -Verbose
 
 # merge treetop and taxa classification tiles into a single treetop file with class prevalence counts within each tree's nominal radius
 #Merge-Treetops -Treetops ([System.IO.Path]::Combine($env:USERPROFILE, "$dataPath\treetops DSM ring")) -Classification "$dataPath\species 10 m non-normalized" -Verbose

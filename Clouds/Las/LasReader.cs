@@ -144,8 +144,7 @@ namespace Mars.Clouds.Las
 
         public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToGridMetricsBandwidth()
         {
-            // TODO: update profiling data
-            return (0.67F, 4.5F * 0.67F);
+            return (2.4F, 4.7F + 3.4F);
         }
 
         public static (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) GetPointsToImageBandwidth(bool unbuffered)
@@ -680,6 +679,243 @@ namespace Mars.Clouds.Las
             }
         }
 
+        public void ReadPointsToGrid(LasFile openedFile, ScanMetricsRaster scanMetrics, ref byte[]? pointReadBuffer)
+        {
+            if (this.BaseStream.IsAsync)
+            {
+                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToGrid) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
+            }
+
+            LasHeader10 lasHeader = openedFile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(openedFile);
+
+            // read points
+            // See performance notes in ReadPointsToGrid().
+            bool hasGpsTime = lasHeader.PointsHaveGpsTime;
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
+
+            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, scanMetrics);
+
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
+            if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
+            {
+                pointReadBuffer = new byte[pointBufferLength];
+            }
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
+            {
+                UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
+                int bytesToRead = pointsToRead * pointRecordLength;
+                this.BaseStream.ReadExactly(pointReadBuffer, 0, bytesToRead);
+
+                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += pointRecordLength)
+                {
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
+
+                    if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
+                    {
+                        // point lies outside of the assigned metrics grid and is therefore not of interest
+                        continue;
+                    }
+
+                    Int64 cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
+                    bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
+                    if (notNoiseOrWithheld)
+                    {
+                        ++scanMetrics.AcceptedPoints[cellIndex];
+
+                        float scanAngleInDegrees;
+                        if (pointFormat < 6)
+                        {
+                            scanAngleInDegrees = (sbyte)pointBytes[16];
+                        }
+                        else
+                        {
+                            scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
+                        }
+
+                        float absoluteScanAngleInDegrees = scanAngleInDegrees < 0.0F ? -scanAngleInDegrees : scanAngleInDegrees;
+                        scanMetrics.ScanAngleMeanAbsolute[cellIndex] += absoluteScanAngleInDegrees;
+                        if (scanMetrics.ScanAngleMin[cellIndex] > scanAngleInDegrees)
+                        {
+                            scanMetrics.ScanAngleMin[cellIndex] = scanAngleInDegrees;
+                        }
+                        if (scanMetrics.ScanAngleMax[cellIndex] < scanAngleInDegrees)
+                        {
+                            scanMetrics.ScanAngleMax[cellIndex] = scanAngleInDegrees;
+                        }
+
+                        // scanMetrics.NoiseOrWithheld[cellIndex] += 0.0F; // nothing to do
+                        if ((scanFlags & ScanFlags.ScanDirection) != 0)
+                        {
+                            scanMetrics.ScanDirectionMean[cellIndex] += 1.0F;
+                        }
+                        if ((scanFlags & ScanFlags.EdgeOfFlightLine) != 0)
+                        {
+                            ++scanMetrics.EdgeOfFlightLine[cellIndex];
+                        }
+                        if ((scanFlags & ScanFlags.Overlap) != 0)
+                        {
+                            ++scanMetrics.Overlap[cellIndex];
+                        }
+
+                        if (hasGpsTime)
+                        {
+                            // TODO: GPS week time origin or adjusted standard GPS time origin (https://geozoneblog.wordpress.com/2013/10/31/when-was-lidar-point-collected/)
+                            // tile.Header.GlobalEncoding
+                            // unset: LAS 1.0 and 1.1 (always) or 1.2+ with GPS week time - needs Sunday midnight as origin
+                            // AdjustedStandardGpsTime: standard GPS time origin of 1980-01-06T00:00:00 + 1 Gs = UTC origin 2011-09-14T01:46:25 due to 15 leap seconds = GPS time (TAI) origin 2011-09-14 01:46:40
+                            // subsequent leap seconds: June 30 2012 + 2016, December 31 2016
+                            // What is most useful set of output formats, assuming concurrent point and imagery acquisition? Time of day (hours), solar time, solar azimuth and elevation, ... ?
+                            // WGS84 coordinate projection to obtain longitude and latitude? (https://stackoverflow.com/questions/71528556/transform-local-coordinates-to-wgs84-and-back-in-c-sharp, https://guideving.blogspot.com/2010/08/sun-position-in-c.html)
+                            // What goes in C# and what in R?
+                            double gpstime;
+                            if (pointFormat < 6)
+                            {
+                                gpstime = BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[20..]);
+                            }
+                            else
+                            {
+                                gpstime = BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[22..]);
+                            }
+                            scanMetrics.GpstimeMean[cellIndex] += gpstime;
+                            if (scanMetrics.GpstimeMin[cellIndex] > gpstime)
+                            {
+                                scanMetrics.GpstimeMin[cellIndex] = gpstime;
+                            }
+                            if (scanMetrics.GpstimeMax[cellIndex] < gpstime)
+                            {
+                                scanMetrics.GpstimeMax[cellIndex] = gpstime;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ++scanMetrics.NoiseOrWithheld[cellIndex];
+                    }
+                }
+            }
+        }
+
+        public void ReadPointsToGrid(LasTile openedFile, Grid<PointListZirnc> metricsGrid, ref byte[]? pointReadBuffer)
+        {
+            if (this.BaseStream.IsAsync)
+            {
+                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToGrid) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
+            }
+
+            LasHeader10 lasHeader = openedFile.Header;
+            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
+            this.MoveToPoints(openedFile);
+
+            // set cell capacity to a reasonable fraction of the tile's average density
+            // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
+            int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(openedFile, metricsGrid);
+            (int metricsIndexXmin, int metricsIndexXmaxInclusive, int metricsIndexYmin, int metricsIndexYmaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
+            for (int metricsIndexY = metricsIndexYmin; metricsIndexY <= metricsIndexYmaxInclusive; ++metricsIndexY)
+            {
+                for (int metricsIndexX = metricsIndexXmin; metricsIndexX <= metricsIndexXmaxInclusive; ++metricsIndexX)
+                {
+                    PointListZirnc metricsCell = metricsGrid[metricsIndexX, metricsIndexY];
+                    if (metricsCell.Capacity == 0) // if cell already has allocated arrays leave them in place
+                    {
+                        metricsCell.Capacity = cellInitialPointCapacity;
+                    }
+                }
+            }
+
+            // read points
+            // This implementation is currently synchronous as both synchronous and overlapped asynchronous reads hold an 18 TB IronWolf
+            // Pro at a steady ~260 MB/s (ST18000NT001, 285 MB/s sustained transfer rate) under Windows 10 22H2, suggesting little ability
+            // to improve on OS prefetching given the 128 kB to 1 MB buffer sizes used by LasTile.CreatePointReader(). Since SSDs and NVMes
+            // offer lower read latencies additional read threads appear likely to be of limited benefit. If a tile is cached in memory
+            // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
+            // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
+            // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
+            int returnNumberMask = lasHeader.GetReturnNumberMask();
+
+            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
+
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScale = (float)lasHeader.ZScaleFactor;
+            int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
+            if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
+            {
+                pointReadBuffer = new byte[pointBufferLength];
+            }
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
+            {
+                UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
+                int bytesToRead = pointsToRead * pointRecordLength;
+                this.BaseStream.ReadExactly(pointReadBuffer, 0, bytesToRead);
+
+                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += pointRecordLength)
+                {
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
+
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
+                    if (notNoiseOrWithheld == false)
+                    {
+                        continue;
+                    }
+
+                    if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
+                    {
+                        // point lies outside of the ABA grid and is therefore not of interest
+                        // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
+                        continue;
+                    }
+
+                    Int64 cellIndex = metricsGrid.ToCellIndex(xIndex, yIndex);
+                    PointListZirnc? abaCell = metricsGrid[cellIndex];
+                    if (abaCell == null)
+                    {
+                        // point lies within ABA grid but is not within a cell of interest
+                        continue;
+                    }
+
+                    float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
+                    abaCell.Z.Add(z);
+
+                    UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
+                    abaCell.Intensity.Add(intensity);
+
+                    byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
+                    abaCell.ReturnNumber.Add(returnNumber);
+
+                    abaCell.Classification.Add(classification);
+                }
+            }
+
+            // increment ABA cell tile load counts
+            // Could include this in the initial loop, though that's not strictly proper.
+            for (int abaYindex = metricsIndexYmin; abaYindex <= metricsIndexYmaxInclusive; ++abaYindex)
+            {
+                for (int abaXindex = metricsIndexXmin; abaXindex <= metricsIndexXmaxInclusive; ++abaXindex)
+                {
+                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
+                    if (abaCell != null)
+                    {
+                        ++abaCell.TilesLoaded;
+                        // useful breakpoint in debugging loaded-intersected issues between tiles
+                        //if ((abaCell.TilesLoaded > 1) || (abaCell.TilesIntersected > 1))
+                        //{
+                        //    int q = 0;
+                        //}
+                    }
+                }
+            }
+        }
+
         #region ReadPointsToImage() asynchronous FileStream at queue depth 2
         //public void ReadPointsToImage(LasTile lasTile, ImageRaster<UInt64> imageTile, ArrayPool<byte> readBufferPool)
         //{
@@ -1210,201 +1446,30 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadPointsToGrid(LasTile openedFile, Grid<PointListZirnc> metricsGrid)
+        private void ReadExtendedVariableLengthRecords(LasFile openedFile)
         {
-            LasHeader10 lasHeader = openedFile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(openedFile);
-
-            // set cell capacity to a reasonable fraction of the tile's average density
-            // Effort here is just to mitigate the amount of time spent in initial doubling of each ABA cell's point arrays.
-            int cellInitialPointCapacity = LasReader.EstimateCellInitialPointCapacity(openedFile, metricsGrid);
-            (int metricsIndexXmin, int metricsIndexXmaxInclusive, int metricsIndexYmin, int metricsIndexYmaxInclusive) = metricsGrid.GetIntersectingCellIndices(openedFile.GridExtent);
-            for (int metricsIndexY = metricsIndexYmin; metricsIndexY <= metricsIndexYmaxInclusive; ++metricsIndexY)
+            Span<byte> evlrBytes = stackalloc byte[ExtendedVariableLengthRecord.HeaderSizeInBytes];
+            for (int recordIndex = 0; recordIndex < openedFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
             {
-                for (int metricsIndexX = metricsIndexXmin; metricsIndexX <= metricsIndexXmaxInclusive; ++metricsIndexX)
+                this.BaseStream.ReadExactly(evlrBytes);
+                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes);
+                string userID = Encoding.UTF8.GetString(evlrBytes.Slice(2, 16)).Trim('\0');
+                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes[18..]);
+                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(evlrBytes[20..]);
+                string description = Encoding.UTF8.GetString(evlrBytes.Slice(28, 32)).Trim('\0');
+
+                // create specific object if record has a well known type
+                long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
+
+                byte[] data = new byte[(int)recordLengthAfterHeader];
+                this.BaseStream.ReadExactly(data);
+                ExtendedVariableLengthRecordUntyped vlr = new(reserved, userID, recordID, recordLengthAfterHeader, description, data); ;
+                openedFile.ExtendedVariableLengthRecords.Add(vlr);
+
+                // skip any unused bytes at end of record
+                if (this.BaseStream.Position != endOfRecordPosition)
                 {
-                    PointListZirnc metricsCell = metricsGrid[metricsIndexX, metricsIndexY];
-                    if (metricsCell.Capacity == 0) // if cell already has allocated arrays leave them in place
-                    {
-                        metricsCell.Capacity = cellInitialPointCapacity;
-                    }
-                }
-            }
-
-            // read points
-            // This implementation is currently synchronous as both synchronous and overlapped asynchronous reads hold an 18 TB IronWolf
-            // Pro at a steady ~260 MB/s (ST18000NT001, 285 MB/s sustained transfer rate) under Windows 10 22H2, suggesting little ability
-            // to improve on OS prefetching given the 128 kB to 1 MB buffer sizes used by LasTile.CreatePointReader(). Since SSDs and NVMes
-            // offer lower read latencies additional read threads appear likely to be of limited benefit. If a tile is cached in memory
-            // effective read speeds approach 600 MB/s (AMD Ryzen 5950X), suggesting a single LasReader can saturate a SATA III link (or
-            // a RAID1 of two 3.5 drives). With NVMes multiple threads could read different parts of a tile's points concurrently but instead
-            // applying those threads to different tiles should favor less lock contention in transferring those points to ABA grid cells.
-            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
-            byte pointFormat = lasHeader.PointDataRecordFormat;
-            int returnNumberMask = lasHeader.GetReturnNumberMask();
-
-            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, metricsGrid);
-
-            float zOffset = (float)lasHeader.ZOffset;
-            float zScale = (float)lasHeader.ZScaleFactor;
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
-            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
-            {
-                this.BaseStream.ReadExactly(pointBytes);
-                bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification classification);
-                if (notNoiseOrWithheld == false)
-                {
-                    continue;
-                }
-
-                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
-                {
-                    // point lies outside of the ABA grid and is therefore not of interest
-                    // In cases of partial overlap, this reader could be extended to take advantage of spatially indexed LAS files.
-                    continue;
-                }
-
-                Int64 cellIndex = metricsGrid.ToCellIndex(xIndex, yIndex);
-                PointListZirnc? abaCell = metricsGrid[cellIndex];
-                if (abaCell == null)
-                {
-                    // point lies within ABA grid but is not within a cell of interest
-                    continue;
-                }
-
-                float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
-                abaCell.Z.Add(z);
-
-                UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
-                abaCell.Intensity.Add(intensity);
-
-                byte returnNumber = (byte)(pointBytes[14] & returnNumberMask);
-                abaCell.ReturnNumber.Add(returnNumber);
-
-                abaCell.Classification.Add(classification);
-            }
-
-            // increment ABA cell tile load counts
-            // Could include this in the initial loop, though that's not strictly proper.
-            for (int abaYindex = metricsIndexYmin; abaYindex <= metricsIndexYmaxInclusive; ++abaYindex)
-            {
-                for (int abaXindex = metricsIndexXmin; abaXindex <= metricsIndexXmaxInclusive; ++abaXindex)
-                {
-                    PointListZirnc? abaCell = metricsGrid[abaXindex, abaYindex];
-                    if (abaCell != null)
-                    {
-                        ++abaCell.TilesLoaded;
-                        // useful breakpoint in debugging loaded-intersected issues between tiles
-                        //if ((abaCell.TilesLoaded > 1) || (abaCell.TilesIntersected > 1))
-                        //{
-                        //    int q = 0;
-                        //}
-                    }
-                }
-            }
-        }
-
-        public void ReadPointsToGrid(LasFile openedFile, ScanMetricsRaster scanMetrics)
-        {
-            LasHeader10 lasHeader = openedFile.Header;
-            LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(openedFile);
-
-            // read points
-            // See performance notes in ReadPointsToGrid().
-            bool hasGpsTime = lasHeader.PointsHaveGpsTime;
-            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
-            byte pointFormat = lasHeader.PointDataRecordFormat;
-
-            LasToGridTransform lasToMetricsTransformXY = new(lasHeader, scanMetrics);
-
-            float zOffset = (float)lasHeader.ZOffset;
-            float zScale = (float)lasHeader.ZScaleFactor;
-            Span<byte> pointBytes = stackalloc byte[lasHeader.PointDataRecordLength]; // for now, assume small enough to stackalloc
-            for (UInt64 pointIndex = 0; pointIndex < numberOfPoints; ++pointIndex)
-            {
-                this.BaseStream.ReadExactly(pointBytes);
-                if (lasToMetricsTransformXY.TryToOnGridIndices(pointBytes, out Int64 xIndex, out Int64 yIndex) == false)
-                {
-                    // point lies outside of the assigned metrics grid and is therefore not of interest
-                    continue;
-                }
-
-                Int64 cellIndex = scanMetrics.ToCellIndex(xIndex, yIndex);
-                bool notNoiseOrWithheld = LasReader.ReadFlags(pointBytes, pointFormat, out PointClassificationFlags classificationFlags, out ScanFlags scanFlags);
-                if (notNoiseOrWithheld)
-                {
-                    ++scanMetrics.AcceptedPoints[cellIndex];
-
-                    float scanAngleInDegrees;
-                    if (pointFormat < 6)
-                    {
-                        scanAngleInDegrees = (sbyte)pointBytes[16];
-                    }
-                    else
-                    {
-                        scanAngleInDegrees = 0.006F * BinaryPrimitives.ReadInt16LittleEndian(pointBytes[18..]);
-                    }
-
-                    float absoluteScanAngleInDegrees = scanAngleInDegrees < 0.0F ? -scanAngleInDegrees : scanAngleInDegrees;
-                    scanMetrics.ScanAngleMeanAbsolute[cellIndex] += absoluteScanAngleInDegrees;
-                    if (scanMetrics.ScanAngleMin[cellIndex] > scanAngleInDegrees)
-                    {
-                        scanMetrics.ScanAngleMin[cellIndex] = scanAngleInDegrees;
-                    }
-                    if (scanMetrics.ScanAngleMax[cellIndex] < scanAngleInDegrees)
-                    {
-                        scanMetrics.ScanAngleMax[cellIndex] = scanAngleInDegrees;
-                    }
-
-                    // scanMetrics.NoiseOrWithheld[cellIndex] += 0.0F; // nothing to do
-                    if ((scanFlags & ScanFlags.ScanDirection) != 0)
-                    {
-                        scanMetrics.ScanDirectionMean[cellIndex] += 1.0F;
-                    }
-                    if ((scanFlags & ScanFlags.EdgeOfFlightLine) != 0)
-                    {
-                        ++scanMetrics.EdgeOfFlightLine[cellIndex];
-                    }
-                    if ((scanFlags & ScanFlags.Overlap) != 0)
-                    {
-                        ++scanMetrics.Overlap[cellIndex];
-                    }
-
-                    if (hasGpsTime)
-                    {
-                        // TODO: GPS week time origin or adjusted standard GPS time origin (https://geozoneblog.wordpress.com/2013/10/31/when-was-lidar-point-collected/)
-                        // tile.Header.GlobalEncoding
-                        // unset: LAS 1.0 and 1.1 (always) or 1.2+ with GPS week time - needs Sunday midnight as origin
-                        // AdjustedStandardGpsTime: standard GPS time origin of 1980-01-06T00:00:00 + 1 Gs = UTC origin 2011-09-14T01:46:25 due to 15 leap seconds = GPS time (TAI) origin 2011-09-14 01:46:40
-                        // subsequent leap seconds: June 30 2012 + 2016, December 31 2016
-                        // What is most useful set of output formats, assuming concurrent point and imagery acquisition? Time of day (hours), solar time, solar azimuth and elevation, ... ?
-                        // WGS84 coordinate projection to obtain longitude and latitude? (https://stackoverflow.com/questions/71528556/transform-local-coordinates-to-wgs84-and-back-in-c-sharp, https://guideving.blogspot.com/2010/08/sun-position-in-c.html)
-                        // What goes in C# and what in R?
-                        double gpstime;
-                        if (pointFormat < 6)
-                        {
-                            gpstime = BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[20..]);
-                        }
-                        else
-                        {
-                            gpstime = BinaryPrimitives.ReadDoubleLittleEndian(pointBytes[22..]);
-                        }
-                        scanMetrics.GpstimeMean[cellIndex] += gpstime;
-                        if (scanMetrics.GpstimeMin[cellIndex] > gpstime)
-                        {
-                            scanMetrics.GpstimeMin[cellIndex] = gpstime;
-                        }
-                        if (scanMetrics.GpstimeMax[cellIndex] < gpstime)
-                        {
-                            scanMetrics.GpstimeMax[cellIndex] = gpstime;
-                        }
-                    }
-                }
-                else
-                {
-                    ++scanMetrics.NoiseOrWithheld[cellIndex];
+                    this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
                 }
             }
         }
@@ -1452,34 +1517,6 @@ namespace Mars.Clouds.Las
             if (numberOfExtendedVariableLengthRecords != openedFile.ExtendedVariableLengthRecords.Count)
             {
                 throw new InvalidDataException(".las file header indicates " + numberOfExtendedVariableLengthRecords + " extended variable length records should be present but " + openedFile.ExtendedVariableLengthRecords.Count + " extended records were read.");
-            }
-        }
-
-        private void ReadExtendedVariableLengthRecords(LasFile openedFile)
-        {
-            Span<byte> evlrBytes = stackalloc byte[ExtendedVariableLengthRecord.HeaderSizeInBytes];
-            for (int recordIndex = 0; recordIndex < openedFile.Header.NumberOfVariableLengthRecords; ++recordIndex)
-            {
-                this.BaseStream.ReadExactly(evlrBytes);
-                UInt16 reserved = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes);
-                string userID = Encoding.UTF8.GetString(evlrBytes.Slice(2, 16)).Trim('\0');
-                UInt16 recordID = BinaryPrimitives.ReadUInt16LittleEndian(evlrBytes[18..]);
-                UInt64 recordLengthAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(evlrBytes[20..]) ;
-                string description = Encoding.UTF8.GetString(evlrBytes.Slice(28, 32)).Trim('\0');
-
-                // create specific object if record has a well known type
-                long endOfRecordPosition = this.BaseStream.Position + (long)recordLengthAfterHeader;
-
-                byte[] data = new byte[(int)recordLengthAfterHeader];
-                this.BaseStream.ReadExactly(data);
-                ExtendedVariableLengthRecordUntyped vlr = new(reserved, userID, recordID, recordLengthAfterHeader, description, data); ;
-                openedFile.ExtendedVariableLengthRecords.Add(vlr);
-
-                // skip any unused bytes at end of record
-                if (this.BaseStream.Position != endOfRecordPosition)
-                {
-                    this.BaseStream.Seek(endOfRecordPosition, SeekOrigin.Begin);
-                }
             }
         }
 

@@ -209,8 +209,9 @@ namespace Mars.Clouds.UnitTests
             }
             Assert.IsTrue(populatedGridCells == 4); // two cells with points (8, 14 and 9, 14) plus two cells without points due to proxied tile size (8, 15 and 9, 15)
 
+            byte[]? pointReadBuffer = null;
             using LasReader pointReader = lasTile.CreatePointReader();
-            pointReader.ReadPointsToGrid(lasTile, tilePoints);
+            pointReader.ReadPointsToGrid(lasTile, tilePoints, ref pointReadBuffer);
             PointListZirnc? psmeCell1 = tilePoints[0, 0];
             Assert.IsTrue(psmeCell1 != null);
             Assert.IsTrue(psmeCell1.TilesIntersected == 1);
@@ -272,10 +273,12 @@ namespace Mars.Clouds.UnitTests
             (int adjacentCell2metricsIndexX, int adjacentCell2metricsIndexY) = metricsRasterMonolithic.ToGridIndices(adjacentCell2X, adjacentCell2Y);
             Assert.IsTrue(dtm.TryGetNeighborhood8(adjacentCell2X, adjacentCell2Y, bandName: null, out RasterNeighborhood8<float>? adjacentCellNeighborhood2));
 
-            metricsRasterMonolithic.SetMetrics(psmeCell1metricsIndexX, psmeCell1metricsIndexY, psmeCell1, psmeDtmNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
-            metricsRasterMonolithic.SetMetrics(psmeCell2metricsIndexX, psmeCell2metricsIndexY, psmeCell2, psmeDtmNeighborhood2, oneMeterHeightClass, twoMeterHeightThreshold);
-            metricsRasterMonolithic.SetMetrics(adjacentCell1metricsIndexX, adjacentCell1metricsIndexY, adjacentCell1, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
-            metricsRasterMonolithic.SetMetrics(adjacentCell2metricsIndexX, adjacentCell2metricsIndexY, adjacentCell2, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold);
+            float[]? sortedZ = null;
+            UInt16[]? sortedIntensity = null;
+            metricsRasterMonolithic.SetMetrics(psmeCell1metricsIndexX, psmeCell1metricsIndexY, psmeCell1, psmeDtmNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold, ref sortedZ, ref sortedIntensity);
+            metricsRasterMonolithic.SetMetrics(psmeCell2metricsIndexX, psmeCell2metricsIndexY, psmeCell2, psmeDtmNeighborhood2, oneMeterHeightClass, twoMeterHeightThreshold, ref sortedZ, ref sortedIntensity);
+            metricsRasterMonolithic.SetMetrics(adjacentCell1metricsIndexX, adjacentCell1metricsIndexY, adjacentCell1, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold, ref sortedZ, ref sortedIntensity);
+            metricsRasterMonolithic.SetMetrics(adjacentCell2metricsIndexX, adjacentCell2metricsIndexY, adjacentCell2, adjacentCellNeighborhood1, oneMeterHeightClass, twoMeterHeightThreshold, ref sortedZ, ref sortedIntensity);
 
             Assert.IsTrue((metricsRasterMonolithic.ZQuantile05 != null) && (metricsRasterMonolithic.ZQuantile15 != null) && (metricsRasterMonolithic.ZQuantile25 != null) && (metricsRasterMonolithic.ZQuantile35 != null) && (metricsRasterMonolithic.ZQuantile45 != null) && (metricsRasterMonolithic.ZQuantile55 != null) && (metricsRasterMonolithic.ZQuantile65 != null) && (metricsRasterMonolithic.ZQuantile75 != null) && (metricsRasterMonolithic.ZQuantile85 != null) && (metricsRasterMonolithic.ZQuantile95 != null));
             Assert.IsTrue((metricsRasterMonolithic.IntensityKurtosis != null) && (metricsRasterMonolithic.ZKurtosis != null));
@@ -659,8 +662,10 @@ namespace Mars.Clouds.UnitTests
 
             Raster<UInt16> gridCellDefinitions = this.SnapPointCloudTileToGridCells(lasTile);
             ScanMetricsRaster scanMetrics = new(gridCellDefinitions);
+
+            byte[]? pointReadBuffer = null;
             using LasReader pointReader = lasTile.CreatePointReader();
-            pointReader.ReadPointsToGrid(lasTile, scanMetrics);
+            pointReader.ReadPointsToGrid(lasTile, scanMetrics, ref pointReadBuffer);
             scanMetrics.OnPointAdditionComplete();
 
             Assert.IsTrue(scanMetrics.Cells == 575);

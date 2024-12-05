@@ -333,7 +333,7 @@ namespace Mars.Clouds.Segmentation
         /// cell. For treetops from merge points the treetop may be higher than the DSM or, potentially, lower. Cost field calculation 
         /// uses whichever is higher.
         /// </remarks>
-        public void MoveToTreetopAndRecalculate(int dsmTreetopIndexX, int dsmTreetopIndexY, int treetopID, float treetopZ, TreeCrownSegmentationState segmentationState)
+        public void MoveToTreetopAndRecalculate(int dsmNeigborhoodTreetopIndexX, int dsmNeighborhoodTreetopIndexY, int treetopID, float treetopZ, float treetopHeight, TreeCrownSegmentationState segmentationState)
         {
             if ((segmentationState.DsmNeighborhood == null) || (segmentationState.ChmNeighborhood == null) || (segmentationState.SlopeNeighborhood == null) || (segmentationState.AspectNeighborhood == null))
             {
@@ -348,8 +348,8 @@ namespace Mars.Clouds.Segmentation
                 throw new NotSupportedException("Digital surface models with rectangular cells or positive cell heights are not currently supported.");
             }
 
-            this.DsmOriginX = dsmTreetopIndexX - TreeCrownCostField.CapacityRadius;
-            this.DsmOriginY = dsmTreetopIndexY - TreeCrownCostField.CapacityRadius;
+            this.DsmOriginX = dsmNeigborhoodTreetopIndexX - TreeCrownCostField.CapacityRadius;
+            this.DsmOriginY = dsmNeighborhoodTreetopIndexY - TreeCrownCostField.CapacityRadius;
             this.TreeID = treetopID;
             segmentationState.DsmNeighborhood.Slice(this.DsmOriginX, this.DsmOriginY, TreeCrownCostField.CapacityXY, TreeCrownCostField.CapacityXY, segmentationState.FieldDsm);
             segmentationState.ChmNeighborhood.Slice(this.DsmOriginX, this.DsmOriginY, TreeCrownCostField.CapacityXY, TreeCrownCostField.CapacityXY, segmentationState.FieldChm);
@@ -362,23 +362,29 @@ namespace Mars.Clouds.Segmentation
             byte centerIndexY = TreeCrownCostField.CapacityRadius;
             int centerIndex = TreeCrownCostField.ToCellIndex(centerIndexX, centerIndexY);
             float dsmTreetopZ = fieldDsm[centerIndex];
-            if (dsm.IsNoData(dsmTreetopZ))
+            if (dsm.IsNoData(dsmTreetopZ) == false)
             {
                 // having a DSM value at the treetop is not strictly necessary but is checked for consistency
-                // DSM values are required for all other pixels in the crown.
-                throw new NotSupportedException("Digital surface model lacks a DSM elevation for treetop " + treetopID + " at (" + dsmTreetopIndexX + ", " + dsmTreetopIndexY + ").");
-            }
-            float chmTreetopHeight = fieldChm[centerIndex];
-            if (chm.IsNoData(chmTreetopHeight))
-            {
-                throw new NotSupportedException("Digital surface model cell at (" + dsmTreetopIndexX + ", " + dsmTreetopIndexY + ") has a DSM elevation but lacks a CHM height.");
+                // Nearly all treetops should have a DSM z but merge points, sometimes at the edge of a gap in scan coverage, sometimes
+                // when there happens to be no LiDAR or SfM points in a DSM cell, can yield treetop coordinates which lie within or edge
+                // case onto a no data DSM cell. DSM values are required for all other pixels in the crown.
+                if (dsmTreetopZ > treetopZ)
+                {
+                    treetopZ = dsmTreetopZ;
+                }
+
+                float chmTreetopHeight = fieldChm[centerIndex];
+                if (chm.IsNoData(chmTreetopHeight))
+                {
+                    throw new NotSupportedException("Digital surface model within or adjacent to tile " + segmentationState.TileName + " at DSM cell indices (" + dsmNeigborhoodTreetopIndexX + ", " + dsmNeighborhoodTreetopIndexY + ") has a DSM elevation but lacks a CHM height.");
+                }
+                if (chmTreetopHeight > treetopHeight)
+                {
+                    treetopHeight = chmTreetopHeight;
+                }
             }
 
-            if (dsmTreetopZ > treetopZ)
-            {
-                treetopZ = dsmTreetopZ;
-            }
-            float minimumCrownDsmZ = treetopZ - segmentationState.MaximumCrownRatio * chmTreetopHeight; // use treetop height rather than DSM height
+            float minimumCrownDsmZ = treetopZ - segmentationState.MaximumCrownRatio * treetopHeight;
 
             Array.Fill(this.costField, Single.PositiveInfinity); // by convention, Falcão et al. 2004 (https://doi.org/10.1109/TPAMI.2004.1261076)
             Array.Fill(searched, false);

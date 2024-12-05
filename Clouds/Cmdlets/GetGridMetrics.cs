@@ -154,11 +154,12 @@ namespace Mars.Clouds.Cmdlets
             // 24 threads @ ~3 GB .las tiles (point format 8; 37 bytes -> 4+2+1+1 = 8 bytes zirnc) + 200x200x40 metrics = ~60 GB => 2.5 GB/thread
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToGridMetricsBandwidth();
             int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 1);
-            int maxUsefulThreads = Int32.Min(lasGrid.NonNullCells, 3 * readThreads);
+            int maxUsefulThreads = Int32.Min(lasGrid.NonNullCells, 6 * readThreads);
             ObjectPool<PointListZirnc> pointListPool = new();
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
             ParallelTasks gridMetricsTasks = new(Int32.Min(maxUsefulThreads, this.DataThreads), () =>
             {
+                byte[]? pointReadBuffer = null;
                 GridMetricsPointLists? tilePoints = null;
                 while (metricsReadCreateWrite.TileWritesInitiated < lasGrid.NonNullCells)
                 {
@@ -203,7 +204,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         // read tile points
-                        pointReader.ReadPointsToGrid(lasTile, tilePoints);
+                        pointReader.ReadPointsToGrid(lasTile, tilePoints, ref pointReadBuffer);
                         readSemaphore.Release(); // exit semaphore as .las file has been read
                         (int tileIndexX, int tileIndexY) = lasGrid.ToGridIndices(tileIndex);
                         lock (metricsReadCreateWrite)
@@ -219,7 +220,7 @@ namespace Mars.Clouds.Cmdlets
                             string metricsTilePath = metricsReadCreateWrite.OutputPathIsDirectory ? LasTilesCmdlet.GetRasterTilePath(this.Metrics, tileName) : this.Metrics;
                             lock (metricsReadCreateWrite)
                             {
-                                metricsRaster = new(lasGrid.Crs, lasTile, this.CellSize, tileSizeInCellsX, tileSizeInCellsY, this.Settings, metricsReadCreateWrite.WriteBandPool)
+                                metricsRaster = new(lasGrid.Crs, lasTile, this.CellSize, tileSizeInCellsX, tileSizeInCellsY, this.Settings, metricsReadCreateWrite.RasterBandPool)
                                 {
                                     FilePath = metricsTilePath,
                                 };

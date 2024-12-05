@@ -71,6 +71,7 @@ namespace Mars.Clouds.Cmdlets
             this.AboveTopPenalty = 2.0F;
             this.CompressRasters = false;
             this.Crowns = String.Empty;
+            this.DataThreads = Environment.ProcessorCount; // ~60% faster than one thread per core on 9900X
             this.Dsm = String.Empty;
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
             this.MaxCrownRatio = 0.75F;
@@ -154,7 +155,7 @@ namespace Mars.Clouds.Cmdlets
                         TreeCrownRaster? crownTile;
                         lock (crownReadWrite)
                         {
-                            crownTile = new(dsmTile, crownReadWrite.WriteBandPool)
+                            crownTile = new(dsmTile, crownReadWrite.RasterBandPool)
                             {
                                 FilePath = crownTilePath
                             };
@@ -162,7 +163,7 @@ namespace Mars.Clouds.Cmdlets
 
                         // segment crowns
                         // Not currently implemented: treetop addition and removal
-                        segmentationState.SetNeighborhoodsAndCellSize(dsm, treetops, tileIndexX, tileIndexY, this.DsmBand);
+                        segmentationState.SetNeighborhoodsAndCellSize(dsm, treetops, tileName, tileIndexX, tileIndexY, this.DsmBand);
                         crownTile.SegmentCrowns(segmentationState);
                         if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                         {
@@ -175,6 +176,9 @@ namespace Mars.Clouds.Cmdlets
                             crowns.Add(tileIndexX, tileIndexY, crownTile);
                             crownReadWrite.OnTileCreated(tileIndexX, tileIndexY);
                         }
+
+                        // treetops and DSM tiles have been read and a crown tile created so exit creation loop to check for completable tiles
+                        break;
                     }
                 }
             }, this.cancellationTokenSource);
@@ -192,9 +196,9 @@ namespace Mars.Clouds.Cmdlets
 
             if (crownStatistics != null) // debatable if this.NoWrite should be considered here; for now treat -Vrt as an independent switch
             {
-                (string crownsVrtFilePath, string crownsVrtDatasetPath) = VrtDataset.GetVrtPaths(this.Dsm, crownReadWrite.OutputPathIsDirectory, subdirectory: null, "crowns.vrt");
+                (string crownsVrtFilePath, string crownsVrtDatasetPath) = VrtDataset.GetVrtPaths(this.Crowns, crownReadWrite.OutputPathIsDirectory, subdirectory: null, "crowns.vrt");
                 VrtDataset crownsVrt = crowns.CreateDataset(crownsVrtDatasetPath, crownStatistics);
-                crownsVrt.WriteXml(crownsVrtDatasetPath);
+                crownsVrt.WriteXml(crownsVrtFilePath);
             }
 
             long meanCrownsPerTile = crownCount / dsm.NonNullTileCount;
@@ -284,14 +288,13 @@ namespace Mars.Clouds.Cmdlets
                 }
                 else
                 {
-                    double treetopGridCellSizeX = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellWidth;
-                    double treetopGridCellSizeY = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellHeight; // default to same sign as DSM cell height
-                    (GridGeoTransform transform, int spanningSizeX, int spanningSizeY) = dsmTile.GetSpanningEquivalent(treetopGridCellSizeX, treetopGridCellSizeY);
-                    treetopTile = new(dsmTile.Crs.Clone(), transform, spanningSizeX, spanningSizeY, cloneCrsAndTransform: false);
+                    treetopTile = TreetopsGrid.Create(dsmTile);
                 }
 
                 treetopLayer.GetTreetops(treetopTile, dsmTile);
                 this.Treetops.Add(tileReadIndexX, tileReadIndexY, treetopTile);
+
+                treetopDataSource.FlushCache();
             }
         }
     }

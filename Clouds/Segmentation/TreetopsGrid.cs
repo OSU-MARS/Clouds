@@ -6,7 +6,7 @@ namespace Mars.Clouds.Segmentation
 {
     public class TreetopsGrid : Grid<Treetops>
     {
-        public const int DefaultCellCapacity = 64; // cell size is likely around 0.1 ha => ~640 TPH basic capacity
+        public const int DefaultCellCapacityInTreetops = 64; // cell size is likely around 0.1 ha => ~640 TPH basic capacity
 
         public int Treetops { get; set; }
 
@@ -17,24 +17,38 @@ namespace Mars.Clouds.Segmentation
 
             for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
-                this[cellIndex] = new(TreetopsGrid.DefaultCellCapacity, xyIndices: true, classCapacity: 0);
+                this[cellIndex] = new(TreetopsGrid.DefaultCellCapacityInTreetops, xyIndices: true, classCapacity: 0);
             }
+        }
+
+        public static TreetopsGrid Create(Grid dsmTile)
+        {
+            // keep in sync with Reset()
+            double treetopGridCellSizeX = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellWidth;
+            double treetopGridCellSizeY = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellHeight; // default to same sign as DSM cell height
+            (GridGeoTransform transform, int spanningSizeX, int spanningSizeY) = dsmTile.GetSpanningEquivalent(treetopGridCellSizeX, treetopGridCellSizeY);
+            TreetopsGrid treetopTile = new(dsmTile.Crs.Clone(), transform, spanningSizeX, spanningSizeY, cloneCrsAndTransform: false);
+            return treetopTile;
         }
 
         public void Reset(Grid dsmTile)
         {
-            // inherited from Grid
-            if ((this.SizeX != dsmTile.SizeX) || (this.SizeY != dsmTile.SizeY))
+            // keep in sync with Create()
+            double treetopGridCellSizeX = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellWidth;
+            double treetopGridCellSizeY = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellHeight;
+            if (treetopGridCellSizeX != this.Transform.CellWidth)
+            {
+                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing cell width from " + this.Transform.CellWidth + " to " + treetopGridCellSizeX + ".");
+            }
+            if (treetopGridCellSizeY != this.Transform.CellHeight)
+            {
+                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing cell height from " + this.Transform.CellHeight + " to " + treetopGridCellSizeY + ".");
+            }
+
+            (GridGeoTransform transform, int spanningSizeX, int spanningSizeY) = dsmTile.GetSpanningEquivalent(treetopGridCellSizeX, treetopGridCellSizeY);
+            if ((this.SizeX != spanningSizeX) || (this.SizeY != spanningSizeY))
             {
                 throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the grid size from " + this.SizeX + " x " + this.SizeY + " cells to " + dsmTile.SizeX + " x " + dsmTile.SizeY + ".");
-            }
-            // for now, mostly caller's responsibility to ensure existing treetop cell size is suitable
-            // DSM cell size is likely to be around 0.5 m and treetop cell size probably 10-20 m depending on species present so
-            // useful checks on treetop versus DSM cell size are limited.
-            if (Math.Sign(dsmTile.Transform.CellHeight) != Math.Sign(this.Transform.CellHeight))
-            {
-                // if needed, changes in cell height signs can be supported by recalculating the origin
-                throw new NotSupportedException(dsmTile.Transform.CellHeight + " is not a valid cell height. Cell height must have the same sign as the current cell height (" + this.Transform.CellHeight + ").");
             }
 
             this.Transform.CopyOriginAndRotation(dsmTile.Transform);

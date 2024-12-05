@@ -1362,7 +1362,7 @@ namespace Mars.Clouds.Las
             this.ZPCumulative90?.ReturnData(dataBufferPool);
         }
 
-        public void SetMetrics(int cellIndexX, int cellIndexY, PointListZirnc pointsInCell, RasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits)
+        public void SetMetrics(int cellIndexX, int cellIndexY, PointListZirnc pointsInCell, RasterNeighborhood8<float> dtmNeighborhood, float heightClassSizeInCrsUnits, float zThresholdInCrsUnits, ref float[]? sortedZ, ref UInt16[]? sortedIntensity)
         {
             int cellIndex = this.ToCellIndex(cellIndexX, cellIndexY);
 
@@ -1400,9 +1400,12 @@ namespace Mars.Clouds.Las
             // z quantiles
             // For now, quantiles are obtained with direct lookups as most likely there are thousands to tens of thousands of points in an
             // ABA cell. If needed, interpolation can be included to estimate quantiles more precisely in cells with low point counts.
-            float[] sortedZ = new float[pointCount];
+            if ((sortedZ == null) || (sortedZ.Length < pointCount))
+            {
+                sortedZ = new float[2 * pointCount];
+            }
             pointsInCell.Z.CopyTo(sortedZ);
-            Array.Sort(sortedZ);
+            Array.Sort(sortedZ, 0, pointCount);
 
             int zQuantile50index;
             float zQuantile10;
@@ -1528,7 +1531,7 @@ namespace Mars.Clouds.Las
                     this.ZQuantile95[cellIndex] = sortedZ[19 * pointCount / 20 - 1];
                 }
             }
-            float zMax = sortedZ[^1];
+            float zMax = sortedZ[pointCount - 1];
             this.ZMax[cellIndex] = zMax;
 
             // combined z, intensity, and return statistics pass
@@ -1836,9 +1839,12 @@ namespace Mars.Clouds.Las
             // intensity quantiles
             if (this.IntensityQuantile10 != null)
             {
-                UInt16[] sortedIntensity = new UInt16[pointCount];
+                if ((sortedIntensity == null) || (sortedIntensity.Length < pointCount))
+                {
+                    sortedIntensity = new UInt16[2 * pointCount];
+                }
                 pointsInCell.Intensity.CopyTo(sortedIntensity);
-                Array.Sort(sortedIntensity);
+                Array.Sort(sortedIntensity, 0, pointCount);
 
                 if (pointCount < 10)
                 {

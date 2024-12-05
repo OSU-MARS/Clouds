@@ -44,7 +44,7 @@ namespace Mars.Clouds.Cmdlets
 
         protected virtual void OnCreatedTileUnreferenced(int unreferencedTileIndexX, int unreferencedTileIndexY, TCreatedTile tile) 
         {
-            tile.ReturnBandData(this.WriteBandPool);
+            tile.ReturnBandData(this.RasterBandPool);
         }
 
         protected override void OnSourceTileRead(int tileReadIndexX, int tileReadIndexY)

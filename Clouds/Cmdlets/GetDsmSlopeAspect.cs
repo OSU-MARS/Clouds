@@ -79,7 +79,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         // obtain slope and aspect bands so they can be calculated
                         // Since this is called at the tile level the overall DSM's list of bands is not updated.
-                        dsmTile.EnsureSupportingBandsCreated(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.WriteBandPool);
+                        dsmTile.EnsureSupportingBandsCreated(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.RasterBandPool);
                     }
                     dsmTile.CalculateSlopeAndAspect(dsmNeighborhood, cmmNeighborhood);
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
@@ -102,7 +102,7 @@ namespace Mars.Clouds.Cmdlets
                         // Primary bands may lie in other, incomplete, processing neighborhoods so are not returned to pool until rows
                         // are released from OnTileRead(). Slope and aspect bands could be returned at the same time as primary bands
                         // but it's somewhat more memory compact to return them here.
-                        dsmTile.ReturnBandData(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.WriteBandPool);
+                        dsmTile.ReturnBandData(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.RasterBandPool);
                         slopeAspectReadWrite.OnTileWritten(tileIndexX, tileIndexY);
                     }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)

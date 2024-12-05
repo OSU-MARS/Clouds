@@ -149,7 +149,7 @@ namespace Mars.Clouds.Cmdlets
                             // possible until the DTM has been read and Reset() of an object pooled DTM tile is inexpensive compared to the .las
                             // read cost.
                             string dsmTilePath = dsmReadCreateWrite.OutputPathIsDirectory ? Path.Combine(this.Dsm, tileName + Constant.File.GeoTiffExtension) : this.Dsm;
-                            DigitalSurfaceModel dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile, dsmReadCreateWrite.WriteBandPool);
+                            DigitalSurfaceModel dsmTile = new(dsmTilePath, lasTile, dsmBands, dtmTile, dsmReadCreateWrite.RasterBandPool);
 
                             // assertions for fully tiled cases
                             // Unlikely to hold for untiled cases, such as UAV flights or handheld scans.

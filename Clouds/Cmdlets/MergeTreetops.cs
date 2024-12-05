@@ -294,7 +294,7 @@ namespace Mars.Clouds.Cmdlets
                 // Otherwise some tiles would not get loaded.
                 lock (this)
                 {
-                    classificationTile.TryTakeOwnershipOfDataBuffers(this.WriteBandPool);
+                    classificationTile.TryTakeOwnershipOfDataBuffers(this.RasterBandPool);
                 }
 
                 classificationTile.ReadBandData();

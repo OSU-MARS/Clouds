@@ -1,5 +1,6 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
+using System;
 using System.Diagnostics;
 
 namespace Mars.Clouds.Las
@@ -24,6 +25,8 @@ namespace Mars.Clouds.Las
             (double xMin, double xMax, double yMin, double yMax) = this.GetExtent();
             (int metricsIndexXmin, int _, int metricsIndexYmin, int _) = metricsRaster.GetIntersectingCellIndices(xMin, xMax, yMin, yMax);
             int cellsCompleted = 0;
+            float[]? sortedZ = null;
+            UInt16[]? sortedIntensity = null;
             for (int yIndex = 0; yIndex < this.SizeY; ++yIndex)
             {
                 int metricsIndexY = metricsIndexYmin + yIndex;
@@ -44,14 +47,14 @@ namespace Mars.Clouds.Las
                     if (cellPoints.TilesLoaded == cellPoints.TilesIntersected) // generally applicable but likely only reached for TilesLoaded = 1 and TilesIntersected = 1
                     {
                         Debug.Assert(cellPoints.TilesLoaded > 0);
-                        metricsRaster.SetMetrics(metricsIndexX, metricsIndexY, cellPoints, dtmNeighborhood, heightClassSizeInCrsUnits, zThresholdInCrsUnits);
+                        metricsRaster.SetMetrics(metricsIndexX, metricsIndexY, cellPoints, dtmNeighborhood, heightClassSizeInCrsUnits, zThresholdInCrsUnits, ref sortedZ, ref sortedIntensity);
                         ++cellsCompleted;
                     }
                     else
                     {
                         if (metricsRaster.AccumulatePointsThreadSafe(metricsIndexX, metricsIndexY, cellPoints, pointListPool, out PointListZirnc? completeCellPoints))
                         {
-                            metricsRaster.SetMetrics(metricsIndexX, metricsIndexY, completeCellPoints, dtmNeighborhood, heightClassSizeInCrsUnits, zThresholdInCrsUnits);
+                            metricsRaster.SetMetrics(metricsIndexX, metricsIndexY, completeCellPoints, dtmNeighborhood, heightClassSizeInCrsUnits, zThresholdInCrsUnits, ref sortedZ, ref sortedIntensity);
                             ++cellsCompleted;
                         }
                     }

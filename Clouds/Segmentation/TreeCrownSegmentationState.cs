@@ -27,6 +27,7 @@ namespace Mars.Clouds.Segmentation
         public float PathCostLimitInCrsUnits { get; init; }
         public float PathCostScalingFactor { get; init; }
         public RasterNeighborhood8<float>? SlopeNeighborhood { get; private set; }
+        public string TileName { get; private set; }
         public TreeCrownCostGrid? TreetopCostTile { get; private set; }
         public GridNeighborhood8<TreetopsGrid, Treetops>? TreetopNeighborhood { get; private set; }
 
@@ -53,11 +54,12 @@ namespace Mars.Clouds.Segmentation
             this.PathCostLimitInCrsUnits = 40.0F;
             this.PathCostScalingFactor = 1.0F;
             this.SlopeNeighborhood = null;
+            this.TileName = String.Empty;
             this.TreetopCostTile = null;
             this.TreetopNeighborhood = null;
         }
 
-        public void SetNeighborhoodsAndCellSize(VirtualRaster<DigitalSurfaceModel> dsm, VirtualVector<TreetopsGrid> treetops, int tileIndexX, int tileIndexY, string dsmBand)
+        public void SetNeighborhoodsAndCellSize(VirtualRaster<DigitalSurfaceModel> dsm, VirtualVector<TreetopsGrid> treetops, string tileName, int tileIndexX, int tileIndexY, string dsmBand)
         {
             if (dsm.TileCellSizeX != Double.Abs(dsm.TileCellSizeY))
             {
@@ -68,6 +70,7 @@ namespace Mars.Clouds.Segmentation
             this.ChmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
             this.DsmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, dsmBand);
             this.SlopeNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.DsmSlopeBandName);
+            this.TileName = tileName;
 
             if (this.TreetopNeighborhood == null)
             {
