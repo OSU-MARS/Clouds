@@ -1398,8 +1398,19 @@ namespace Mars.Clouds.Las
             }
 
             // z quantiles
-            // For now, quantiles are obtained with direct lookups as most likely there are thousands to tens of thousands of points in an
-            // ABA cell. If needed, interpolation can be included to estimate quantiles more precisely in cells with low point counts.
+            // For now, quantiles are obtained with direct lookups as typically there are hundreds to tens of thousands of points per
+            // cell. If needed, interpolation can be included to estimate quantiles more precisely in cells with low point counts.
+            // Get-GridMetrics' runtime is ~70 % sorting with Array.Sort()'s introspective sort. Sort algorithm review and profiling
+            // - Suggests radix sorts are likely most efficienty for larger metrics grid cells, such as the 10-40 m used with fixed wing
+            //   aerial LiDAR for area based approaches, and individual tree scale cells in the range of 1-4 m with higher density point
+            //   clouds such as drone LiDAR. For intensity, radix crosses over Array.Sort() around 320 points/cell on Zen 5 (SpanExtensions.SortRadix256())
+            //   but function call overhead dominates sorting costs up to a few thousand points. Z sorting has not been profiled.
+            // - Suggests investigation of introspective sort alternatives shown to outperform quicksort for the individual tree scale cells
+            //   with a few hundred points such as fixed wing LiDAR, perhaps primarily quadsort (https://github.com/scandum/quadsort).
+            // See also
+            // - https://www.boost.org/doc/libs/1_85_0/libs/sort/doc/html/index.htm
+            // - https://philarchive.org/rec/SABCAO-2
+            // - https://probablydance.com/2016/12/02/investigating-radix-sort/, https://probablydance.com/2017/01/17/faster-sorting-algorithm-part-2/
             if ((sortedZ == null) || (sortedZ.Length < pointCount))
             {
                 sortedZ = new float[2 * pointCount];

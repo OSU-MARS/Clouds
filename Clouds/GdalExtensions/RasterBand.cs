@@ -1,5 +1,4 @@
-﻿using DocumentFormat.OpenXml.Presentation;
-using OSGeo.GDAL;
+﻿using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -125,8 +124,8 @@ namespace Mars.Clouds.GdalExtensions
             try
             {
                 // read entire band from GDAL's cache at once
-                CPLErr gdalErrorCode2 = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: bufferDataType, pixelSpace: 0, lineSpace: 0);
-                GdalException.ThrowIfError(gdalErrorCode2, nameof(gdalBand.ReadRaster));
+                CPLErr gdalErrorCode = gdalBand.ReadRaster(xOff: 0, yOff: 0, xSize: gdalBand.XSize, ySize: gdalBand.YSize, buffer: dataPin.AddrOfPinnedObject(), buf_xSize: gdalBand.XSize, buf_ySize: gdalBand.YSize, buf_type: bufferDataType, pixelSpace: 0, lineSpace: 0);
+                GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.ReadRaster));
 
                 // read entire band in block y size increments
                 // GDAL documentation recommends this approach for performance but's no faster than entire band reads and increases DDR bandwidth
@@ -574,7 +573,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.HasNoDataValue)
             {
-                return this.NoDataIsNaN ? TBand.IsNaN(value) : this.NoDataValue == value; // have to test with IsNaN() since float.NaN == float.NaN = false
+                return this.NoDataIsNaN ? TBand.IsNaN(value) : this.NoDataValue == value; // have to test with IsNaN() since { float, double }.NaN == { float, double }.NaN = false
             }
             return false;
         }
@@ -738,12 +737,12 @@ namespace Mars.Clouds.GdalExtensions
         [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
         private void SetNoDataValue(Band gdalBand)
         {
-            gdalBand.GetNoDataValue(out double noDataValue, out int hasNoDataValue);
+            gdalBand.GetNoDataValue(out double gdalNoDataValue, out int hasNoDataValue);
 
             this.HasNoDataValue = hasNoDataValue != 0;
             if (this.HasNoDataValue)
             {
-                this.NoDataValue = TBand.CreateChecked(noDataValue);
+                this.NoDataValue = TBand.CreateChecked(gdalNoDataValue);
             }
             else
             {

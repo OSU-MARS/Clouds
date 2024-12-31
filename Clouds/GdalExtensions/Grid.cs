@@ -44,7 +44,7 @@ namespace Mars.Clouds.GdalExtensions
         public (double xCentroid, double yCentroid) GetCentroid()
         {
             double xCentroid = this.Transform.OriginX + 0.5 * this.SizeX * this.Transform.CellWidth;
-            double yCentroid = this.Transform.OriginY + 0.5 * this.SizeX * this.Transform.CellHeight;
+            double yCentroid = this.Transform.OriginY + 0.5 * this.SizeY * this.Transform.CellHeight;
             return (xCentroid, yCentroid);
         }
 

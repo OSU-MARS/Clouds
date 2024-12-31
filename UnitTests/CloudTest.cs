@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 
+[assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 namespace Mars.Clouds.UnitTests
 {
     [TestClass]

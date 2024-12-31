@@ -188,7 +188,8 @@ namespace Mars.Clouds.Cmdlets
                     treetops.GetClassCounts(crownNeighborhood, classificationNeighborhood);
 
                     // write treetops with their class counts
-                    // GDAL APIs work with a single thread per layer or file, so an unavoidable bottleneck. https://gdal.org/en/stable/user/multithreading.html
+                    // GDAL APIs work with a single thread per layer or file, so single threaded output to a single layer is an unavoidable
+                    // bottleneck. https://gdal.org/en/stable/user/multithreading.html
                     lock (mergedTreetopLayer)
                     {
                         mergedTreetopLayer.Add(tileName, treetops, classNames);

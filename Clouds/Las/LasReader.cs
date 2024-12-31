@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Mars.Clouds.Cmdlets.Hardware;
-using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Laz;
 

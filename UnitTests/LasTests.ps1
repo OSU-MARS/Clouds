@@ -98,3 +98,20 @@ Register-Cloud -Lat 44.64800 -Long -123.27089 -Z 429.5 -HorizontalEpsg 6556 -Rot
 # reference cloud reprojection (EPSG:2994, English units, to 6556, metric, in this example)
 $lazPath = [System.IO.Path]::Combine($env:USERPROFILE, "PhD\data\McDonald-Dunn\LDQ-44123F3 Airlie South\2012_OLC_Central Coast\pointz\44123F3419.laz")
 Convert-CloudCrs -Las $lazPath -HorizontalEpsg 6556
+
+## sort performance characterization for grid metrics quantile extraction
+$dataPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County"
+$tile = "s04200w06810.las"
+$sortTimings = Get-SortPerformance -Las "$dataPath\tiles RGB+NIR\$tile" -CellSize (3.28084 * 1.8) -Verbose
+$transposedTimings = for ($i = 0; $i -lt $sortTimings.SortSize.Count; ++$i) 
+{
+    [PSCustomObject]@{
+        SortSize = $sortTimings.SortSize[$i]
+        SortCount = $sortTimings.SortCount[$i]
+        IntrospectiveZ = $sortTimings.IntrospectiveZ[$i].TotalMilliseconds
+        IntrospectiveIntensity = $sortTimings.IntrospectiveIntensity[$i].TotalMilliseconds
+        RadixIntensity = $sortTimings.RadixIntensity[$i].TotalMilliseconds
+        RadixSpeedup = $sortTimings.IntrospectiveIntensity[$i].TotalMilliseconds / $sortTimings.RadixIntensity[$i].TotalMilliseconds
+    }
+}
+$transposedTimings | Format-Table

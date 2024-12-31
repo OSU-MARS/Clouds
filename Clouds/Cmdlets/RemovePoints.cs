@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
             // remove points from clouds
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            int readThreads = Int32.Min(hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
+            int readThreads = hardwareCapabilities.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
 
             int cloudFiltrationsInitiated = -1;
             int cloudFiltrationsCompleted = 0;

@@ -31,7 +31,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string Dtm { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Size, in point cloud CRS units, of cells in output grid metrics tiles matching the input point cloud tiles. Mutually exclusive with -Cells and, if used, the point cloud tile spacing must be an integer multiple of the cell size.")]
+        [Parameter(HelpMessage = "Size, in point cloud CRS units, of cells in output grid metrics tiles matching the input point cloud tiles. Mutually exclusive with -Cells and, if used, the point cloud tile spacing must be an integer multiple of the cell size.")]
         [ValidateRange(0.0F, 1000.0F)] // arbitrary upper bound
         public double CellSize { get; set; }
 
@@ -91,10 +91,8 @@ namespace Mars.Clouds.Cmdlets
 
             RasterBand? metricsCellMask = null;
             GridMetricsRaster? metricsRasterMonolithic = null;
-            double tileSizeInFractionalCellsX = lasGrid.Transform.CellWidth / this.CellSize;
-            double tileSizeInFractionalCellsY = Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize;
-            int tileSizeInCellsX = (int)tileSizeInFractionalCellsX;
-            int tileSizeInCellsY = (int)tileSizeInFractionalCellsY;
+            int tileSizeInCellsX;
+            int tileSizeInCellsY;
             if (String.IsNullOrWhiteSpace(this.Cells))
             {
                 if (Double.IsNaN(this.CellSize) || (this.CellSize <= 0.0))
@@ -102,6 +100,10 @@ namespace Mars.Clouds.Cmdlets
                     throw new ParameterOutOfRangeException(nameof(this.CellSize), "If -" + nameof(this.Cells) + " is not specified then -" + nameof(this.CellSize) + " must be set to a positive value.");
                 }
 
+                double tileSizeInFractionalCellsX = lasGrid.Transform.CellWidth / this.CellSize;
+                double tileSizeInFractionalCellsY = Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize;
+                tileSizeInCellsX = (int)tileSizeInFractionalCellsX;
+                tileSizeInCellsY = (int)tileSizeInFractionalCellsY;
                 if ((Double.Abs(tileSizeInFractionalCellsX - tileSizeInCellsX) > 1E-9) || (Double.Abs(tileSizeInFractionalCellsY - tileSizeInCellsY) > 1E-9)) // integer truncation and tolerances mean Abs() shouldn't be needed but Abs() just in case of unanticipated numerical edge conditions
                 {
                     throw new ParameterOutOfRangeException(nameof(this.CellSize), "A -" + nameof(this.CellSize) + " of " + this.CellSize + " results in grid metrics tiles of " + tileSizeInFractionalCellsX + " by " + tileSizeInFractionalCellsY + " cells. The tile size (" + lasGrid.Transform.CellWidth + " by " + lasGrid.Transform.CellHeight + ") must be an integer multiple of the cell size. If the point clouds' bounding boxes do not entirely fill their tile size specifying -" + nameof(this.Snap) + " may help.");
@@ -109,6 +111,11 @@ namespace Mars.Clouds.Cmdlets
             }
             else
             {
+                if (Double.IsNaN(this.CellSize) == false)
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.CellSize), "If -" + nameof(this.Cells) + " is not specified then -" + nameof(this.CellSize) + " must not be specified.");
+                }
+
                 using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
                 Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: false);
                 if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, cellDefinitions.Crs) == false)
@@ -127,10 +134,10 @@ namespace Mars.Clouds.Cmdlets
                 metricsRasterMonolithic = new(metricsCellMask, this.Settings);
 
                 // increase point tile size by one row and column to support tile sizes which aren't exact multiples of the metrics cell size
-                // This passing is sufficient only when the tile and metrics grids' axes are aligned, which is the net effect of same horizontal
+                // This padding is sufficient only when the tile and metrics grids' axes are aligned, which is the net effect of same horizontal
                 // CRS checks, no rotation checks on rasters, and .las files' lack of rotated bounding box support.
-                ++tileSizeInCellsX;
-                ++tileSizeInCellsY;
+                tileSizeInCellsX = Int32.Max((int)(lasGrid.Transform.CellWidth / cellDefinitions.Transform.CellWidth) + 1, 2);
+                tileSizeInCellsY = Int32.Max((int)Double.Abs(lasGrid.Transform.CellHeight / cellDefinitions.Transform.CellHeight) + 1, 2);
             }
 
             VirtualRaster<Raster<float>> dtm = this.ReadVirtualRasterMetadata<Raster<float>>(cmdletName, this.Dtm, Raster<float>.CreateFromBandMetadata, this.CancellationTokenSource);
@@ -192,8 +199,7 @@ namespace Mars.Clouds.Cmdlets
                         }
                         dtmTileBand.Read(dtmTile.FilePath);
 
-                        // read .las points
-                        using LasReader pointReader = lasTile.CreatePointReader();
+                        // read tile points
                         if (tilePoints == null)
                         {
                             tilePoints = new(lasGrid, lasTile, this.CellSize, tileSizeInCellsX, tileSizeInCellsY, metricsCellMask);
@@ -203,7 +209,7 @@ namespace Mars.Clouds.Cmdlets
                             tilePoints.Reset(lasGrid, lasTile, metricsCellMask);
                         }
 
-                        // read tile points
+                        using LasReader pointReader = lasTile.CreatePointReader();
                         pointReader.ReadPointsToGrid(lasTile, tilePoints, ref pointReadBuffer);
                         readSemaphore.Release(); // exit semaphore as .las file has been read
                         (int tileIndexX, int tileIndexY) = lasGrid.ToGridIndices(tileIndex);

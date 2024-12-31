@@ -119,7 +119,7 @@ namespace Mars.Clouds.GdalExtensions
                 (Double.IsFinite(this.ColumnRotation) == false) ||
                 (Double.IsFinite(this.RowRotation) == false))
             {
-                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform contains non-finite numbers, a negative cell height, or a negative cell width.");
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform contains non-finite numbers, a negative cell width, or a zero cell height.");
             }
         }
 
