@@ -14,7 +14,7 @@ namespace Mars.Clouds.Cmdlets
 
         [Parameter(Mandatory = true, HelpMessage = "List of directories or wildcarded file paths to read files from.")]
         [ValidateNotNullOrWhiteSpace]
-        public List<string> Input { get; set; }
+        public List<string> Files { get; set; }
 
         [Parameter(HelpMessage = "Time to read files for. Default is 10 minutes.")]
         public TimeSpan Duration { get; set; }
@@ -23,10 +23,10 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(1, Constant.DefaultMaximumThreads)] // arbitrary upper bound
         public int Threads { get; set; }
 
-        [Parameter(HelpMessage = "If -Input contains directories or wildcarded paths, read files only from top directory specified (the default) or from all subdirectories.")]
+        [Parameter(HelpMessage = "If -Files contains directories or wildcarded paths, read files only from top directory specified (the default) or from all subdirectories.")]
         public SearchOption Search { get; set; }
 
-        [Parameter(HelpMessage = "If an IOException is raised when trying to read a file, ignore it and move on to the next file. Depending on -Input and testing objectives, may be useful for skipping files opened exclusively or locked by other programs.")]
+        [Parameter(HelpMessage = "If an IOException is raised when trying to read a file, ignore it and move on to the next file. Depending on -Files and testing objectives, may be useful for skipping files opened exclusively or locked by other programs.")]
         public SwitchParameter IgnoreIOExceptions { get; set; }
 
         public ReadFiles()
@@ -35,14 +35,14 @@ namespace Mars.Clouds.Cmdlets
 
             this.Duration = TimeSpan.FromMinutes(10.0);
             this.Threads = 1;
-            this.Input = [];
+            this.Files = [];
             this.Search = SearchOption.TopDirectoryOnly;
         }
 
         protected override void ProcessRecord()
         {
             // Can check drive capabilities and do automatic thread setting if needed.
-            List<string> filePathsToRead = this.GetExistingFilePaths(this.Input, ".*", this.Search);
+            List<string> filePathsToRead = this.GetExistingFilePaths(this.Files, ".*", this.Search);
 
             long totalBytesRead = 0;
             bool durationElapsedOrFaulted = false;

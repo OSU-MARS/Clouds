@@ -656,9 +656,30 @@ namespace Mars.Clouds.Las
             for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
                 float dsmZ = this.Surface[cellIndex];
-                // canopy height is calculated relative to DTM
-                // If needed, mean ground elevation can be used instead.
-                this.CanopyHeight[cellIndex] = dsmZ - dtm[cellIndex];
+                if (this.Surface.IsNoData(dsmZ))
+                {
+                    continue;
+                }
+
+                // canopy height is calculated relative to DTM with fallback to this.GroundMean if it's available and the DTM has no data
+                // If a DSM height is unavailable or if both a CHM and ground mean are unavailable then the CHM is left as no data.
+                float dtmZ = dtm[cellIndex];
+                if (dtm.IsNoData(dtmZ) == false)
+                {
+                    float chmHeight = dsmZ - dtmZ;
+                    this.CanopyHeight[cellIndex] = chmHeight;
+                    Debug.Assert((chmHeight >= -10.0F) && (chmHeight <= 400.0F));
+                }
+                else if (this.GroundMean != null)
+                {
+                    float meanGround = this.GroundMean[cellIndex];
+                    if ((this.GroundMean.IsNoData(meanGround) == false) && (dsmZ >= meanGround)) // for now avoid fallback generation of negative CHM heights
+                    {
+                        float chmHeight = dsmZ - meanGround;
+                        this.CanopyHeight[cellIndex] = chmHeight;
+                        Debug.Assert((chmHeight >= -10.0F) && (chmHeight <= 400.0F));
+                    }
+                }
 
                 if (hasSubsurface) // if there's no subsurface buffer nothing to do but leave this.Subsurface as is
                 {

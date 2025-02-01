@@ -8,21 +8,23 @@ namespace Mars.Clouds.Cmdlets.Hardware
     [SupportedOSPlatform("windows")]
     internal partial class NativeMethodsWindows
     {
+        // https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformation
         // https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-system_logical_processor_information
         [LibraryImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static unsafe partial bool GetLogicalProcessorInformation(SYSTEM_LOGICAL_PROCESSOR_INFORMATION* buffer, out UInt32 bufferSize);
+        private static unsafe partial bool GetLogicalProcessorInformation(SYSTEM_LOGICAL_PROCESSOR_INFORMATION* buffer, ref UInt32 bufferSize);
 
         public static unsafe int GetPhysicalCoreCount()
         {
-            NativeMethodsWindows.GetLogicalProcessorInformation(null, out UInt32 bufferSizeInBytes);
+            UInt32 bufferSizeInBytes = 0;
+            NativeMethodsWindows.GetLogicalProcessorInformation(null, ref bufferSizeInBytes);
             int processorInformationFields = (int)(bufferSizeInBytes / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
 
             int physicalCores = 0;
             SYSTEM_LOGICAL_PROCESSOR_INFORMATION[] logicalProcessorInfo = new SYSTEM_LOGICAL_PROCESSOR_INFORMATION[processorInformationFields];
             fixed (SYSTEM_LOGICAL_PROCESSOR_INFORMATION* pLogicalProcessorInfo = logicalProcessorInfo)
             {
-                if (NativeMethodsWindows.GetLogicalProcessorInformation(pLogicalProcessorInfo, out bufferSizeInBytes) == false)
+                if (NativeMethodsWindows.GetLogicalProcessorInformation(pLogicalProcessorInfo, ref bufferSizeInBytes) == false)
                 {
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 }

@@ -55,7 +55,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether or not to compress slope and aspect rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
-        [Parameter(HelpMessage = "Perform all processing steps except writing output tiles to disk. This development and diangostic switch provides insight in certain types of performance profiling and it allows evaluation of drive thermals without incurring flash write wear.")]
+        [Parameter(HelpMessage = "Perform all processing steps except writing output tiles to disk. This development and diagnostic switch provides insight in certain types of performance profiling and it allows evaluation of drive thermals without incurring flash write wear.")]
         public SwitchParameter NoWrite { get; set; }
 
         public GetGridMetrics()
@@ -73,10 +73,6 @@ namespace Mars.Clouds.Cmdlets
 
         protected override void ProcessRecord()
         {
-            if (this.DataThreads < 2)
-            {
-                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
-            }
             if ((String.IsNullOrWhiteSpace(this.Cells) == false) && this.Vrt)
             {
                 throw new NotSupportedException("A virtual raster cannot be generated when the output is a single metrics raster. Specify either -" + nameof(this.Cells) + " or -" + nameof(this.Vrt) + " but not both.");
@@ -160,7 +156,7 @@ namespace Mars.Clouds.Cmdlets
             // TODO: constain number of data threads based on physical DDR and estimated memory consumption per thread
             // 24 threads @ ~3 GB .las tiles (point format 8; 37 bytes -> 4+2+1+1 = 8 bytes zirnc) + 200x200x40 metrics = ~60 GB => 2.5 GB/thread
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToGridMetricsBandwidth();
-            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 1);
+            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
             int maxUsefulThreads = Int32.Min(lasGrid.NonNullCells, 6 * readThreads);
             ObjectPool<PointListZirnc> pointListPool = new();
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);

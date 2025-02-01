@@ -1,6 +1,6 @@
 ﻿# This script illustrates cmdlet use. Paths need to be changed to files available for the area of interest.
-$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
-#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net9.0"))
+#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net9.0"))
 $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native') # for GDAL
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
@@ -45,9 +45,9 @@ $dsmMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\$tile DSM 
 $dataPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County"
 Get-GridMetrics -CellSize 15 -Las "$dataPath\tiles RGB+NIR\s04230w06840.las" -Dtm "$dataPath\DTM\s04230w06840.tif" -Metrics "$dataPath\metrics\4.6 m\s04230w06840.tif" -Snap -Verbose
 
-# full grid metrics run example: 561 LiDAR tiles (1.69 TB)
+# full grid metrics run example: 561 LiDAR tiles (1.69 TB) on 9900X with SN850X -> ~5m50s @ 24 data threads with 4-6 read threads
 $dataPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County"
-Get-GridMetrics -CellSize 15 -Las ("$dataPath\tiles RGB+NIR", "$dataPath\tiles surrounding distance 1") -Dtm "$dataPath\DTM" -Metrics "$dataPath\metrics\4.6 m" -Snap -Vrt -Verbose
+Get-GridMetrics -CellSize 15 -ReadThreads 4 -Las ("$dataPath\tiles RGB+NIR", "$dataPath\tiles surrounding distance 1") -Dtm "$dataPath\DTM" -Metrics "$dataPath\metrics\4.6 m" -Snap -Vrt -Verbose
 
 ## grid metrics at 10+ m resolution for area based approaches
 $gridPath = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\Elliott ABA grid 10 m EPSG 6557.tif"

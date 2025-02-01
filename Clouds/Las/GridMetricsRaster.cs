@@ -1411,6 +1411,7 @@ namespace Mars.Clouds.Las
             // - https://www.boost.org/doc/libs/1_85_0/libs/sort/doc/html/index.htm
             // - https://philarchive.org/rec/SABCAO-2
             // - https://probablydance.com/2016/12/02/investigating-radix-sort/, https://probablydance.com/2017/01/17/faster-sorting-algorithm-part-2/
+            // - https://stackoverflow.com/questions/2539545/fastest-gap-sequence-for-shell-sort
             if ((sortedZ == null) || (sortedZ.Length < pointCount))
             {
                 sortedZ = new float[2 * pointCount];

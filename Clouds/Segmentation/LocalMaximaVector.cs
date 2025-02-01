@@ -70,7 +70,7 @@ namespace Mars.Clouds.Segmentation
         /// <param name="minRingZ">minimum DSM elevation by ring in CRS units</param>
         public void Add(int sourceID, double x, double y, double dsmZ, double cmmZ, double chmHeight, byte localMaximaRadius, ReadOnlySpan<float> maxRingZ, ReadOnlySpan<float> meanRingZ, ReadOnlySpan<float> minRingZ, ReadOnlySpan<float> varianceRingZ)
         {
-            Debug.Assert(this.IsInEditMode);
+            Debug.Assert(this.IsInEditMode && (chmHeight >= -5.0F) && (chmHeight <= 400.0F)); // provide some allowance for below DTM noise and errors
 
             // indices must be kept in sync with order of field creation
             Feature treetopCandidate = new(this.Definition);

@@ -1,5 +1,6 @@
-$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net8.0"))
-#$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net8.0"))
+# This script illustrates cmdlet use. Paths need to be changed to files available for the area of interest.
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net9.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net9.0"))
 $env:PATH = $env:PATH + (';' + $buildDirectory + '\runtimes\win-x64\native')
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))

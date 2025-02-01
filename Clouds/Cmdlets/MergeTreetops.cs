@@ -123,7 +123,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // create output layer
-            string[] classNames = Enum.GetNames(typeof(LandCoverClassification));
+            string[] classNames = Enum.GetNames<LandCoverClassification>();
             Debug.Assert(classNames.Length == (int)LandCoverClassification.MaxValue);
             using DataSource mergedTreetopFile = OgrExtensions.CreateOrOpenForWrite(mergedTreetopFilePath);
             TreetopVector mergedTreetopLayer = TreetopVector.CreateOrOverwrite(mergedTreetopFile, classification.Crs, tileFieldWidth, classNames);
