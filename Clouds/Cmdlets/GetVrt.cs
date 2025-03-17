@@ -102,7 +102,7 @@ namespace Mars.Clouds.Cmdlets
                     throw new ParameterOutOfRangeException(nameof(this.TilePaths), "Tile path '" + vrtPath + "' is not a directory but also does not appear to contain a search pattern (or specify an individual file).");
                 }
 
-                List<string> tilePaths = Directory.EnumerateFiles(vrtDirectoryPath, vrtSearchPattern, this.EnumerationOptions).ToList();
+                List<string> tilePaths = [..Directory.EnumerateFiles(vrtDirectoryPath, vrtSearchPattern, this.EnumerationOptions)];
                 if (tilePaths.Count < 1)
                 {
                     throw new ParameterOutOfRangeException(nameof(this.TilePaths), "-" + nameof(this.TilePaths) + " does not specify any virtual raster tiles.");

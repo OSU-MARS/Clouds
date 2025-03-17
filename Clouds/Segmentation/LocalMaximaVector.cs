@@ -70,7 +70,7 @@ namespace Mars.Clouds.Segmentation
         /// <param name="minRingZ">minimum DSM elevation by ring in CRS units</param>
         public void Add(int sourceID, double x, double y, double dsmZ, double cmmZ, double chmHeight, byte localMaximaRadius, ReadOnlySpan<float> maxRingZ, ReadOnlySpan<float> meanRingZ, ReadOnlySpan<float> minRingZ, ReadOnlySpan<float> varianceRingZ)
         {
-            Debug.Assert(this.IsInEditMode && (chmHeight >= -5.0F) && (chmHeight <= 400.0F)); // provide some allowance for below DTM noise and errors
+            Debug.Assert(this.IsInEditMode && (Double.IsNaN(chmHeight) || ((chmHeight >= -5.0F) && (chmHeight <= 400.0F)))); // provide some allowance for below DTM noise and errors
 
             // indices must be kept in sync with order of field creation
             Feature treetopCandidate = new(this.Definition);
@@ -104,14 +104,14 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        public static LocalMaximaVector CreateOrOverwrite(DataSource localMaximaVector, Grid dsmTile, string tileName)
+        public static LocalMaximaVector CreateOrOverwrite(DataSource localMaximaVector, string layerName, Grid dsmTile, string tileName)
         {
             if (Double.Abs(dsmTile.Transform.CellHeight) != dsmTile.Transform.CellWidth)
             {
                 throw new NotSupportedException("Rectangular DSM cells are not currently supported.");
             }
 
-            Layer gdalLayer = localMaximaVector.CreateLayer("localMaxima", dsmTile.Crs, wkbGeometryType.wkbPoint25D, ["OVERWRITE=YES"]);
+            Layer gdalLayer = localMaximaVector.CreateLayer(layerName, dsmTile.Crs, wkbGeometryType.wkbPoint25D, [ "OVERWRITE=YES" ]);
             gdalLayer.StartTransaction();
 
             // Add() must be kept in sync with field order

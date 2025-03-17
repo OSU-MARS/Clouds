@@ -169,33 +169,46 @@ namespace Mars.Clouds.Cmdlets
 
                     localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile, rasterTilePath);
                     using DataSource localMaximaVector = OgrExtensions.CreateOrOpenForWrite(vectorTilePath);
-                    using LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, dsmTile, tileName);
+                    LocalMaximaState state = new(tileName, dsm, tileWriteIndex, localMaximaRaster);
 
                     // find DSM maxima radii and statistics
-                    LocalMaximaState state = new(tileName, dsm, tileWriteIndex, localMaximaRaster)
+                    int dsmMaximaFound;
+                    using (LocalMaximaVector dsmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaDsm", dsmTile, tileName))
                     {
-                        CurrentStatistics = dsmMaximaPoints // transactions stream to SQL thread for write as points are added
-                    };
-                    int dsmMaximaFound = this.FindLocalMaxima(state);
+                        // transactions stream to SQL thread for write as points are added
+                        // A using block is needed as GDAL 3.10 doesn't support concurrent transactions on multiple layers, meaning the last DSM
+                        // transaction needs to be committed before beginning CMM.
+                        state.CurrentStatistics = dsmMaximaPoints;
+                        dsmMaximaFound = this.FindLocalMaxima(state);
+                    }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
 
                     // find CMM maxima radii
-                    state.CurrentNeighborhood = state.CmmNeighborhood;
-                    state.CurrentStatistics = null;
-                    state.CurrentRadii = localMaximaRaster.CmmMaxima;
-                    int cmmMaximaFound = this.FindLocalMaxima(state);
+                    int cmmMaximaFound;
+                    using (LocalMaximaVector cmmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaCmm", dsmTile, tileName))
+                    {
+                        state.CurrentNeighborhood = state.CmmNeighborhood;
+                        state.CurrentStatistics = cmmMaximaPoints;
+                        state.CurrentRadii = localMaximaRaster.CmmMaxima;
+                        cmmMaximaFound = this.FindLocalMaxima(state);
+                    }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
 
                     // find CHM maxima radii
-                    state.CurrentNeighborhood = state.ChmNeighborhood;
-                    state.CurrentRadii = localMaximaRaster.ChmMaxima;
-                    int chmMaximaFound = this.FindLocalMaxima(state);
+                    int chmMaximaFound;
+                    using (LocalMaximaVector chmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaChm", dsmTile, tileName))
+                    {
+                        state.CurrentNeighborhood = state.ChmNeighborhood;
+                        state.CurrentRadii = localMaximaRaster.ChmMaxima;
+                        state.CurrentStatistics = chmMaximaPoints;
+                        chmMaximaFound = this.FindLocalMaxima(state);
+                    }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
                         return;
