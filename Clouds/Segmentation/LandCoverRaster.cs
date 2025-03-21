@@ -99,7 +99,7 @@ namespace Mars.Clouds.Segmentation
 
         public override void Write(string coverPath, bool compress)
         {
-            using Dataset coverDataset = this.CreateGdalRasterAndSetFilePath(coverPath, 1, DataType.GDT_Byte, compress);
+            using Dataset coverDataset = this.CreateGdalRaster(coverPath, 1, DataType.GDT_Byte, compress);
             this.Classification.Write(coverDataset, 1);
             this.FilePath = coverPath;
         }

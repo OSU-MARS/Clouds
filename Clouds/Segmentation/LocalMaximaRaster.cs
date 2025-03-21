@@ -151,7 +151,7 @@ namespace Mars.Clouds.Segmentation
         public override void Write(string maximaPath, bool compress)
         {
             Debug.Assert(this.DsmMaxima.IsNoData(RasterBand.NoDataDefaultByte) && this.CmmMaxima.IsNoData(RasterBand.NoDataDefaultByte) && this.ChmMaxima.IsNoData(RasterBand.NoDataDefaultByte));
-            using Dataset maximaDataset = this.CreateGdalRasterAndSetFilePath(maximaPath, 3, DataType.GDT_Byte, compress);
+            using Dataset maximaDataset = this.CreateGdalRaster(maximaPath, 3, DataType.GDT_Byte, compress);
             this.DsmMaxima.Write(maximaDataset, 1);
             this.CmmMaxima.Write(maximaDataset, 2);
             this.ChmMaxima.Write(maximaDataset, 3);

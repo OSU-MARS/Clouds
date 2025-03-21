@@ -62,7 +62,7 @@ namespace Mars.Clouds.Las
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string dsmFilePath, LasFile lasFile, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
+        public DigitalSurfaceModel(string dsmPrimaryFilePath, LasFile lasFile, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
             : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
@@ -71,17 +71,17 @@ namespace Mars.Clouds.Las
             }
             if (this.Crs.IsCompound() == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), dsmFilePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), dsmPrimaryFilePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
             }
 
             SpatialReference lasTileCrs = lasFile.GetSpatialReference();
             if (SpatialReferenceExtensions.IsSameCrs(lasTileCrs, dtmTile.Crs) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(dtmTile), dsmFilePath + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
+                throw new ArgumentOutOfRangeException(nameof(dtmTile), dsmPrimaryFilePath + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
             }
 
             this.Bands = DigitalSurfaceModelBands.Primary;
-            this.FilePath = dsmFilePath;
+            this.FilePath = dsmPrimaryFilePath;
             this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
@@ -809,7 +809,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSurfaceModelBands.SlopeAspect) != DigitalSurfaceModelBands.None)
             {
-                string slopeAspectTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createDiagnosticDirectory: false);
+                string slopeAspectTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: false);
                 using Dataset slopeAspectDataset = Gdal.Open(slopeAspectTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = slopeAspectDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= slopeAspectDataset.RasterCount; ++gdalBandIndex)
@@ -880,7 +880,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSurfaceModelBands.DiagnosticZ) != DigitalSurfaceModelBands.None)
             {
-                string zTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: false);
+                string zTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createComponentDirectory: false);
                 using Dataset zDataset = Gdal.Open(zTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = zDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= zDataset.RasterCount; ++gdalBandIndex)
@@ -938,7 +938,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSurfaceModelBands.PointCounts) != DigitalSurfaceModelBands.None)
             {
-                string pointCountTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: false);
+                string pointCountTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createComponentDirectory: false);
                 using Dataset pointCountDataset = Gdal.Open(pointCountTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = pointCountDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= pointCountDataset.RasterCount; ++gdalBandIndex)
@@ -983,7 +983,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSurfaceModelBands.ReturnNumberSurface) != DigitalSurfaceModelBands.None)
             {
-                string returnNumberTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: false);
+                string returnNumberTilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createComponentDirectory: false);
                 using Dataset returnNumberDataset = Gdal.Open(returnNumberTilePath, Access.GA_ReadOnly);
                 SpatialReference crs = returnNumberDataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= returnNumberDataset.RasterCount; ++gdalBandIndex)
@@ -1015,7 +1015,7 @@ namespace Mars.Clouds.Las
 
             if ((bands & DigitalSurfaceModelBands.SourceIDSurface) != DigitalSurfaceModelBands.None)
             {
-                string sourceIDtilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: false);
+                string sourceIDtilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createComponentDirectory: false);
                 using Dataset sourceIDdataset = Gdal.Open(sourceIDtilePath, Access.GA_ReadOnly);
                 SpatialReference crs = sourceIDdataset.GetSpatialRef();
                 for (int gdalBandIndex = 1; gdalBandIndex <= sourceIDdataset.RasterCount; ++gdalBandIndex)
@@ -1402,7 +1402,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.DsmSlope.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: false);
                     bandIndexInFile = 0;
                     return true;
                 }
@@ -1411,7 +1411,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.DsmAspect.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: false);
                     bandIndexInFile = 1;
                     return true;
                 }
@@ -1420,7 +1420,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.CmmSlope3.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: false);
                     bandIndexInFile = 2;
                     return true;
                 }
@@ -1429,7 +1429,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.CmmAspect3.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: false);
                     bandIndexInFile = 3;
                     return true;
                 }
@@ -1439,7 +1439,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.Subsurface.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createComponentDirectory: false);
                     bandIndexInFile = 0;
                     return true;
                 }
@@ -1448,7 +1448,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.AerialMean.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createComponentDirectory: false);
                     bandIndexInFile = 1;
                     return true;
                 }
@@ -1457,7 +1457,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.GroundMean.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryZ, createComponentDirectory: false);
                     bandIndexInFile = 2;
                     return true;
                 }
@@ -1467,7 +1467,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.AerialPoints.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createComponentDirectory: false);
                     bandIndexInFile = 0;
                     return true;
                 }
@@ -1476,7 +1476,7 @@ namespace Mars.Clouds.Las
             {
                 if (String.Equals(name, this.GroundPoints.Name, StringComparison.Ordinal))
                 {
-                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, false);
+                    bandFilePath = Raster.GetComponentFilePath(this.FilePath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createComponentDirectory: false);
                     bandIndexInFile = 1;
                     return true;
                 }
@@ -1576,7 +1576,7 @@ namespace Mars.Clouds.Las
             if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.None)
             {
                 Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
-                using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(dsmPrimaryPath, 3, DataType.GDT_Float32, compress);
+                using Dataset dsmDataset = this.CreateGdalRaster(dsmPrimaryPath, 3, DataType.GDT_Float32, compress);
                 if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
                 {
                     this.Surface.Write(dsmDataset, 1);
@@ -1589,6 +1589,7 @@ namespace Mars.Clouds.Las
                 {
                     this.CanopyHeight.Write(dsmDataset, 3);
                 }
+
                 this.FilePath = dsmPrimaryPath;
             }
 
@@ -1602,9 +1603,9 @@ namespace Mars.Clouds.Las
                 int slopeAspectBands = (writeDsmSlope ? 1 : 0) + (writeDsmAspect ? 1 : 0) + (writeCmmSlope3 ? 1 : 0) + (writeCmmAspect3 ? 1 : 0);
                 if (slopeAspectBands > 0)
                 {
-                    string slopeAspectTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DirectorySlopeAspect, createDiagnosticDirectory: true);
+                    string slopeAspectTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DirectorySlopeAspect, createComponentDirectory: true);
 
-                    using Dataset slopeAspectDataset = this.CreateGdalRasterAndSetFilePath(slopeAspectTilePath, slopeAspectBands, DataType.GDT_Float32, compress);
+                    using Dataset slopeAspectDataset = this.CreateGdalRaster(slopeAspectTilePath, slopeAspectBands, DataType.GDT_Float32, compress);
                     int gdalBand = 1;
                     if (writeDsmSlope)
                     {
@@ -1642,9 +1643,9 @@ namespace Mars.Clouds.Las
                 int zDiagnosticBands = (writeSubsurface ? 1 : 0) + (writeAerialMean ? 1 : 0) + (writeGroundMean ? 1 : 0);
                 if (zDiagnosticBands > 0)
                 {
-                    string zTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createDiagnosticDirectory: true);
+                    string zTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryZ, createComponentDirectory: true);
 
-                    using Dataset zDataset = this.CreateGdalRasterAndSetFilePath(zTilePath, zDiagnosticBands, DataType.GDT_Float32, compress);
+                    using Dataset zDataset = this.CreateGdalRaster(zTilePath, zDiagnosticBands, DataType.GDT_Float32, compress);
                     int gdalBand = 1;
                     if (writeSubsurface)
                     {
@@ -1676,10 +1677,10 @@ namespace Mars.Clouds.Las
                 int pointCountBands = (writeAerialPoints ? 1 : 0) + (writeGroundPoints ? 1 : 0);
                 if (pointCountBands > 0)
                 {
-                    string pointCountTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+                    string pointCountTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryPointCounts, createComponentDirectory: true);
                     DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(writeAerialPoints, this.AerialPoints, writeGroundPoints, this.GroundPoints);
 
-                    using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, pointCountBands, pointCountBandType, compress);
+                    using Dataset pointCountDataset = this.CreateGdalRaster(pointCountTilePath, pointCountBands, pointCountBandType, compress);
                     int gdalBand = 1;
                     if (writeAerialPoints)
                     {
@@ -1699,9 +1700,9 @@ namespace Mars.Clouds.Las
             // For now, write band even if return numbers aren't defined in the data source.
             if (((bandsToWriteIfPresent & DigitalSurfaceModelBands.ReturnNumberSurface) == DigitalSurfaceModelBands.ReturnNumberSurface) && (this.ReturnNumberSurface != null))
             {
-                string returnNumberTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createDiagnosticDirectory: true);
+                string returnNumberTilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectoryReturnNumber, createComponentDirectory: true);
 
-                using Dataset returnNumberDataset = this.CreateGdalRasterAndSetFilePath(returnNumberTilePath, 1, DataType.GDT_Byte, compress);
+                using Dataset returnNumberDataset = this.CreateGdalRaster(returnNumberTilePath, 1, DataType.GDT_Byte, compress);
                 this.ReturnNumberSurface.Write(returnNumberDataset, 1);
                 Debug.Assert(returnNumberDataset.RasterCount == 1);
             }
@@ -1710,10 +1711,10 @@ namespace Mars.Clouds.Las
             // For now, write band even if the maximum source ID is zero.
             if (((bandsToWriteIfPresent & DigitalSurfaceModelBands.SourceIDSurface) == DigitalSurfaceModelBands.SourceIDSurface) && (this.SourceIDSurface != null))
             {
-                string sourceIDtilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createDiagnosticDirectory: true);
+                string sourceIDtilePath = Raster.GetComponentFilePath(dsmPrimaryPath, DigitalSurfaceModel.DiagnosticDirectorySourceID, createComponentDirectory: true);
                 DataType sourceIDbandType = DataTypeExtensions.GetMostCompactIntegerType(this.SourceIDSurface); // could cache this when points are being added
 
-                using Dataset sourceIDdataset = this.CreateGdalRasterAndSetFilePath(sourceIDtilePath, 1, sourceIDbandType, compress);
+                using Dataset sourceIDdataset = this.CreateGdalRaster(sourceIDtilePath, 1, sourceIDbandType, compress);
                 this.SourceIDSurface.Write(sourceIDdataset, 1);
                 Debug.Assert(sourceIDdataset.RasterCount == 1);
             }

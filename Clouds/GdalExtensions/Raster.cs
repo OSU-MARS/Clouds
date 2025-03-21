@@ -73,7 +73,7 @@ namespace Mars.Clouds.GdalExtensions
             return raster;
         }
 
-        protected Dataset CreateGdalRasterAndSetFilePath(string rasterPath, int bands, DataType cellDataType, bool compress)
+        protected Dataset CreateGdalRaster(string rasterPath, int bands, DataType cellDataType, bool compress)
         {
             using Driver rasterDriver = GdalExtensions.GetDriverByExtension(rasterPath);
             if (File.Exists(rasterPath))
@@ -103,7 +103,6 @@ namespace Mars.Clouds.GdalExtensions
             rasterDataset.SetGeoTransform(this.Transform.GetPadfTransform());
             rasterDataset.SetSpatialRef(this.Crs);
 
-            this.FilePath = rasterPath;
             return rasterDataset;
         }
 
@@ -122,7 +121,7 @@ namespace Mars.Clouds.GdalExtensions
         /// <summary>
         /// Get path to a file with additional bands in a subdirectory below a raster's primary file with its main bands.
         /// </summary>
-        protected static string GetComponentFilePath(string primaryFilePath, string diagnosticDirectoryName, bool createDiagnosticDirectory)
+        protected static string GetComponentFilePath(string primaryFilePath, string componentDirectoryName, bool createComponentDirectory)
         {
             string? directoryPath = Path.GetDirectoryName(primaryFilePath);
             if (directoryPath == null)
@@ -135,21 +134,21 @@ namespace Mars.Clouds.GdalExtensions
                 throw new ArgumentOutOfRangeException(nameof(primaryFilePath), "Primary raster file path '" + primaryFilePath + "' does not contain a file name.");
             }
 
-            string diagnosticDirectoryPath = Path.Combine(directoryPath, diagnosticDirectoryName);
-            if (Directory.Exists(diagnosticDirectoryPath) == false)
+            string componentDirectoryPath = Path.Combine(directoryPath, componentDirectoryName);
+            if (Directory.Exists(componentDirectoryPath) == false)
             {
-                if (createDiagnosticDirectory)
+                if (createComponentDirectory)
                 {
-                    Directory.CreateDirectory(diagnosticDirectoryPath);
+                    Directory.CreateDirectory(componentDirectoryPath);
                 }
                 else
                 {
-                    throw new ArgumentOutOfRangeException(nameof(diagnosticDirectoryName), "Directory '" + directoryPath + "' does not have a '" + diagnosticDirectoryName + "' subdirectory for diagnostic tiles.");
+                    throw new ArgumentOutOfRangeException(nameof(componentDirectoryName), "Directory '" + directoryPath + "' does not have a '" + componentDirectoryName + "' subdirectory for component tiles.");
                 }
             }
 
-            string diagnosticFilePath = Path.Combine(diagnosticDirectoryPath, fileName);
-            return diagnosticFilePath;
+            string componentFilePath = Path.Combine(componentDirectoryPath, fileName);
+            return componentFilePath;
         }
 
         public abstract List<RasterBandStatistics> GetBandStatistics();
@@ -493,13 +492,15 @@ namespace Mars.Clouds.GdalExtensions
         {
             // all bands have the same type, so no need for type conversion to meet GDAL (and GeoTIFF) single type constraints
             DataType gdalDataType = RasterBand.GetGdalDataType<TBand>();
-            using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, this.Bands.Length, gdalDataType, compress);
+            using Dataset rasterDataset = this.CreateGdalRaster(rasterPath, this.Bands.Length, gdalDataType, compress);
             for (int bandIndex = 0; bandIndex < this.Bands.Length; ++bandIndex)
             {
                 RasterBand<TBand> band = this.Bands[bandIndex];
                 int gdalbandIndex = bandIndex + 1;
                 band.Write(rasterDataset, gdalbandIndex);
             }
+
+            this.FilePath = rasterPath;
         }
     }
 }

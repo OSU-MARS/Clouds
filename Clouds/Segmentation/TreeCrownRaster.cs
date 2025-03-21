@@ -205,7 +205,7 @@ namespace Mars.Clouds.Segmentation
         public override void Write(string crownPath, bool compress)
         {
             Debug.Assert(this.TreeID.IsNoData(RasterBand.NoDataDefaultInt32));
-            using Dataset crownDataset = this.CreateGdalRasterAndSetFilePath(crownPath, 1, DataType.GDT_Int32, compress);
+            using Dataset crownDataset = this.CreateGdalRaster(crownPath, 1, DataType.GDT_Int32, compress);
             this.TreeID.Write(crownDataset, 1);
             this.FilePath = crownPath;
         }

@@ -7,7 +7,7 @@ Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
 
 # DSM and orthoimage .vrts with all primary and diagnostic bands, complete sampling of band statistics, and logging of all tile statistics
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 test"
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3"
 Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.Path]::Combine($vrtDirectory, "z")), ([System.IO.Path]::Combine($vrtDirectory, "nPoints")), ([System.IO.Path]::Combine($vrtDirectory, "sourceID"))) -Vrt ([System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt")) -Verbose
 
 $vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\orthoimage v3"
@@ -15,7 +15,7 @@ Get-Vrt -Stats -MinSamplingFraction 1.0 -TilePaths ($vrtDirectory, ([System.IO.P
 
 # extraction of .vrt bands
 # If a .vrt is generated for all bands then bands can be sliced out of it for more performant viewing in QGIS.
-$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta"
+$vrtDirectory = "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3"
 $vrt = [System.IO.Path]::Combine($vrtDirectory, "dsm all.vrt")
 Export-VrtBands -Input $vrt -Bands "dsm" -Output ([System.IO.Path]::Combine($vrtDirectory, "dsm.vrt"))
 Export-VrtBands -Input $vrt -Bands "cmm3" -Output ([System.IO.Path]::Combine($vrtDirectory, "cmm3.vrt"))

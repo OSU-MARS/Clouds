@@ -451,7 +451,7 @@ namespace Mars.Clouds.Las
             this.Write(imagePath, 16, compress);
         }
 
-        public void Write(string imagePath, int bitsPerRgbNirIntensityPixel, bool compress)
+        public void Write(string imagePrimaryPath, int bitsPerRgbNirIntensityPixel, bool compress)
         {
             DataType gdalImagePixelType = bitsPerRgbNirIntensityPixel switch
             {
@@ -462,7 +462,7 @@ namespace Mars.Clouds.Las
             };
 
             int nearInfraredOffset = this.nearInfraredInUse ? 1 : 0;
-            using Dataset dsmDataset = this.CreateGdalRasterAndSetFilePath(imagePath, bands: 5 + nearInfraredOffset, gdalImagePixelType, compress);
+            using Dataset dsmDataset = this.CreateGdalRaster(imagePrimaryPath, bands: 5 + nearInfraredOffset, gdalImagePixelType, compress);
             this.Red.Write(dsmDataset, 1);
             this.Green.Write(dsmDataset, 2);
             this.Blue.Write(dsmDataset, 3);
@@ -474,17 +474,17 @@ namespace Mars.Clouds.Las
             this.IntensityFirstReturn.Write(dsmDataset, 4 + nearInfraredOffset);
             this.IntensitySecondReturn.Write(dsmDataset, 5 + nearInfraredOffset);
 
-            string scanAngleTilePath = Raster.GetComponentFilePath(imagePath, ImageRaster.DiagnosticDirectoryScanAngle, createDiagnosticDirectory: true);
-            using Dataset scanAngleDataset = this.CreateGdalRasterAndSetFilePath(scanAngleTilePath, 1, DataType.GDT_Float32, compress);
+            string scanAngleTilePath = Raster.GetComponentFilePath(imagePrimaryPath, ImageRaster.DiagnosticDirectoryScanAngle, createComponentDirectory: true);
+            using Dataset scanAngleDataset = this.CreateGdalRaster(scanAngleTilePath, 1, DataType.GDT_Float32, compress);
             this.ScanAngleMeanAbsolute.Write(scanAngleDataset, 1);
 
-            string pointCountTilePath = Raster.GetComponentFilePath(imagePath, ImageRaster.DiagnosticDirectoryPointCounts, createDiagnosticDirectory: true);
+            string pointCountTilePath = Raster.GetComponentFilePath(imagePrimaryPath, ImageRaster.DiagnosticDirectoryPointCounts, createComponentDirectory: true);
             DataType pointCountBandType = DataTypeExtensions.GetMostCompactIntegerType(this.FirstReturns, this.SecondReturns);
-            using Dataset pointCountDataset = this.CreateGdalRasterAndSetFilePath(pointCountTilePath, 2, pointCountBandType, compress);
+            using Dataset pointCountDataset = this.CreateGdalRaster(pointCountTilePath, 2, pointCountBandType, compress);
             this.FirstReturns.Write(pointCountDataset, 1);
             this.SecondReturns.Write(pointCountDataset, 2);
 
-            this.FilePath = imagePath;
+            this.FilePath = imagePrimaryPath;
         }
     }
 }

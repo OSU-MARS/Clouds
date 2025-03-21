@@ -41,11 +41,11 @@ namespace Mars.Clouds.Cmdlets
             this.LocalMaxima = String.Empty;
         }
 
-        private int FindLocalMaxima(LocalMaximaState state)
+        private int FindLocalMaxima(LocalMaximaState tileState)
         {
-            RasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            RasterNeighborhood8<float> currentNeighborhood = tileState.CurrentNeighborhood;
             RasterBand<float> currentSurface = currentNeighborhood.Center;
-            RasterBand<byte> currentRadii = state.CurrentRadii;
+            RasterBand<byte> currentRadii = tileState.CurrentMaximaRaster;
             int localMaximaFound = 0;
             for (int tileYindex = 0; tileYindex < currentSurface.SizeY; ++tileYindex)
             {
@@ -67,7 +67,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                         {
-                            if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, state))
+                            if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileNextXindex - 1, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, tileState))
                             {
                                 ++localMaximaFound;
                             }
@@ -93,7 +93,7 @@ namespace Mars.Clouds.Cmdlets
                     int tileXIndex = currentSurface.SizeX - 1;
                     if (((hasPreviousSurfaceZ == false) || (previousSurfaceZ <= surfaceZ)) && ((hasNextSurfaceZ == false) || (nextSurfaceZ <= surfaceZ)))
                     {
-                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, state))
+                        if (GetLocalMaxima.TryGetLocalMaximaRadiusAndStatistics(tileXIndex, tileYindex, hasPreviousSurfaceZ, previousSurfaceZ, surfaceZ, hasNextSurfaceZ, nextSurfaceZ, tileState))
                         {
                             ++localMaximaFound;
                         }
@@ -169,7 +169,7 @@ namespace Mars.Clouds.Cmdlets
 
                     localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile, rasterTilePath);
                     using DataSource localMaximaVector = OgrExtensions.CreateOrOpenForWrite(vectorTilePath);
-                    LocalMaximaState state = new(tileName, dsm, tileWriteIndex, localMaximaRaster);
+                    LocalMaximaState tileState = new(tileName, dsm, tileWriteIndex, localMaximaRaster);
 
                     // find DSM maxima radii and statistics
                     int dsmMaximaFound;
@@ -177,9 +177,12 @@ namespace Mars.Clouds.Cmdlets
                     {
                         // transactions stream to SQL thread for write as points are added
                         // A using block is needed as GDAL 3.10 doesn't support concurrent transactions on multiple layers, meaning the last DSM
-                        // transaction needs to be committed before beginning CMM.
-                        state.CurrentStatistics = dsmMaximaPoints;
-                        dsmMaximaFound = this.FindLocalMaxima(state);
+                        // transaction needs to be committed before beginning CMM maxima location. (Same for CMM commit before starting CHM,
+                        // below.)
+                        // DSM is default raster output
+                        tileState.CurrentMaximaVector = dsmMaximaPoints;
+                        // DSM is default neighborhood
+                        dsmMaximaFound = this.FindLocalMaxima(tileState);
                     }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
@@ -190,10 +193,10 @@ namespace Mars.Clouds.Cmdlets
                     int cmmMaximaFound;
                     using (LocalMaximaVector cmmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaCmm", dsmTile, tileName))
                     {
-                        state.CurrentNeighborhood = state.CmmNeighborhood;
-                        state.CurrentStatistics = cmmMaximaPoints;
-                        state.CurrentRadii = localMaximaRaster.CmmMaxima;
-                        cmmMaximaFound = this.FindLocalMaxima(state);
+                        tileState.CurrentMaximaRaster = localMaximaRaster.CmmMaxima;
+                        tileState.CurrentMaximaVector = cmmMaximaPoints;
+                        tileState.CurrentNeighborhood = tileState.CmmNeighborhood;
+                        cmmMaximaFound = this.FindLocalMaxima(tileState);
                     }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
@@ -204,10 +207,10 @@ namespace Mars.Clouds.Cmdlets
                     int chmMaximaFound;
                     using (LocalMaximaVector chmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaChm", dsmTile, tileName))
                     {
-                        state.CurrentNeighborhood = state.ChmNeighborhood;
-                        state.CurrentRadii = localMaximaRaster.ChmMaxima;
-                        state.CurrentStatistics = chmMaximaPoints;
-                        chmMaximaFound = this.FindLocalMaxima(state);
+                        tileState.CurrentMaximaRaster = localMaximaRaster.ChmMaxima;
+                        tileState.CurrentMaximaVector = chmMaximaPoints;
+                        tileState.CurrentNeighborhood = tileState.ChmNeighborhood;
+                        chmMaximaFound = this.FindLocalMaxima(tileState);
                     }
                     if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
                     {
@@ -254,10 +257,10 @@ namespace Mars.Clouds.Cmdlets
             base.StopProcessing();
         }
 
-        private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, bool hasPreviousSurfaceZ, float previousSurfaceZ, float surfaceZ, bool hasNextSurfaceZ, float nextSurfaceZ, LocalMaximaState state)
+        private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, bool hasPreviousSurfaceZ, float previousSurfaceZ, float surfaceZ, bool hasNextSurfaceZ, float nextSurfaceZ, LocalMaximaState tileState)
         {
             // check remainder of first ring: caller has checked xOffset = ±1, yOffset = 0
-            RasterNeighborhood8<float> currentNeighborhood = state.CurrentNeighborhood;
+            RasterNeighborhood8<float> currentNeighborhood = tileState.CurrentNeighborhood;
             Span<float> maxRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
             Span<float> meanRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
             Span<float> minRingZ = stackalloc float[LocalMaximaVector.RingsWithStatistics];
@@ -311,7 +314,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         if (z > surfaceZ)
                         {
-                            state.CurrentRadii[tileXindex, tileYindex] = 0;
+                            tileState.CurrentMaximaRaster[tileXindex, tileYindex] = 0;
                             return false;
                         }
 
@@ -359,7 +362,7 @@ namespace Mars.Clouds.Cmdlets
             // investment here is well into diminishing returns as Get-LocalMaxima is limited by GDAL read speeds. DSM+CMM+CHM local maxima
             // identification runs at ~200 2000 x 2000 cell tiles per second (5950X).
             // Indices in rings are also sorted in row major order for performance.
-            bool hasStatistics = state.CurrentStatistics != null;
+            bool hasStatistics = tileState.CurrentMaximaVector != null;
             bool ringRadiusFound = false;
             byte ringRadiusInCells = (byte)Ring.Rings.Count; // default to no higher z value found within search radius
             for (byte ringIndex = 1; ringIndex < LocalMaximaVector.RingsWithStatistics; ++ringIndex)
@@ -450,17 +453,20 @@ namespace Mars.Clouds.Cmdlets
                 }
             }
 
-            state.CurrentRadii[tileXindex, tileYindex] = ringRadiusInCells;
+            tileState.CurrentMaximaRaster[tileXindex, tileYindex] = ringRadiusInCells;
 
             if (hasStatistics)
             {
-                Debug.Assert((state.CurrentStatistics != null) && (state.DsmTile.SourceIDSurface != null)); // VS 17.8.7 nullability can't figure out hasStatistics == true means state.CurrentStatistics != null
+                Debug.Assert((tileState.CurrentMaximaVector != null) && (tileState.DsmTile.SourceIDSurface != null)); // VS 17.8.7 nullability can't figure out hasStatistics == true means state.CurrentStatistics != null
 
-                (double x, double y) = state.DsmTile.Transform.GetCellCenter(tileXindex, tileYindex);
-                UInt16 sourceID = state.DsmTile.SourceIDSurface[tileXindex, tileYindex];
-                float cmmZ = state.DsmTile.CanopyMaxima3[tileXindex, tileYindex];
-                float chmHeight = state.DsmTile.CanopyHeight[tileXindex, tileYindex];
-                state.CurrentStatistics.Add(sourceID, x, y, surfaceZ, cmmZ, chmHeight, ringRadiusInCells, maxRingZ, meanRingZ, minRingZ, varianceRingZ);
+                // surfaceZ is dsmZ, cmmZ, or chmHeight depending on current surface
+                // Could therefore save one load by testing Object.ReferenceEquals(tileState.CurrentNeighborhood, tileState.DsmNeighborhood).
+                (double x, double y) = tileState.DsmTile.Transform.GetCellCenter(tileXindex, tileYindex);
+                UInt16 sourceID = tileState.DsmTile.SourceIDSurface[tileXindex, tileYindex];
+                float dsmZ = tileState.DsmTile.Surface[tileXindex, tileYindex];
+                float cmmZ = tileState.DsmTile.CanopyMaxima3[tileXindex, tileYindex];
+                float chmHeight = tileState.DsmTile.CanopyHeight[tileXindex, tileYindex];
+                tileState.CurrentMaximaVector.Add(sourceID, x, y, dsmZ, cmmZ, chmHeight, ringRadiusInCells, maxRingZ, meanRingZ, minRingZ, varianceRingZ);
             }
 
             return true;
@@ -468,9 +474,9 @@ namespace Mars.Clouds.Cmdlets
 
         private class LocalMaximaState
         {
-            public RasterBand<byte> CurrentRadii { get; set; }
+            public RasterBand<byte> CurrentMaximaRaster { get; set; }
             public RasterNeighborhood8<float> CurrentNeighborhood { get; set; }
-            public LocalMaximaVector? CurrentStatistics { get; set; }
+            public LocalMaximaVector? CurrentMaximaVector { get; set; }
             public RasterNeighborhood8<float> ChmNeighborhood { get; private init; }
             public RasterNeighborhood8<float> CmmNeighborhood { get; private init; }
             public RasterNeighborhood8<float> DsmNeighborhood { get; private init; }
@@ -487,8 +493,8 @@ namespace Mars.Clouds.Cmdlets
                 }
 
                 (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileIndex);
-                this.CurrentRadii = maximaRaster.DsmMaxima;
-                this.CurrentStatistics = null;
+                this.CurrentMaximaRaster = maximaRaster.DsmMaxima;
+                this.CurrentMaximaVector = null;
                 this.CurrentNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.SurfaceBandName);
                 this.ChmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
                 this.CmmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyMaximaBandName);

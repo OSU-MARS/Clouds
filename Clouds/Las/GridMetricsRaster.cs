@@ -2746,7 +2746,7 @@ namespace Mars.Clouds.Las
         public override void Write(string rasterPath, bool compress)
         {
             int gdalBandIndex = 0;
-            using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, this.GetBandCount(), DataType.GDT_Float32, compress);
+            using Dataset rasterDataset = this.CreateGdalRaster(rasterPath, this.GetBandCount(), DataType.GDT_Float32, compress);
             this.AcceptedPoints.Write(rasterDataset, ++gdalBandIndex);
             this.ZMax.Write(rasterDataset, ++gdalBandIndex);
             this.ZMean.Write(rasterDataset, ++gdalBandIndex);
@@ -2818,6 +2818,8 @@ namespace Mars.Clouds.Las
             this.ZPCumulative70?.Write(rasterDataset, ++gdalBandIndex);
             this.ZPCumulative80?.Write(rasterDataset, ++gdalBandIndex);
             this.ZPCumulative90?.Write(rasterDataset, ++gdalBandIndex);
+
+            this.FilePath = rasterPath;
         }
     }
 }

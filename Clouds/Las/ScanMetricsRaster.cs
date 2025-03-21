@@ -324,7 +324,7 @@ namespace Mars.Clouds.Las
             // GDAL+GeoTIFF single type constraint: convert all bands to double and write with default no data value
             Debug.Assert(this.GpstimeMin.IsNoData(RasterBand.NoDataDefaultDouble) && this.GpstimeMean.IsNoData(RasterBand.NoDataDefaultDouble) && this.GpstimeMax.IsNoData(RasterBand.NoDataDefaultDouble));
 
-            using Dataset rasterDataset = this.CreateGdalRasterAndSetFilePath(rasterPath, 11, DataType.GDT_Float64, compress);
+            using Dataset rasterDataset = this.CreateGdalRaster(rasterPath, 11, DataType.GDT_Float64, compress);
             this.AcceptedPoints.Write(rasterDataset, 1);
             this.ScanAngleMeanAbsolute.Write(rasterDataset, 2);
             this.NoiseOrWithheld.Write(rasterDataset, 3);
@@ -336,6 +336,8 @@ namespace Mars.Clouds.Las
             this.GpstimeMax.Write(rasterDataset, 9);
             this.EdgeOfFlightLine.Write(rasterDataset, 10);
             this.Overlap.Write(rasterDataset, 11);
+
+            this.FilePath = rasterPath;
         }
     }
 }

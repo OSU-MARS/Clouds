@@ -14,8 +14,8 @@ Get-Dsm -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tile.las
 $tiles = "s042?0w068?0"
 Get-Dsm -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR\$tiles.las" -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM testing" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
-# DSM generation, all on forest and buffer tiles from 3.5 drive
-Get-Dsm -Las ("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3 beta" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
+# DSM generation, all on forest and buffer tiles
+Get-Dsm -Las ("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR", "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles surrounding distance 1") -Dsm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DSM v3" -Dtm "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\DTM" -Snap -Verbose
 
 ## orthoimage generation, single tile
 $tile = "s03480w06540" # "s04200w06810" # "s04230w06810" # "s04020w07050"
@@ -69,6 +69,9 @@ $scanMetrics.Write("D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\metrics\scan metr
 # read headers from .las or .laz files with basic query
 $singleLasFile = Get-LasInfo -Las ([System.IO.Path]::Combine((Get-Location), "PSME LAS 1.4 point type 6.las"))
 $lasTiles = Get-LasInfo -Las "D:\Elliott\GIS\DOGAMI\2021 OLC Coos County\tiles RGB+NIR"
+
+$tileHeaders = ($lasTiles | ForEach-Object {$_}).Header
+$tileHeaders | Export-Csv -Path "tile metadata.csv"
 
 $pointCounts = [long[]](($lasTiles | ForEach-Object {$_}).Header.NumberOfPointRecords)
 $megaPoints = [double[]]$pointCounts
