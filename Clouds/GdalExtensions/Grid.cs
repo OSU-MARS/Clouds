@@ -178,7 +178,7 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         /// <remarks>Does not check CRS.</remarks>
-        public bool IsSameExtentAndSpatialResolution(VirtualRaster vrt)
+        public bool IsSameExtentAndTileResolution(VirtualRaster vrt)
         {
             if ((this.SizeX != vrt.SizeInTilesX) || (this.SizeY != vrt.SizeInTilesY) ||
                 (GridGeoTransform.Equals(this.Transform, vrt.TileTransform) == false))

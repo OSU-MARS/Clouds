@@ -66,7 +66,7 @@ namespace Mars.Clouds.Segmentation
 
         public override bool TryGetBand(string? name, [NotNullWhen(true)] out RasterBand? band)
         {
-            if (String.Equals(this.Classification.Name, name, StringComparison.Ordinal))
+            if ((name == null) || String.Equals(this.Classification.Name, name, StringComparison.Ordinal))
             {
                 band = this.Classification;
                 return true;

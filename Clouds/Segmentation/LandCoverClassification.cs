@@ -12,8 +12,6 @@
         ConiferDeepShadow = 7,
         Hardwood = 8,
         HardwoodShadow = 9,
-        HardwoodDeepShadow = 10,
-
-        MaxValue = HardwoodDeepShadow
+        HardwoodDeepShadow = 10
     }
 }

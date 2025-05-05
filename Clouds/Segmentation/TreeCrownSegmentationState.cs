@@ -29,7 +29,7 @@ namespace Mars.Clouds.Segmentation
         public RasterNeighborhood8<float>? SlopeNeighborhood { get; private set; }
         public string TileName { get; private set; }
         public TreeCrownCostGrid? TreetopCostTile { get; private set; }
-        public GridNeighborhood8<TreetopsGrid, Treetops>? TreetopNeighborhood { get; private set; }
+        public GridNeighborhood8<TreetopsGrid, TreetopsIndexed>? TreetopNeighborhood { get; private set; }
 
         public TreeCrownSegmentationState()
         {

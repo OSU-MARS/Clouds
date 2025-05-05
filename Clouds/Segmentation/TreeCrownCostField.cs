@@ -12,7 +12,7 @@ namespace Mars.Clouds.Segmentation
         //private static readonly float[] RadiusInCells;
 
         public const int CapacityRadius = 31;
-        public const int CapacityXY = 2 * 31 + 1; // must be less than Byte.MaxValue
+        public const int CapacityXY = 2 * 31 + 1; // must be less than Byte.MaxValue, if changing size consider interop consequences with existing segmentation rasters
         public const int Cells = TreeCrownCostField.CapacityXY * TreeCrownCostField.CapacityXY;
 
         private readonly float[] costField;
@@ -518,7 +518,7 @@ namespace Mars.Clouds.Segmentation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int ToCellIndex(int fieldIndexX, int fieldIndexY)
+        public static int ToCellIndex(int fieldIndexX, int fieldIndexY)
         {
             return fieldIndexX + fieldIndexY * TreeCrownCostField.CapacityXY;
         }

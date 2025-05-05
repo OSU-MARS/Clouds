@@ -74,7 +74,7 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        public void Add(string tileName, Treetops treetops, IList<string> classNames)
+        public void Add(string tileName, TreetopsClassified treetops, IList<string> classNames)
         {
             Debug.Assert(this.IsInEditMode && (this.tileFieldIndex >= 0));
             if (classNames.Count < treetops.ClassCounts.GetLength(1))
@@ -158,7 +158,7 @@ namespace Mars.Clouds.Segmentation
             return extent;
         }
 
-        public Treetops GetTreetops(int classCapacity, [NotNull] ref Treetops? treetops)
+        public void GetTreetops([NotNull] ref TreetopsClassified? treetops)
         {
             int treetopCount = (int)this.GetFeatureCount();
             int treetopCapacity = TreetopVector.DefaultCapacityIncrement * (treetopCount / TreetopVector.DefaultCapacityIncrement + 1);
@@ -167,7 +167,7 @@ namespace Mars.Clouds.Segmentation
                 // no need to retain any existing data, so just reallocate rather than extending
                 // Could extend but cost of extending is cost of array reallocation plus cost of copying, which is probably greater than
                 // cost of class allocation plus cost of array allocation.
-                treetops = new(treetopCapacity, xyIndices: false, classCapacity);
+                treetops = new(treetopCapacity);
             }
 
             this.Layer.ResetReading();
@@ -185,8 +185,7 @@ namespace Mars.Clouds.Segmentation
                 treetops.Radius[treetopIndex] = treetop.GetFieldAsDouble(this.radiusFieldIndex);
             }
 
-            treetops.Count = treetops.Capacity;
-            return treetops;
+            treetops.Count = treetopCount;
         }
 
         public void GetTreetops(TreetopsGrid treetopsGrid, Raster surfaceModel)
@@ -201,7 +200,7 @@ namespace Mars.Clouds.Segmentation
                 double x = pointBuffer[0];
                 double y = pointBuffer[1];
                 (int gridIndexX, int gridIndexY) = treetopsGrid.ToGridIndices(x, y);
-                Treetops treetops = treetopsGrid[gridIndexX, gridIndexY];
+                TreetopsIndexed treetops = treetopsGrid[gridIndexX, gridIndexY];
 
                 if (treetops.Count == treetops.Capacity)
                 {

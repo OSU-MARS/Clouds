@@ -4,7 +4,7 @@ using System;
 
 namespace Mars.Clouds.Segmentation
 {
-    public class TreetopsGrid : Grid<Treetops>
+    public class TreetopsGrid : Grid<TreetopsIndexed>
     {
         public const int DefaultCellCapacityInTreetops = 64; // cell size is likely around 0.1 ha => ~640 TPH basic capacity
 
@@ -17,7 +17,7 @@ namespace Mars.Clouds.Segmentation
 
             for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
             {
-                this[cellIndex] = new(TreetopsGrid.DefaultCellCapacityInTreetops, xyIndices: true, classCapacity: 0);
+                this[cellIndex] = new(TreetopsGrid.DefaultCellCapacityInTreetops);
             }
         }
 

@@ -11,6 +11,11 @@ namespace Mars.Clouds.Extensions
             return clone;
         }
 
+        public static T[,] Empty2D<T>()
+        {
+            return EmptyArray2D<T>.Value;
+        }
+
         public static T[] Extend<T>(this T[] array, int newCapacity)
         {
             if (newCapacity <= array.Length)
@@ -34,6 +39,11 @@ namespace Mars.Clouds.Extensions
             T[,] extendedArray = new T[newRowCount, array.GetLength(1)];
             Array.Copy(array, extendedArray, array.Length); // can use Array.Copy() here since number of columns does not change
             return extendedArray;
+        }
+
+        private static class EmptyArray2D<T>
+        {
+            public static readonly T[,] Value = new T[0, 0];
         }
     }
 }

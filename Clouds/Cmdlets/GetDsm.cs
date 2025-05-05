@@ -226,7 +226,7 @@ namespace Mars.Clouds.Cmdlets
                 : base(lasGrid, unpopulatedTileMapForRead, dsm.TileGrid!, unpopulatedTileMapForCreate, unpopulatedTileMapForWrite, dsmPathIsDirectory)
             {
                 Debug.Assert(SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dsm.Crs));
-                if (lasGrid.IsSameExtentAndSpatialResolution(dsm) == false)
+                if (lasGrid.IsSameExtentAndTileResolution(dsm) == false)
                 {
                     throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " with extent (" + lasGrid.GetExtentString() + ") while the DSM tile grid is " + dsm.SizeInTilesX + " x " + dsm.SizeInTilesY + " with extent " + dsm.GetExtentString() + ". Are the LAS and DTM tiles matched?");
                 }

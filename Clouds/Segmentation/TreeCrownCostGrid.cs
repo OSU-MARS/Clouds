@@ -48,7 +48,7 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        private static void CostCell(Treetops cellTreetops, List<TreeCrownCostField> cellCostFields, int dsmNeighborhoodOffsetX, int dsmNeighborhoodOffsetY, TreeCrownSegmentationState segmentationState)
+        private static void CostCell(TreetopsIndexed cellTreetops, List<TreeCrownCostField> cellCostFields, int dsmNeighborhoodOffsetX, int dsmNeighborhoodOffsetY, TreeCrownSegmentationState segmentationState)
         {
             Debug.Assert(segmentationState.DsmNeighborhood != null);
 
@@ -122,7 +122,7 @@ namespace Mars.Clouds.Segmentation
                 throw new ArgumentOutOfRangeException(nameof(treetopCellIndexY), nameof(treetopCellIndexY) + " must be in [ 0, " + (this.SizeY - 2) + "] to indicate an eight-way neighborhood that fully within the cost grid (grid is " + this.SizeX + " by " + this.SizeY + ").");
             }
 
-            GridNeighborhood8<TreetopsGrid, Treetops>? treetopsNeighborhood = segmentationState.TreetopNeighborhood;
+            GridNeighborhood8<TreetopsGrid, TreetopsIndexed>? treetopsNeighborhood = segmentationState.TreetopNeighborhood;
             if (treetopsNeighborhood == null)
             {
                 throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state's treetop neighborhood is missing. Call " + nameof(segmentationState.SetNeighborhoodsAndCellSize) + "() before calling " + nameof(this.EnumerateCostFields) + "().");
@@ -157,42 +157,42 @@ namespace Mars.Clouds.Segmentation
             int dsmNeighborhoodOffsetSouth = treetopCellIndexSouth >= (this.SizeY - 2) ? segmentationState.DsmNeighborhood.Center.SizeY : 0;
             int dsmNeighborhoodOffsetEast = treetopCellIndexEast >= (this.SizeX - 2) ? segmentationState.DsmNeighborhood.Center.SizeX : 0;
             int dsmNeighborhoodOffsetWest = treetopCellIndexWest < 0 ? (segmentationState.DsmNeighborhood.West != null ? -segmentationState.DsmNeighborhood.West.SizeX : Int32.MinValue) : 0;
-            if ((this.currentNeighborhood.Northwest.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexNorth, out Treetops? treetopsNorthwest))
+            if ((this.currentNeighborhood.Northwest.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexNorth, out TreetopsIndexed? treetopsNorthwest))
             {
                 TreeCrownCostGrid.CostCell(treetopsNorthwest, this.currentNeighborhood.Northwest, dsmNeighborhoodOffsetWest, dsmNeighborhoodOffsetNorth, segmentationState);
             }
-            if ((this.currentNeighborhood.North.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexNorth, out Treetops? treetopsNorth))
+            if ((this.currentNeighborhood.North.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexNorth, out TreetopsIndexed? treetopsNorth))
             {
                 TreeCrownCostGrid.CostCell(treetopsNorth, this.currentNeighborhood.North, 0, dsmNeighborhoodOffsetNorth, segmentationState);
             }
-            if ((this.currentNeighborhood.Northeast.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX + 1, treetopCellIndexNorth, out Treetops? treetopsNortheast))
+            if ((this.currentNeighborhood.Northeast.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX + 1, treetopCellIndexNorth, out TreetopsIndexed? treetopsNortheast))
             {
                 TreeCrownCostGrid.CostCell(treetopsNortheast, this.currentNeighborhood.Northeast, dsmNeighborhoodOffsetEast, dsmNeighborhoodOffsetNorth, segmentationState);
             }
 
-            if ((this.currentNeighborhood.West.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexY, out Treetops? treetopsWest))
+            if ((this.currentNeighborhood.West.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexY, out TreetopsIndexed? treetopsWest))
             {
                 TreeCrownCostGrid.CostCell(treetopsWest, this.currentNeighborhood.West, dsmNeighborhoodOffsetWest, 0, segmentationState);
             }
-            if ((this.currentNeighborhood.Center.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexY, out Treetops? treetopsCenter))
+            if ((this.currentNeighborhood.Center.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexY, out TreetopsIndexed? treetopsCenter))
             {
                 // center of neighborhood is always on tile
                 TreeCrownCostGrid.CostCell(treetopsCenter, this.currentNeighborhood.Center, 0, 0, segmentationState);
             }
-            if ((this.currentNeighborhood.East.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexEast, treetopCellIndexY, out Treetops? treetopsEast))
+            if ((this.currentNeighborhood.East.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexEast, treetopCellIndexY, out TreetopsIndexed? treetopsEast))
             {
                 TreeCrownCostGrid.CostCell(treetopsEast, this.currentNeighborhood.East, dsmNeighborhoodOffsetEast, 0, segmentationState);
             }
 
-            if ((this.currentNeighborhood.Southwest.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexSouth, out Treetops? treetopsSouthwest))
+            if ((this.currentNeighborhood.Southwest.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexWest, treetopCellIndexSouth, out TreetopsIndexed? treetopsSouthwest))
             {
                 TreeCrownCostGrid.CostCell(treetopsSouthwest, this.currentNeighborhood.Southwest, dsmNeighborhoodOffsetWest, dsmNeighborhoodOffsetSouth, segmentationState);
             }
-            if ((this.currentNeighborhood.South.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexSouth, out Treetops? treetopsSouth))
+            if ((this.currentNeighborhood.South.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexX, treetopCellIndexSouth, out TreetopsIndexed? treetopsSouth))
             {
                 TreeCrownCostGrid.CostCell(treetopsSouth, this.currentNeighborhood.South, 0, dsmNeighborhoodOffsetSouth, segmentationState);
             }
-            if ((this.currentNeighborhood.Southeast.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexEast, treetopCellIndexSouth, out Treetops? treetopsSoutheast))
+            if ((this.currentNeighborhood.Southeast.Count == 0) && treetopsNeighborhood.TryGetValue(treetopCellIndexEast, treetopCellIndexSouth, out TreetopsIndexed? treetopsSoutheast))
             {
                 TreeCrownCostGrid.CostCell(treetopsSoutheast, this.currentNeighborhood.Southeast, dsmNeighborhoodOffsetEast, dsmNeighborhoodOffsetSouth, segmentationState);
             }

@@ -186,8 +186,8 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (crownTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = crownReadWrite.TilesRead + (crownReadWrite.TilesRead == 1 ? " DSM read, " : " DSMs read, ") +
-                                             crowns.NonNullTileCount + (crowns.NonNullTileCount == 1 ? " tile created, " : " tiles created, ") +
+                progress.StatusDescription = crownReadWrite.TilesRead + (crownReadWrite.TilesRead == 1 ? " treetop tile read, " : " treetop tiles read, ") +
+                                             crowns.NonNullTileCount + (crowns.NonNullTileCount == 1 ? " crown tile created, " : " crown tiles created, ") +
                                              crownReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles " + (this.NoWrite ? "completed (" : "written (") + 
                                              crownTasks.Count + (crownTasks.Count == 1 ? " thread)..." : " threads)...");
                 progress.Update(crownReadWrite.TilesCreated, dsm.NonNullTileCount);
