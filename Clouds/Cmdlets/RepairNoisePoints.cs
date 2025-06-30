@@ -80,14 +80,14 @@ namespace Mars.Clouds.Cmdlets
         {
             const string cmdletName = "Repair-NoisePoints";
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
-            double lasGridUnits = lasGrid.Crs.GetLinearUnits();
+            double lasGridProjectedLinearUnitInM = lasGrid.Crs.GetProjectedLinearUnitInM();
             if (Single.IsNaN(this.HighNoise))
             {
-                this.HighNoise = lasGridUnits == 1.0 ? 100.0F : 400.0F;
+                this.HighNoise = lasGridProjectedLinearUnitInM == 1.0 ? 100.0F : 400.0F;
             }
             if (Single.IsNaN(this.LowNoise))
             {
-                this.LowNoise = lasGridUnits == 1.0 ? -30.0F : -100.0F;
+                this.LowNoise = lasGridProjectedLinearUnitInM == 1.0 ? -30.0F : -100.0F;
             }
 
             // spin up point cloud read and tile worker threads

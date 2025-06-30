@@ -146,9 +146,8 @@ namespace Mars.Clouds.Las
             return (this.Header.PointDataRecordFormat & LazVariableLengthRecord.PointDataFormatMask) == LazVariableLengthRecord.PointDataFormatMask;
         }
 
-        public void RotateExtents(double rotationXYinDegrees)
+        public void RotateExtents(double rotationXYinRadians)
         {
-            double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
 
@@ -233,7 +232,7 @@ namespace Mars.Clouds.Las
             this.Header.MinY = minYrotated;
         }
 
-        public void SetOrigin(double originX, double originY, double originZ)
+        public void SetOriginAndUpdateExtents(double originX, double originY, double originZ)
         {
             // if needed, the origin's precision can be matched to the cloud's scale precision
             // LAStools wants origin and extent doubles are truncated to match the scale but this is not required by the LAS 1.4 R15

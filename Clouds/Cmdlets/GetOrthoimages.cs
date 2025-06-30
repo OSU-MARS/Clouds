@@ -5,6 +5,7 @@ using System.Management.Automation;
 using System.IO;
 using Mars.Clouds.Extensions;
 using System.Threading;
+using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -141,8 +142,8 @@ namespace Mars.Clouds.Cmdlets
         {
             if (this.CellSize < 0.0)
             {
-                double crsLinearUnits = lasGrid.Crs.GetLinearUnits();
-                this.CellSize = crsLinearUnits == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
+                double crsProjectedLinearUnitInM = lasGrid.Crs.GetProjectedLinearUnitInM();
+                this.CellSize = crsProjectedLinearUnitInM == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
             }
 
             int outputTileSizeX = (int)(lasGrid.Transform.CellWidth / this.CellSize);

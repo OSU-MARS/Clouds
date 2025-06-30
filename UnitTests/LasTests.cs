@@ -254,9 +254,9 @@ namespace Mars.Clouds.UnitTests
                 ZQFives = true
             };
             SpatialReference lasSpatialReference = lasTile.GetSpatialReference();
-            float crsLinearUnits = (float)lasSpatialReference.GetLinearUnits();
-            float oneMeterHeightClass = 1.0F / crsLinearUnits;
-            float twoMeterHeightThreshold = 2.0F / crsLinearUnits;
+            float crsProjectedLinearUnitInM = (float)lasSpatialReference.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsProjectedCrs);
+            float oneMeterHeightClass = 1.0F / crsProjectedLinearUnitInM;
+            float twoMeterHeightThreshold = 2.0F / crsProjectedLinearUnitInM;
 
             GridMetricsRaster metricsRasterMonolithic = new(gridCellDefinitions, metricsSettings);
 

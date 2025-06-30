@@ -113,24 +113,24 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points and any extended records from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public void CopyPointsAndExtendedVariableLengthRecords(LasReader reader, LasFile lasFile)
-        {
-            if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
-            {
-                throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasFile.Header.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
-            }
+        //public void CopyPointsAndExtendedVariableLengthRecords(LasReader reader, LasFile lasFile)
+        //{
+        //    if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
+        //    {
+        //        throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasFile.Header.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+        //    }
 
-            // points don't need to be unpacked so both uncompressed .las and compressed .laz points can be copied
-            Span<byte> copyBuffer = stackalloc byte[512];
-            long sourceLasFileSize = reader.BaseStream.Length;
-            while (reader.BaseStream.Position < sourceLasFileSize)
-            {
-                int bytesToRead = (int)Int64.Min(sourceLasFileSize - reader.BaseStream.Position, copyBuffer.Length);
-                reader.BaseStream.ReadExactly(copyBuffer[..bytesToRead]);
+        //    // points don't need to be unpacked so both uncompressed .las and compressed .laz points can be copied
+        //    Span<byte> copyBuffer = stackalloc byte[512];
+        //    long sourceLasFileSize = reader.BaseStream.Length;
+        //    while (reader.BaseStream.Position < sourceLasFileSize)
+        //    {
+        //        int bytesToRead = (int)Int64.Min(sourceLasFileSize - reader.BaseStream.Position, copyBuffer.Length);
+        //        reader.BaseStream.ReadExactly(copyBuffer[..bytesToRead]);
 
-                this.BaseStream.Write(copyBuffer[..bytesToRead]);
-            }
-        }
+        //        this.BaseStream.Write(copyBuffer[..bytesToRead]);
+        //    }
+        //}
 
         public static LasWriter CreateForPointWrite(string lasPath)
         {
@@ -276,7 +276,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public long WriteTransformedPointsWithSourceID(LasReader reader, LasFile lasFile, double rotationXYinDegrees, UInt16 sourceID, bool repairClassification, bool repairReturnNumbers)
+        public LasWriteTransformedResult WriteTransformedAndRepairedPoints(LasReader reader, LasFile lasFile, double rotationXYinRadians, UInt16? sourceID, bool repairClassification, bool repairReturnNumbers)
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
@@ -289,11 +289,14 @@ namespace Mars.Clouds.Las
             int pointRecordLength = lasHeader.PointDataRecordLength; 
             int classificationOffset = pointFormat < 6 ? 15 : 16;
 
-            bool hasRotation = rotationXYinDegrees != 0.0;
-            double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
+            bool hasRotation = rotationXYinRadians != 0.0; // could also check for multiples of 2π but this isn't currently needed
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
 
+            int maxX = Int32.MinValue;
+            int maxY = Int32.MinValue;
+            int minX = Int32.MaxValue;
+            int minY = Int32.MaxValue;
             byte[] pointBuffer = new byte[LasReader.ReadBufferSizeInPoints * pointRecordLength];
             long returnNumbersRepaired = 0;
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
@@ -312,11 +315,28 @@ namespace Mars.Clouds.Las
                         double xScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                         double yScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
 
-                        double xTransformed = xScaled * cosRotationXY - yScaled * sinRotationXY;
-                        double yTransformed = xScaled * sinRotationXY + yScaled * cosRotationXY;
+                        int xTransformed = (int)(xScaled * cosRotationXY - yScaled * sinRotationXY + 0.5);
+                        int yTransformed = (int)(xScaled * sinRotationXY + yScaled * cosRotationXY + 0.5);
 
-                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[0..4], (int)(xTransformed + 0.5));
-                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[4..8], (int)(yTransformed + 0.5));
+                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[0..4], xTransformed);
+                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[4..8], yTransformed);
+
+                        if (xTransformed > maxX)
+                        {
+                            maxX = xTransformed;
+                        }
+                        else if (xTransformed < minX)
+                        {
+                            minX = xTransformed;
+                        }
+                        if (yTransformed > maxY)
+                        {
+                            maxY = yTransformed;
+                        }
+                        else if (yTransformed < minY)
+                        {
+                            minY = yTransformed;
+                        }
                     }
                     if (repairClassification) 
                     {
@@ -374,13 +394,16 @@ namespace Mars.Clouds.Las
 
                     // set source ID
                     // If needed, this can be changed to alter only source IDs which are zero.
-                    if (pointFormat < 6)
+                    if (sourceID.HasValue)
                     {
-                        BinaryPrimitives.WriteUInt16LittleEndian(pointBytes[18..20], sourceID);
-                    }
-                    else
-                    {
-                        BinaryPrimitives.WriteUInt16LittleEndian(pointBytes[20..22], sourceID);
+                        if (pointFormat < 6)
+                        {
+                            BinaryPrimitives.WriteUInt16LittleEndian(pointBytes[18..20], sourceID.Value);
+                        }
+                        else
+                        {
+                            BinaryPrimitives.WriteUInt16LittleEndian(pointBytes[20..22], sourceID.Value);
+                        }
                     }
                     
                     // other possible changes
@@ -392,7 +415,14 @@ namespace Mars.Clouds.Las
                 this.BaseStream.Write(pointBuffer, 0, bytesToRead);
             }
 
-            return returnNumbersRepaired;
+            return new LasWriteTransformedResult()
+            {
+                MaxX = lasHeader.XOffset + lasHeader.XScaleFactor * maxX,
+                MaxY = lasHeader.YOffset + lasHeader.YScaleFactor * maxY,
+                MinX = lasHeader.XOffset + lasHeader.XScaleFactor * minX,
+                MinY = lasHeader.YOffset + lasHeader.YScaleFactor * minY,
+                ReturnNumbersRepaired = returnNumbersRepaired
+            };
         }
 
         public void WriteVariableLengthRecordsAndUserData(LasFile lasFile)

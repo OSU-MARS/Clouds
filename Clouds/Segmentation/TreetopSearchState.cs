@@ -7,7 +7,7 @@ namespace Mars.Clouds.Segmentation
 {
     internal class TreetopSearchState
     {
-        public float CrsLinearUnits { get; private init; }
+        public float CrsProjectedLinearUnitInM { get; private init; }
         public DigitalSurfaceModel Dsm { get; private init; }
         public float CellHeight { get; private init; }
         public float CellWidth { get; private init; }
@@ -25,7 +25,7 @@ namespace Mars.Clouds.Segmentation
         {
             this.Dsm = dsmTile;
 
-            this.CrsLinearUnits = (float)this.Dsm.Crs.GetLinearUnits(); // 1.0 if CRS uses meters, 0.3048 if CRS is in feet
+            this.CrsProjectedLinearUnitInM = (float)this.Dsm.Crs.GetProjectedLinearUnitInM(); // 1.0 if CRS uses meters, 0.3048 if CRS is in feet
             this.CellHeight = MathF.Abs((float)this.Dsm.Transform.CellHeight); // ensure positive cell height values
             this.CellWidth = (float)this.Dsm.Transform.CellWidth;
             this.ChmNeighborhood = chmNeighborhood;
@@ -34,7 +34,7 @@ namespace Mars.Clouds.Segmentation
             this.MinimumCandidateHeight = Single.NaN;
             this.NextTreeID = 1;
 
-            this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsLinearUnits * this.CellHeight));
+            this.EqualHeightPatchCommitInterval = (int)(50.0F / (this.CrsProjectedLinearUnitInM * this.CellHeight));
             this.MostRecentSimilarElevationGroup = null;
             this.TreetopEqualHeightPatches = [];
         }

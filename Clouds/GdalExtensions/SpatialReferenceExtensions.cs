@@ -1,62 +1,55 @@
-﻿using OSGeo.OSR;
+﻿using OSGeo.GDAL;
+using OSGeo.OSR;
 using System;
 
 namespace Mars.Clouds.GdalExtensions
 {
     public static class SpatialReferenceExtensions
     {
-        public static SpatialReference Create(SpatialReference horizontalCrs, SpatialReference verticalCrs) 
+        public static SpatialReference Create(int epsg)
+        {
+            SpatialReference crs = new(String.Empty);
+            CPLErr gdalError = (CPLErr)crs.ImportFromEPSG(epsg);
+            if (gdalError != CPLErr.CE_None)
+            {
+                throw new ArgumentOutOfRangeException(nameof(epsg), "Could not create a spatial reference from EPSG:" + epsg + ". EPSG import failed with GDAL error code " + gdalError + ".");
+            }
+
+            return crs;
+        }
+
+        public static SpatialReference CreateCompound(int horizontalEpsg, int verticalEpsg)
+        {
+            SpatialReference horizontalCrs = SpatialReferenceExtensions.Create(horizontalEpsg);
+            SpatialReference verticalCrs = SpatialReferenceExtensions.Create(verticalEpsg);
+            return SpatialReferenceExtensions.CreateCompound(horizontalCrs, verticalCrs);
+        }
+
+        /// <summary>
+        /// Create a compound coordinate system.
+        /// </summary>
+        /// <remarks>
+        /// No matching constraint is placed on the horizontal and vertical units as callers require an ability to 
+        /// create inconsistent coordinate systems.
+        /// </remarks>
+        public static SpatialReference CreateCompound(SpatialReference horizontalCrs, SpatialReference verticalCrs) 
         {
             // SetCompoundCS() passes through to proj_create_compound_crs()
             // https://github.com/OSGeo/gdal/blob/master/ogr/ogrspatialreference.cpp
-            // Unclear where source for proj_create_compound_crs() is, so check coordinate systems for unit consistency here.
-            double horizontalUnits = horizontalCrs.GetLinearUnits();
-            double verticalUnits = verticalCrs.GetLinearUnits();
-            if (horizontalUnits != verticalUnits) 
-            {
-                throw new NotSupportedException("Horizontal coordinate system has units of " + horizontalUnits + " m while vertical coordinate system's units are " + verticalUnits + " m. Such mismatched compound coordinate systems are not currently supported.");
-            }
-
+            // Unclear where source for proj_create_compound_crs().
             SpatialReference compoundCrs = new(String.Empty);
-            if (compoundCrs.SetCompoundCS(horizontalCrs.GetName() + " + " + verticalCrs.GetName(), horizontalCrs, verticalCrs) != 0)
+            CPLErr gdalError = (CPLErr)compoundCrs.SetCompoundCS(horizontalCrs.GetName() + " + " + verticalCrs.GetName(), horizontalCrs, verticalCrs);
+            if (gdalError != CPLErr.CE_None)
             {
-                throw new GdalException("Could not create a compound spatial reference from " + horizontalCrs.GetName() + " and " + verticalCrs.GetName() + ".");
+                throw new GdalException("Creating a compound spatial reference from " + horizontalCrs.GetName() + " and " + verticalCrs.GetName() + " failed with GDAL error code " + gdalError + ".");
             }
 
             return compoundCrs;
         }
 
-        public static SpatialReference Create(int horizontalEpsg, int verticalEpsg) 
+        public static double GetProjectedLinearUnitInM(this SpatialReference crs)
         {
-            SpatialReference horizontalCrs = new(String.Empty);
-            if (horizontalCrs.ImportFromEPSG(horizontalEpsg) != 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(horizontalEpsg), "Could not create a spatial reference horizontal EPSG:" + horizontalEpsg + ".");
-            }
-            SpatialReference verticalCrs = new(String.Empty);
-            if (verticalCrs.ImportFromEPSG(verticalEpsg) != 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(verticalEpsg), "Could not create a spatial reference from vertical EPSG:" + verticalEpsg + ".");
-            }
-
-            return SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
-        }
-
-        public static SpatialReference CreateCompoundCrs(SpatialReference horizontalCrs, SpatialReference verticalCrs)
-        {
-            double horizontalLinearUnits = horizontalCrs.GetLinearUnits();
-            double verticalLinearUnits = verticalCrs.GetLinearUnits();
-            if (horizontalLinearUnits != verticalLinearUnits)
-            {
-                throw new NotSupportedException("Horizontal linear units of " + horizontalLinearUnits + " m for " + horizontalCrs.GetName() + " do not match vertical units of " + verticalLinearUnits + " m for " + verticalCrs.GetName() + ".");
-            }
-
-            return SpatialReferenceExtensions.Create(horizontalCrs, verticalCrs);
-        }
-
-        public static string GetLinearUnitsPlural(this SpatialReference crs)
-        {
-            return crs.GetLinearUnits() == 1.0 ? "m" : "feet";
+            return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsProjectedCrs);
         }
 
         public static string GetWkt(this SpatialReference crs)
@@ -69,11 +62,17 @@ namespace Mars.Clouds.GdalExtensions
             return wkt;
         }
 
+        public static double GetVerticalLinearUnitInM(this SpatialReference crs)
+        {
+            return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsVerticalCrs);
+        }
+
         public static void ImportFromEpsg(this SpatialReference crs, int epsg)
         {
-            if (crs.ImportFromEPSG(epsg) != 0)
+            CPLErr gdalError = (CPLErr)crs.ImportFromEPSG(epsg);
+            if (gdalError != CPLErr.CE_None)
             {
-                throw new ArgumentOutOfRangeException(nameof(epsg), "Failed to import EPSG:" + epsg + " into GDAL spatial reference.");
+                throw new ArgumentOutOfRangeException(nameof(epsg), "Importing EPSG:" + epsg + " into GDAL spatial reference failed with GDAL error code" + gdalError + ".");
             }
         }
 

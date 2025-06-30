@@ -112,9 +112,9 @@ namespace Mars.Clouds.Cmdlets
             GridNullable<List<RasterBandStatistics>>? crownStatistics = this.Vrt ? new(crowns.TileGrid, cloneCrsAndTransform: false) : null;
 
             long crownCount = 0;
-            float crsLinearUnitInM = (float)dsm.Crs.GetLinearUnits();
-            float minimumHeightInCrsUnits = Single.IsNaN(this.MinHeight) ? 1.0F / crsLinearUnitInM : this.MinHeight;
-            float pathCostLimitInCrsUnits = Single.IsNaN(this.MaxPath) ? 20.0F / crsLinearUnitInM : this.MaxPath;
+            float crsProjectedUnitInM = (float)dsm.Crs.GetProjectedLinearUnitInM();
+            float minimumHeightInCrsUnits = Single.IsNaN(this.MinHeight) ? 1.0F / crsProjectedUnitInM : this.MinHeight;
+            float pathCostLimitInCrsUnits = Single.IsNaN(this.MaxPath) ? 20.0F / crsProjectedUnitInM : this.MaxPath;
             ParallelTasks crownTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
                 TreeCrownSegmentationState segmentationState = new()

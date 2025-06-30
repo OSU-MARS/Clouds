@@ -143,9 +143,9 @@ namespace Mars.Clouds.Cmdlets
             }
 
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            float crsLinearUnits = (float)lasGrid.Crs.GetLinearUnits();
-            float oneMeterHeightClass = 1.0F / crsLinearUnits;
-            float twoMeterHeightThreshold = 2.0F / crsLinearUnits; // applied relative to mean ground height in each cell if ground points are classified, used as is if points aren't classified
+            float crsProjectedLinearUnitInM = (float)lasGrid.Crs.GetProjectedLinearUnitInM();
+            float oneMeterHeightClass = 1.0F / crsProjectedLinearUnitInM;
+            float twoMeterHeightThreshold = 2.0F / crsProjectedLinearUnitInM; // applied relative to mean ground height in each cell if ground points are classified, used as is if points aren't classified
 
             bool metricsPathIsDirectory = Directory.Exists(this.Metrics);
             VirtualRaster<GridMetricsRaster> metrics = new(lasGrid);

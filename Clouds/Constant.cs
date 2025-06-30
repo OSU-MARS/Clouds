@@ -10,7 +10,9 @@ namespace Mars.Clouds
 
         public static class Epsg
         {
-            public const int Navd88ft = 8228; // English units
+            public const int Min = 1024;
+            public const int Max = 32767;
+            public const int Navd88ft = 6360; // English units for most use cases, EPSG:8228 is preferred with a few state planes
             public const int Navd88m = 5703; // metric
             public const int Utm10N = 32610;
             public const int Wgs84 = 4326;
@@ -24,6 +26,12 @@ namespace Mars.Clouds
             public const string LasExtension = ".las";
             public const string XlsxExtension = ".xlsx";
             public const string XmlExtension = ".xml";
+        }
+
+        public static class Gdal
+        {
+            public const string TargetLinearUnitsProjectedCrs = "PROJCS";
+            public const string TargetLinearUnitsVerticalCrs = "VERT_CS";
         }
 
         public static class Las

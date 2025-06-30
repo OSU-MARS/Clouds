@@ -33,11 +33,11 @@ namespace Mars.Clouds.Cmdlets
         public double Z { get; set; }
 
         [Parameter(HelpMessage = "EPSG of projected coordinate system to assign to point cloud. Default is 32610 (WGS 84 / UTM zone 10N).")]
-        [ValidateRange(1024, 32767)]
+        [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int HorizontalEpsg { get; set; }
 
         [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters).")]
-        [ValidateRange(1024, 32767)]
+        [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int VerticalEpsg { get; set; }
 
         [Parameter(HelpMessage = "Initial source ID to assign. Incremented for each file found thereafter.")]
@@ -108,10 +108,8 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // reproject point cloud origin from WGS84 to cloud's coordinate system
-            SpatialReference wgs84 = new(String.Empty);
-            wgs84.ImportFromEPSG(Constant.Epsg.Wgs84);
-
-            SpatialReference cloudCrs = SpatialReferenceExtensions.Create(this.HorizontalEpsg, this.VerticalEpsg);
+            SpatialReference wgs84 = SpatialReferenceExtensions.Create(Constant.Epsg.Wgs84);
+            SpatialReference cloudCrs = SpatialReferenceExtensions.CreateCompound(this.HorizontalEpsg, this.VerticalEpsg);
 
             CoordinateTransformation transform = new(wgs84, cloudCrs, new());
             Geometry origin = new(wkbGeometryType.wkbPoint25D);
@@ -142,10 +140,11 @@ namespace Mars.Clouds.Cmdlets
                     LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
 
                     // update cloud extents
-                    double rotationXY = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
-                    if (rotationXY != 0.0)
+                    double rotationXYinDegrees = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
+                    double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
+                    if (rotationXYinRadians != 0.0)
                     {
-                        cloud.RotateExtents(rotationXY); // update extents to match rotation of points below
+                        cloud.RotateExtents(rotationXYinRadians); // update extents to match rotation of points below
                     }
 
                     // translate cloud
@@ -153,7 +152,7 @@ namespace Mars.Clouds.Cmdlets
                     double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
                     double originX = scanAnchorX + nudgeXinCrsUnits;
                     double originY = scanAnchorY + nudgeYinCrsUnits;
-                    cloud.SetOrigin(originX, originY, scanAnchorZ);
+                    cloud.SetOriginAndUpdateExtents(originX, originY, scanAnchorZ);
 
                     // assign cloud coordinate system
                     cloud.SetSpatialReference(cloudCrs);
@@ -164,14 +163,14 @@ namespace Mars.Clouds.Cmdlets
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
 
-                    long returnNumbersRepaired = writer.WriteTransformedPointsWithSourceID(reader, cloud, rotationXY, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
+                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, rotationXYinRadians, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
-                    if (returnNumbersRepaired > 0)
+                    if (writeResult.ReturnNumbersRepaired > 0)
                     {
                         // debatable: should synthetic return numbers flag be set for LAS 1.3+ files if return numbers are, in fact, repaired?
                         // cloud.Header13.GlobalEncoding |= GlobalEncoding.SyntheticReturnNumbers
-                        cloud.Header.IncrementFirstReturnCount(returnNumbersRepaired);
+                        cloud.Header.IncrementFirstReturnCount(writeResult.ReturnNumbersRepaired);
                         writer.WriteHeader(cloud);
                     }
 

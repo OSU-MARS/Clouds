@@ -49,7 +49,7 @@ namespace Mars.Clouds.Segmentation
             // Assumption here is that xy and z units match, which is not necessarily enforced.
             if (Single.IsNaN(tileSearch.MinimumCandidateHeight))
             {
-                tileSearch.MinimumCandidateHeight = 1.5F / tileSearch.CrsLinearUnits; // 1.5 m, 4.92 ft
+                tileSearch.MinimumCandidateHeight = 1.5F / tileSearch.CrsProjectedLinearUnitInM; // 1.5 m, 4.92 ft
             }
 
             // search for treetops in this tile

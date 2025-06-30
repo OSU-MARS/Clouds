@@ -34,11 +34,11 @@ namespace Mars.Clouds.Segmentation
 
         protected override (bool addTreetop, int localMaximaRadiusInCells) FindTreetops(int indexX, int indexY, float dsmZ, float chmHeight, TreetopSearchState searchState)
         {
-            float heightInM = searchState.CrsLinearUnits * chmHeight;
+            float heightInM = searchState.CrsProjectedLinearUnitInM * chmHeight;
             // float searchRadiusInM = 8.59F / (1.0F + MathF.Exp((58.72F - heightInM) / 19.42F)); // logistic regression at 0.025 quantile against boostrap crown radii estimates
             // float searchRadiusInM = 6.0F / (1.0F + MathF.Exp((49.0F - heightInM) / 18.5F)); // manual retune based on segmentation
             float searchRadiusInM = Single.Min(0.055F * heightInM + 0.4F, 5.0F); // manual retune based on segmentation
-            float searchRadiusInCrsUnits = searchRadiusInM / searchState.CrsLinearUnits;
+            float searchRadiusInCrsUnits = searchRadiusInM / searchState.CrsProjectedLinearUnitInM;
 
             // check if point is local maxima
             float candidateZ = this.SearchCanopyHeightModel ? chmHeight : dsmZ;

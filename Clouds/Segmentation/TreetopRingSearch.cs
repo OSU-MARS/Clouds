@@ -30,8 +30,8 @@ namespace Mars.Clouds.Segmentation
         {
             Debug.Assert(searchState.CellHeight == searchState.CellWidth, "Rectangular DSM cells are not currently supported.");
 
-            float heightInM = searchState.CrsLinearUnits * chmHeight;
-            float searchRadiusInCrsUnits = Single.Min(0.045F * heightInM + 0.5F, 4.0F) / searchState.CrsLinearUnits; // max 4 m radius
+            float heightInM = searchState.CrsProjectedLinearUnitInM * chmHeight;
+            float searchRadiusInCrsUnits = Single.Min(0.045F * heightInM + 0.5F, 4.0F) / searchState.CrsProjectedLinearUnitInM; // max 4 m radius
 
             bool dsmCellInSimilarElevationGroup = false;
             double dsmCellSizeInCrsUnits = searchState.CellHeight;

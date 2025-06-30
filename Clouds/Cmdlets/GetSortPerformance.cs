@@ -1,5 +1,6 @@
 ﻿using Mars.Clouds.Cmdlets.Hardware;
 using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if (Double.IsNaN(this.CellSize))
             {
-                this.CellSize = 10.0 / lasGrid.Crs.GetLinearUnits();
+                this.CellSize = 10.0 / lasGrid.Crs.GetProjectedLinearUnitInM();
             }
             double tileSizeInFractionalCellsX = lasGrid.Transform.CellWidth / this.CellSize;
             double tileSizeInFractionalCellsY = Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize;
