@@ -76,7 +76,7 @@ namespace Mars.Clouds.Segmentation
             Feature treetopCandidate = new(this.Definition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
             treetopPosition.AddPoint(x, y, dsmZ - chmHeight);
-            treetopCandidate.SetGeometry(treetopPosition);
+            treetopCandidate.SetGeometryDirectly(treetopPosition);
             treetopCandidate.SetField(0, this.tileName);
             treetopCandidate.SetField(1, this.nextMaximaID++);
             treetopCandidate.SetField(2, sourceID);
@@ -111,7 +111,7 @@ namespace Mars.Clouds.Segmentation
                 throw new NotSupportedException("Rectangular DSM cells are not currently supported.");
             }
 
-            Layer gdalLayer = localMaximaVector.CreateLayer(layerName, dsmTile.Crs, wkbGeometryType.wkbPoint25D, [ "OVERWRITE=YES" ]);
+            Layer gdalLayer = localMaximaVector.CreateLayer(layerName, dsmTile.Crs, wkbGeometryType.wkbPoint25D, [ Constant.Gdal.OverwriteLayer ]);
             gdalLayer.StartTransaction();
 
             // Add() must be kept in sync with field order

@@ -30,6 +30,7 @@ namespace Mars.Clouds
 
         public static class Gdal
         {
+            public const string OverwriteLayer = "OVERWRITE=YES";
             public const string TargetLinearUnitsProjectedCrs = "PROJCS";
             public const string TargetLinearUnitsVerticalCrs = "VERT_CS";
         }

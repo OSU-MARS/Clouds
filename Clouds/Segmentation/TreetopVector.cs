@@ -60,7 +60,7 @@ namespace Mars.Clouds.Segmentation
             Feature treetopCandidate = new(this.Definition);
             Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
             treetopPosition.AddPoint(x, y, elevation);
-            treetopCandidate.SetGeometry(treetopPosition);
+            treetopCandidate.SetGeometryDirectly(treetopPosition);
             treetopCandidate.SetField(this.idFieldIndex, id);
             treetopCandidate.SetField(this.heightFieldIndex, height);
             treetopCandidate.SetField(this.radiusFieldIndex, radius);
@@ -98,7 +98,7 @@ namespace Mars.Clouds.Segmentation
                 Feature treetopCandidate = new(this.Definition);
                 Geometry treetopPosition = new(wkbGeometryType.wkbPoint25D);
                 treetopPosition.AddPoint(treetops.X[treetopIndex], treetops.Y[treetopIndex], treetops.Elevation[treetopIndex]);
-                treetopCandidate.SetGeometry(treetopPosition);
+                treetopCandidate.SetGeometryDirectly(treetopPosition);
                 treetopCandidate.SetField(this.tileFieldIndex, tileName);
                 treetopCandidate.SetField(this.idFieldIndex, treetops.ID[treetopIndex]);
                 treetopCandidate.SetField(this.heightFieldIndex, treetops.Height[treetopIndex]);
@@ -113,7 +113,7 @@ namespace Mars.Clouds.Segmentation
 
         protected static Layer CreateGdalLayer(DataSource source, string layerName, SpatialReference crs, int tileFieldWidth)
         {
-            Layer gdalLayer = source.CreateLayer(layerName, crs, wkbGeometryType.wkbPoint25D, [ "OVERWRITE=YES" ]); // https://gdal.org/drivers/vector/gpkg.html#vector-gpkg or equivalent for creation options
+            Layer gdalLayer = source.CreateLayer(layerName, crs, wkbGeometryType.wkbPoint25D, [ Constant.Gdal.OverwriteLayer ]); // https://gdal.org/drivers/vector/gpkg.html#vector-gpkg or equivalent for creation options
             gdalLayer.StartTransaction();
 
             FieldDefn tileFieldDefinition = new("tile", FieldType.OFTString);

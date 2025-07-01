@@ -6,15 +6,20 @@ using System.Diagnostics;
 namespace Mars.Clouds.GdalExtensions
 {
     // wrap OSGeo.OGR.Layer as GDAL classes implement IDisposable but lack the standard dispose pattern's Dispose(bool)
-    internal class GdalVectorLayer : IDisposable
+    public class GdalVectorLayer : IDisposable
     {
-        protected static int MaximumTransactionSizeInFeatures = 10000;
+        protected static int MaximumTransactionSizeInFeatures { get; private set; }
 
         private bool isInEditMode;
         private bool isDisposed;
 
         protected FeatureDefn Definition { get; init; }
         protected Layer Layer { get; init; }
+
+        static GdalVectorLayer()
+        {
+            GdalVectorLayer.MaximumTransactionSizeInFeatures = 10000;
+        }
 
         protected GdalVectorLayer(Layer gdalLayer)
         {

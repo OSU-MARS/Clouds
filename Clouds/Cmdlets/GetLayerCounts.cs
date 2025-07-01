@@ -9,7 +9,7 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "LayerCounts")]
-    public class GetLayerCount : FileCmdlet
+    public class GetLayerCounts : FileCmdlet
     {
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -23,7 +23,7 @@ namespace Mars.Clouds.Cmdlets
 
         public SwitchParameter Force { get; set; }
 
-        public GetLayerCount()
+        public GetLayerCounts()
         {
             this.cancellationTokenSource = new CancellationTokenSource();
             this.Files = [];

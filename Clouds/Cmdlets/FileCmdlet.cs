@@ -80,5 +80,15 @@ namespace Mars.Clouds.Cmdlets
             }
             return filePaths;
         }
+
+        protected string GetRootedPath(string candidatePath)
+        {
+            if (Path.IsPathRooted(candidatePath))
+            {
+                return candidatePath;
+            }
+
+            return Path.Combine(this.SessionState.Path.CurrentFileSystemLocation.Path, candidatePath);
+        }
     }
 }
