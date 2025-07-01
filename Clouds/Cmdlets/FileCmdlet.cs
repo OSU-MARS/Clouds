@@ -62,7 +62,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     if (String.IsNullOrWhiteSpace(directoryPath))
                     {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Wildcarded file search path '" + fileSearchPath + "' doesn't contain a directory path.");
+                        directoryPath = this.SessionState.Path.CurrentLocation.Path;
                     }
 
                     string[] filePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern, searchDepth);

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mars.Clouds.GdalExtensions;
+using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
@@ -276,7 +277,7 @@ namespace Mars.Clouds.Las
         }
 
         /// <param name="reader">Stream to read points from. Caller must ensure reader is positioned at the first point in the source .las file.</param>
-        public LasWriteTransformedResult WriteTransformedAndRepairedPoints(LasReader reader, LasFile lasFile, double rotationXYinRadians, UInt16? sourceID, bool repairClassification, bool repairReturnNumbers)
+        public LasWriteTransformedResult WriteTransformedAndRepairedPoints(LasReader reader, LasFile lasFile, CoordinateTransform scaledSourceTransform, UInt16? sourceID, bool repairClassification, bool repairReturnNumbers)
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
@@ -289,9 +290,15 @@ namespace Mars.Clouds.Las
             int pointRecordLength = lasHeader.PointDataRecordLength; 
             int classificationOffset = pointFormat < 6 ? 15 : 16;
 
-            bool hasRotation = rotationXYinRadians != 0.0; // could also check for multiples of 2π but this isn't currently needed
+            bool hasRotationXY = scaledSourceTransform.HasRotationXY;
+            bool hasTranslationXY = scaledSourceTransform.HasTranslationXY;
+            bool hasTranslationZ = scaledSourceTransform.HasTranslationZ;
+            double rotationXYinRadians = scaledSourceTransform.RotationXYinRadians;
             double sinRotationXY = Double.Sin(rotationXYinRadians);
             double cosRotationXY = Double.Cos(rotationXYinRadians);
+            double scaledTranslationX = scaledSourceTransform.TranslationX;
+            double scaledTranslationY = scaledSourceTransform.TranslationY;
+            double scaledTranslationZ = scaledSourceTransform.TranslationZ;
 
             int maxX = Int32.MinValue;
             int maxY = Int32.MinValue;
@@ -310,10 +317,10 @@ namespace Mars.Clouds.Las
                 {
                     Span<byte> pointBytes = pointBuffer.AsSpan(batchOffset, pointRecordLength);
 
-                    if (hasRotation)
+                    if (hasTranslationXY || hasRotationXY)
                     {
-                        double xScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
-                        double yScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+                        double xScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]) - scaledTranslationX;
+                        double yScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]) - scaledTranslationY;
 
                         int xTransformed = (int)(xScaled * cosRotationXY - yScaled * sinRotationXY + 0.5);
                         int yTransformed = (int)(xScaled * sinRotationXY + yScaled * cosRotationXY + 0.5);
@@ -337,6 +344,12 @@ namespace Mars.Clouds.Las
                         {
                             minY = yTransformed;
                         }
+                    }
+                    if (hasTranslationZ)
+                    {
+                        double zScaled = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]) - scaledTranslationZ;
+                        int zTransformed = (int)(zScaled + 0.5);
+                        BinaryPrimitives.WriteInt32LittleEndian(pointBytes[8..12], zTransformed);
                     }
                     if (repairClassification) 
                     {

@@ -163,7 +163,11 @@ namespace Mars.Clouds.Cmdlets
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
 
-                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, rotationXYinRadians, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
+                    CoordinateTransform scaledTransformInSourceCrsUnits = new()
+                    {
+                        RotationXYinRadians = rotationXYinRadians
+                    };
+                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, scaledTransformInSourceCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     if (writeResult.ReturnNumbersRepaired > 0)

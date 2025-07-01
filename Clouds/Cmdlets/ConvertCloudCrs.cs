@@ -36,6 +36,9 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int InputVerticalEpsg { get; set; }
 
+        [Parameter(HelpMessage = "By default, each point cloud's origin is rebased to be at its center and then projected into the new coordinate system. This approach maximizes reprojection accuracy by minimizing coordinate system error across the distance between the point cloud's origin and the points' location. Setting this switch disables rebasing, which likely has negligible effects if the origin lies within the point cloud but may introduce several meters of error on fixed-wing point clouds whose origin is tens of kilometers away from a tile.")]
+        public SwitchParameter MaintainOrigin { get; set; }
+
         public ConvertCloudCrs() 
         {
             this.cancellationTokenSource = new();
@@ -115,18 +118,29 @@ namespace Mars.Clouds.Cmdlets
                     double currentBoundingBoxMaxZ = this.InputScale * cloud.Header.MaxZ;
                     transform.TransformBounds(newBoundingBox, currentBoundingBoxMinX, currentBoundingBoxMinY, currentBoundingBoxMaxX, currentBoundingBoxMaxY, densify_pts: 21); // densify_pts = 21 per https://gdal.org/en/stable/doxygen/classOGRCoordinateTransformation.html
 
-                    newXoriginMinMin[0] = this.InputScale * cloud.Header.XOffset;
+                    double currentOriginX = this.InputScale * cloud.Header.XOffset;
+                    double currentOriginY = this.InputScale * cloud.Header.YOffset;
+                    double currentOriginZ = this.InputScale * cloud.Header.ZOffset;
+                    double rebasedOriginX = currentOriginX;
+                    double rebasedOriginY = currentOriginY;
+                    double rebasedOriginZ = currentOriginZ;
+                    if (this.MaintainOrigin == false)
+                    {
+                        rebasedOriginX = 0.5 * (currentBoundingBoxMaxX + currentBoundingBoxMinX);
+                        rebasedOriginY = 0.5 * (currentBoundingBoxMaxY + currentBoundingBoxMinY);
+                        rebasedOriginZ = 0.5 * (currentBoundingBoxMaxZ + currentBoundingBoxMinZ);
+                    }
+
+                    newXoriginMinMin[0] = rebasedOriginX;
                     newXoriginMinMin[1] = currentBoundingBoxMinX;
                     newXoriginMinMin[2] = currentBoundingBoxMinX;
-                    newYoriginMinMax[0] = this.InputScale * cloud.Header.YOffset;
+                    newYoriginMinMax[0] = rebasedOriginY;
                     newYoriginMinMax[1] = currentBoundingBoxMinY;
                     newYoriginMinMax[2] = currentBoundingBoxMaxY;
-                    newZoriginMinMax[0] = this.InputScale * cloud.Header.ZOffset;
+                    newZoriginMinMax[0] = rebasedOriginZ;
                     newZoriginMinMax[1] = currentBoundingBoxMinZ;
                     newZoriginMinMax[2] = currentBoundingBoxMaxZ;
                     transform.TransformPoints(newXoriginMinMin.Length, newXoriginMinMin, newYoriginMinMax, newZoriginMinMax);
-
-                    double newNorthAngleInRadians = 0.5 * Math.PI - Math.Atan2(newYoriginMinMax[2] - newYoriginMinMax[1], newXoriginMinMin[2] - newXoriginMinMin[1]);
 
                     Debug.Assert((newBoundingBox[0] < newBoundingBox[2]) && (newBoundingBox[1] < newBoundingBox[3]));
                     cloud.Header.MinX = newBoundingBox[0]; // min and max x and y are refreshed here for zero rotation
@@ -154,17 +168,32 @@ namespace Mars.Clouds.Cmdlets
                         cloud.Header.ZScaleFactor *= verticalScaleFactorChange;
                     }
 
+                    // find transform between origin and north in current CRS and rebased origin and new north direction in new CRS
+                    // Since orgin rebasing is a translation in the new CRS units and scale the translations need to be found after
+                    // scale factors are updated for changes in units, whether due to -InputScale or differing units between the current
+                    // and new CRSes.
+                    double newNorthAngleInRadians = 0.5 * Math.PI - Math.Atan2(newYoriginMinMax[2] - newYoriginMinMax[1], newXoriginMinMin[2] - newXoriginMinMin[1]);
+                    CoordinateTransform scaledTransformInReprojectedUnits = new()
+                    {
+                        RotationXYinRadians = -newNorthAngleInRadians,
+                        TranslationX = (rebasedOriginX - currentOriginX) / cloud.Header.XScaleFactor,
+                        TranslationY = (rebasedOriginY - currentOriginY) / cloud.Header.YScaleFactor,
+                        TranslationZ = (rebasedOriginZ - currentOriginZ) / cloud.Header.ZScaleFactor
+                    };
+
                     // write out copy of cloud with reprojected origin, scale, and coordinate system
                     string modifiedCloudPath = PathExtensions.AppendToFileName(cloudPath, " reprojected");
                     using LasWriter writer = LasWriter.CreateForPointWrite(modifiedCloudPath);
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
-                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, -newNorthAngleInRadians, sourceID: null, repairClassification: false, repairReturnNumbers: false);
+                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, scaledTransformInReprojectedUnits, sourceID: null, repairClassification: false, repairReturnNumbers: false);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     Debug.Assert(writeResult.ReturnNumbersRepaired == 0);
-                    if (newNorthAngleInRadians != 0.0)
+                    if (scaledTransformInReprojectedUnits.HasRotationXY)
                     {
+                        // update bounding box to exact positions if point cloud was rotated to adjust for differences in north between CRSes
+                        // Bounding box is trivially updated for translations based on TransformBounds() + TransformPoints().
                         cloud.Header.MaxX = writeResult.MaxX;
                         cloud.Header.MaxY = writeResult.MaxY;
                         cloud.Header.MinX = writeResult.MinX;
@@ -180,10 +209,10 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.cancellationTokenSource);
 
-            TimedProgressRecord progress = new("Register-Cloud", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Convert-CloudCrs", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Registered " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...";
+                progress.StatusDescription = "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...";
                 progress.Update(cloudReprojectionsCompleted, cloudPaths.Count);
                 this.WriteProgress(progress);
             }
