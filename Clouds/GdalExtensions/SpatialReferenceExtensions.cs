@@ -52,6 +52,21 @@ namespace Mars.Clouds.GdalExtensions
             return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsProjectedCrs);
         }
 
+        public static double GetVerticalLinearUnitInM(this SpatialReference crs)
+        {
+            return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsVerticalCrs);
+        }
+
+        public static string GetVerticalLinearUnitName(this SpatialReference crs)
+        {
+            return crs.GetVerticalLinearUnitInM() switch
+            {
+                Constant.Gdal.LinearUnitFoot => Constant.Crs.LinearUnitFoot,
+                Constant.Gdal.LinearUnitMeter => Constant.Crs.LinearUnitMeter,
+                _ => throw new NotSupportedException("Unhandled CRS vertical linear unit of " + crs.GetVerticalLinearUnitInM() + "m")
+            };
+        }
+
         public static string GetWkt(this SpatialReference crs)
         {
             if (crs.ExportToWkt(out string wkt, []) != OgrError.NONE)
@@ -60,11 +75,6 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             return wkt;
-        }
-
-        public static double GetVerticalLinearUnitInM(this SpatialReference crs)
-        {
-            return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsVerticalCrs);
         }
 
         public static void ImportFromEpsg(this SpatialReference crs, int epsg)

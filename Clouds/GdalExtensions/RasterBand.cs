@@ -275,11 +275,17 @@ namespace Mars.Clouds.GdalExtensions
         {
         }
 
+        /// <summary>
+        /// Create a new raster band.
+        /// </summary>
+        /// <param name="raster">Raster defining the band's CRS, transform, and size. The newly created band does not become part of this raster.</param>
+        /// <param name="name">Name of the band.</param>
+        /// <param name="initialValue">Whether or not to initialize the band's data and, if so, how. If <see cref="RasterBandInitialValue.NoData"/> specified the band has the default no data value for its cell data type. Otherwise the band is not marked as having a no data value.</param>
         public RasterBand(Raster raster, string name, RasterBandInitialValue initialValue, RasterBandPool? dataBufferPool)
             : this(raster, name, RasterBand<TBand>.GetDefaultNoDataValue(), initialValue, dataBufferPool)
         {
-            // revert no data status but leave default no data value in place in case HasNoDataValue is later set to true
-            this.HasNoDataValue = false;
+            // since a no data value wasn't indicated, infer the caller's no data intent from the initial value requested
+            this.HasNoDataValue = initialValue == RasterBandInitialValue.NoData;
         }
 
         public RasterBand(Raster raster, string name, TBand noDataValue, RasterBandInitialValue initialValue)

@@ -21,18 +21,18 @@ namespace Mars.Clouds.GdalExtensions
         }
 
         protected Raster(Dataset rasterDataset)
-            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), rasterDataset.RasterXSize, rasterDataset.RasterYSize)
+            : this(rasterDataset.GetSpatialRef(), new(rasterDataset), rasterDataset.RasterXSize, rasterDataset.RasterYSize, cloneCrsAndTransform: true)
         {
             this.FilePath = rasterDataset.GetFirstFile(); // for now, assume primary source file is always the first file in the raster's sources
         }
 
         protected Raster(Grid transformAndExtent)
-            : this(transformAndExtent.Crs, transformAndExtent.Transform, transformAndExtent.SizeX, transformAndExtent.SizeY)
+            : this(transformAndExtent.Crs, transformAndExtent.Transform, transformAndExtent.SizeX, transformAndExtent.SizeY, cloneCrsAndTransform: true)
         {
         }
 
-        protected Raster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize)
-            : this(crs, transform, xSize, ySize, cloneCrsAndTransform: true)
+        protected Raster(SpatialReference crs, (GridGeoTransform Transform, int XSize, int YSize) gridTuple, bool cloneCrsAndTransform)
+            : this(crs, gridTuple.Transform, gridTuple.XSize, gridTuple.YSize, cloneCrsAndTransform)
         {
         }
 

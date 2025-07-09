@@ -12,15 +12,12 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Remove, "Points")]
     public class RemovePoints : LasCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "Output locations of filtered point clouds.")]
         [ValidateNotNullOrEmpty]
         public string Filtered { get; set; }
 
         public RemovePoints() 
         {
-            this.cancellationTokenSource = new();
             this.Filtered = String.Empty;
         }
 
@@ -79,7 +76,7 @@ namespace Mars.Clouds.Cmdlets
                     Interlocked.Increment(ref cloudFiltrationsCompleted);
                     Interlocked.Add(ref pointsRemoved, nonNoisePoints.PointsRemoved);
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new("Register-Cloud", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -92,12 +89,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Removed " + pointsRemoved.ToString("n0") + " points from " + sourceCloudPaths.Count + (sourceCloudPaths.Count > 1 ? " clouds in " : " cloud in ") + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

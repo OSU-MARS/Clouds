@@ -13,8 +13,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Treetops")]
     public class GetTreetops : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate treetops within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each file must contain DigitalSurfaceModel's required bands.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
@@ -36,8 +34,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetTreetops()
         {
-            this.cancellationTokenSource = new();
-
             // leave this.DataThreads at default
             this.Dsm = String.Empty; // mandatory
             // leave this.MetadataThreads at default
@@ -50,7 +46,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             const string cmdletName = "Get-Treetops";
-            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.cancellationTokenSource);
+            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.CancellationTokenSource);
             Debug.Assert(dsm.TileGrid != null);
 
             bool treetopsPathIsDirectory = Directory.Exists(this.Treetops);
@@ -80,9 +76,9 @@ namespace Mars.Clouds.Cmdlets
                         continue;
                     }
 
-                    if (treetopSearch.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
+                    if (treetopSearch.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.CancellationTokenSource) == false)
                     {
-                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        Debug.Assert(this.CancellationTokenSource.IsCancellationRequested);
                         return; // reading was aborted
                     }
 
@@ -99,7 +95,7 @@ namespace Mars.Clouds.Cmdlets
                     }
                     mostRecentDsmTileName = tileName;
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -115,12 +111,6 @@ namespace Mars.Clouds.Cmdlets
             string tileOrTiles = dsm.NonNullTileCount > 1 ? "tiles" : "tile";
             this.WriteVerbose(dsm.NonNullTileCount + " " + tileOrTiles + " and " + treetopCandidates.ToString("n0") + " treetop candidates in " + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

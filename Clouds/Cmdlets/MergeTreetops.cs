@@ -22,8 +22,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Merge, "Treetops")]
     public class MergeTreetops : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "Paths to one or more directories containing treetop tiles. Wildcards may be included and, if not specfied, *.gpkg search pattern will be used.")]
         [ValidateNotNullOrEmpty]
         public List<string> Treetops { get; set; }
@@ -42,8 +40,6 @@ namespace Mars.Clouds.Cmdlets
 
         public MergeTreetops()
         {
-            this.cancellationTokenSource = new();
-
             this.Classification = String.Empty;
             this.Crowns = String.Empty;
             this.Merge = "treetops" + Constant.File.GeoPackageExtension;
@@ -102,8 +98,8 @@ namespace Mars.Clouds.Cmdlets
 
             // grid crown and classification virtual rasters
             const string cmdletName = "Merge-Treetops";
-            VirtualRaster<TreeCrownRaster> crowns = this.ReadVirtualRasterMetadata(cmdletName, this.Crowns, TreeCrownRaster.CreateFromBandMetadata, this.cancellationTokenSource);
-            VirtualRaster<LandCoverRaster> classification = this.ReadVirtualRasterMetadata(cmdletName, this.Classification, LandCoverRaster.CreateFromBandMetadata, this.cancellationTokenSource);
+            VirtualRaster<TreeCrownRaster> crowns = this.ReadVirtualRasterMetadata(cmdletName, this.Crowns, TreeCrownRaster.CreateFromBandMetadata, this.CancellationTokenSource);
+            VirtualRaster<LandCoverRaster> classification = this.ReadVirtualRasterMetadata(cmdletName, this.Classification, LandCoverRaster.CreateFromBandMetadata, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(crowns.Crs, classification.Crs) == false)
             {
                 throw new NotSupportedException("Crown virtual raster '" + this.Crowns + "' is in '" + crowns.Crs.GetName() + "' while classification virtual raster '" + this.Classification + "' is in '" + classification.Crs.GetName() + "'.");
@@ -127,9 +123,9 @@ namespace Mars.Clouds.Cmdlets
                 TreetopsClassified? treetops = null;
                 for (int tileMergeIndex = treetopReadWrite.GetNextTileWriteIndexThreadSafe(); tileMergeIndex < treetopReadWrite.MaxTileIndex; tileMergeIndex = treetopReadWrite.GetNextTileWriteIndexThreadSafe())
                 {
-                    if (treetopReadWrite.TryEnsureNeighborhoodRead(tileMergeIndex, crowns, this.cancellationTokenSource) == false)
+                    if (treetopReadWrite.TryEnsureNeighborhoodRead(tileMergeIndex, crowns, this.CancellationTokenSource) == false)
                     {
-                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        Debug.Assert(this.CancellationTokenSource.IsCancellationRequested);
                         return; // reading was abortede
                     }
 
@@ -193,7 +189,7 @@ namespace Mars.Clouds.Cmdlets
                         treetopReadWrite.OnTileWritten(tileIndexX, tileIndexY);
                     }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (loadAndClassifyTreetops.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -230,12 +226,6 @@ namespace Mars.Clouds.Cmdlets
 
             progress.Stopwatch.Stop();
             this.WriteVerbose("Merged " + totalTreetops.ToString("#,#,0") + " treetops from " + treetopReadWrite.TilesWritten + (treetopReadWrite.TilesWritten == 1 ? " tile " : " tiles ") + "in " + progress.Stopwatch.ToElapsedString() + " with " + unmergedTiles + (unmergedTiles == 1 ? " unmerged tile." : " unmerged tiles."));
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private class TilePathAndIsMerged

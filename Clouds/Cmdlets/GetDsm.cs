@@ -20,7 +20,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles. The read capability of the DTM's storage is assumed to be the same as or greater than the DSM's storage.")]
+        [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles. The read capability of the DTMs' storage is assumed to be the same as or greater than the DSM's storage.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dtm { get; set; }
 

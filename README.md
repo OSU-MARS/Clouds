@@ -7,6 +7,8 @@ clouds.
 - `Get-Treetops`: simple unsupervised classification of local maxima as treetop candidates in a digital surface or canopy height model
 - `Get-Crowns`: treetop seeded segmentation of individual tree crowns from a digital surface model using path cost functions
 - `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
+- `Register-Cloud`: set .las files' origin, coordinate system, source ID, and repair LAS compliance issues left by SLAM tools
+- `Export-Slices`: extract mean intensity rasters for stem mapping using points between a minimum and maximum height
 
 The cmdlets are multithreaded at the tile level and attempt to self configure to reasonable defaults. The current configuration logic is 
 nascent and manually setting `-ReadThreads` and `-DataThreads` on cmdlets which offer them may improve performance or be needed to constrain
@@ -42,7 +44,6 @@ manipulating point clouds, working with virtual rasters, and characterizing driv
 - `Get-Vrt`: a [gdalbuildvrt](https://gdal.org/programs/gdalbuildvrt.html) alternative supporting sharded tile sets with fixes for other limitations
 - `Get-LasInfo`: read a .las or .laz file's header
 - `Get-DsmSlopeAspect`: get slope and aspect of a digital surface, canopy maxima, canopy height model
-- `Register-Cloud`: set .las files' origin, coordinate system, and source ID
 - `Convert-CloudCrs`: reproject .las files to a new coordinate system, adding a vertical coordinate system if one is not present
 - `Get-BoundingBoxes`: get a set of .las files' bounding boxes as a polygon layer, useful for indexing tiles
 - `Remove-Points`: remove high noise, low noise, and withheld points from a point cloud
@@ -265,10 +266,10 @@ Also,
   .vrt in a text editor does the same thing).
 - In certain situations GDAL bypasses its callers and writes directly to the console. The common case for this is `ERROR 4` when a malformed 
   dataset (GIS file) is encountered. If error 4 occurs during a raster write Clouds catches it and tries to recreate the raster, which typically 
-  succeeds,but Clouds has no ability to prevent the error from appearing in PowerShell.
+  succeeds,but Clouds has no ability to prevent GDAL's error message from appearing in PowerShell.
 
 ### Dependencies
-Clouds is a .NET 8 assembly which includes C# cmdlets for PowerShell Core. It therefore makes use of both the System.Management.Automation
+Clouds is a .NET 9 assembly which includes C# cmdlets for PowerShell Core. It therefore makes use of both the System.Management.Automation
 nuget package and the system's PowerShell Core installation, creating a requirement the PowerShell Core version be the same or newer than 
 the nuget's. If Visual Studio Code is used for PowerShell Core execution then corresponding updates to Visual Studio Code and its PowerShell 
 extension are required.

@@ -2,11 +2,19 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
+using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
     public class FileCmdlet : PSCmdlet
     {
+        protected CancellationTokenSource CancellationTokenSource { get; private init; }
+
+        protected FileCmdlet()
+        {
+            this.CancellationTokenSource = new();
+        }
+
         protected List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
         {
             ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
@@ -89,6 +97,12 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return Path.Combine(this.SessionState.Path.CurrentFileSystemLocation.Path, candidatePath);
+        }
+
+        protected override void StopProcessing()
+        {
+            this.CancellationTokenSource.Cancel();
+            base.StopProcessing();
         }
     }
 }

@@ -17,8 +17,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "Crowns")]
     public class GetCrowns : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single digital surface model (DSM) raster to locate tree crowns within, 2) wildcarded path to a set of DSM tiles to process, or 3) path to a directory of DSM GeoTIFF files (.tif extension) to process. Each file must contain DigitalSurfaceModel's required bands.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
@@ -66,8 +64,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetCrowns()
         {
-            this.cancellationTokenSource = new();
-
             this.AboveTopPenalty = 2.0F;
             this.CompressRasters = false;
             this.Crowns = String.Empty;
@@ -89,7 +85,7 @@ namespace Mars.Clouds.Cmdlets
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
                 return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary | DigitalSurfaceModelBands.DsmSlope | DigitalSurfaceModelBands.DsmAspect);
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
             bool treetopsPathIsDirectory = Directory.Exists(this.Treetops);
             bool crownsPathIsDirectory = GdalCmdlet.ValidateOrCreateOutputPath(this.Crowns, dsm, nameof(this.Dsm), nameof(this.Crowns));
             if (dsm.NonNullTileCount > 1)
@@ -127,7 +123,7 @@ namespace Mars.Clouds.Cmdlets
                 };
                 while (crownReadWrite.TileWritesInitiated < dsm.NonNullTileCount)
                 {
-                    crownReadWrite.TryWriteCompletedTiles(this.cancellationTokenSource, crownStatistics);
+                    crownReadWrite.TryWriteCompletedTiles(this.CancellationTokenSource, crownStatistics);
 
                     // if all available tiles are written and tiles remain, load next DSM neighborhood and create next crown tile
                     for (int tileCreateIndex = crownReadWrite.GetNextTileCreateIndexThreadSafe(); tileCreateIndex < crownReadWrite.MaxTileIndex; tileCreateIndex = crownReadWrite.GetNextTileCreateIndexThreadSafe())
@@ -139,9 +135,9 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         // assist in treetop and DSM read until neighborhood complete or no more tiles left to read
-                        if (crownReadWrite.TryEnsureNeighborhoodRead(tileCreateIndex, dsm, this.cancellationTokenSource) == false)
+                        if (crownReadWrite.TryEnsureNeighborhoodRead(tileCreateIndex, dsm, this.CancellationTokenSource) == false)
                         {
-                            Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                            Debug.Assert(this.CancellationTokenSource.IsCancellationRequested);
                             return; // reading was aborted
                         }
 
@@ -165,7 +161,7 @@ namespace Mars.Clouds.Cmdlets
                         // Not currently implemented: treetop addition and removal
                         segmentationState.SetNeighborhoodsAndCellSize(dsm, treetops, tileName, tileIndexX, tileIndexY, this.DsmBand);
                         crownTile.SegmentCrowns(segmentationState);
-                        if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                         {
                             return;
                         }
@@ -181,7 +177,7 @@ namespace Mars.Clouds.Cmdlets
                         break;
                     }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (crownTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -205,12 +201,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Delineated " + crownCount.ToString("n0") + " crowns within " + (dsm.NonNullTileCount > 1 ? dsm.NonNullTileCount + " tiles" : "one tile") + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanCrownsPerTile.ToString("n0") + " crowns/tile).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource?.Cancel();
-            base.StopProcessing();
         }
 
         private class TreeCrownReadCreateWriteStreaming : TileReadCreateWriteStreaming<GridNullable<DigitalSurfaceModel>, DigitalSurfaceModel, TreeCrownRaster>

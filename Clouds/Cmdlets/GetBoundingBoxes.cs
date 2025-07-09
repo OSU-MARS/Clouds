@@ -15,8 +15,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "BoundingBoxes")]
     public class GetBoundingBoxes : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, HelpMessage = "Point clouds whose bounding boxes will be placed in the output bounding box layer.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
@@ -34,8 +32,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetBoundingBoxes()
         {
-            this.cancellationTokenSource = new();
-
             this.Bounds = String.Empty;
             this.BoundsLayer = "point cloud bounding boxes";
             this.Las = [];
@@ -92,8 +88,13 @@ namespace Mars.Clouds.Cmdlets
                     {
                         boundingBoxLayer.Add(cloudName, cloud.Header.MinX, cloud.Header.MinY, cloud.Header.MaxX, cloud.Header.MaxY);
                     }
+
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
+                    {
+                        break;
+                    }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new("Get-BoundingBoxes", "Read " + boundingBoxReadsCompleted + " of " + cloudPaths.Count + " bounding boxes...");
             while (boundsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -115,12 +116,6 @@ namespace Mars.Clouds.Cmdlets
             }
 
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

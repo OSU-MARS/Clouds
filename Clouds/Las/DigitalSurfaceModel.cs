@@ -63,7 +63,7 @@ namespace Mars.Clouds.Las
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
         public DigitalSurfaceModel(string dsmPrimaryFilePath, LasFile lasFile, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
-            : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY)
+            : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY, cloneCrsAndTransform: true)
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {

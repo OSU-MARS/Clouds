@@ -10,8 +10,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommunications.Read, "Files")]
     public class ReadFiles : FileCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, HelpMessage = "List of directories or wildcarded file paths to read files from.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Files { get; set; }
@@ -31,8 +29,6 @@ namespace Mars.Clouds.Cmdlets
 
         public ReadFiles()
         {
-            this.cancellationTokenSource = new();
-
             this.Duration = TimeSpan.FromMinutes(10.0);
             this.Threads = 1;
             this.Files = [];
@@ -53,7 +49,7 @@ namespace Mars.Clouds.Cmdlets
                 while (durationElapsedOrFaulted == false)
                 {
                     int fileIndex = Interlocked.Increment(ref fileReadIndex) % filePathsToRead.Count;
-                    if (durationElapsedOrFaulted || this.cancellationTokenSource.IsCancellationRequested || this.Stopping)
+                    if (durationElapsedOrFaulted || this.CancellationTokenSource.IsCancellationRequested || this.Stopping)
                     {
                         return;
                     }
@@ -86,7 +82,7 @@ namespace Mars.Clouds.Cmdlets
 
                     Interlocked.Add(ref totalBytesRead, fileBytesRead);
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             float gibibytesRead;
             TimedProgressRecord progress = new("Read-Files", "placeholder");
@@ -120,12 +116,6 @@ namespace Mars.Clouds.Cmdlets
             float gigabytesPerSecond = gigabytesRead / (float)progress.Stopwatch.Elapsed.TotalSeconds;
             this.WriteVerbose(gibibytesRead.ToString("0.0") + " GiB read in " + progress.Stopwatch.ToElapsedString() + " by " + readFiles.Count + " threads (" + gibibytesPerSecond.ToString("0.00") + " GiB/s, " + gigabytesPerSecond.ToString("0.00") + " GB/s).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

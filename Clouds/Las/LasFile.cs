@@ -74,6 +74,51 @@ namespace Mars.Clouds.Las
         //    }
         //}
 
+        /// <summary>
+        /// Get grid spanning the point cloud with boundaries that have reasonably round units in the CRS. Most commonly used for rasterization.
+        /// </summary>
+        /// <remarks>
+        /// Currently a simple, initial implementation is used which uses a grid placement frame that's the CRS unit or a power of 10 thereof
+        /// (e.g. 1, 10, 100, 1000, ... m). If the frame size is an integer multiple of the cell size (e.g. 5, 10, 25, or 50 cm cells in a 1 m
+        /// frame) then different point clouds' grids will end up aligned. If the frame is not a multiple (e.g. 30 cm cells in a 1 m frame) then 
+        /// different clouds' grids are likely to often be offset from each other.
+        /// </remarks>
+        public (GridGeoTransform Transform, int XSize, int YSize) GetSizeSnappedGrid(double cellSizeInCrsUnits, double trimInCrsUnits)
+        {
+            if (cellSizeInCrsUnits <= 0.0F)
+            {
+                throw new ArgumentOutOfRangeException("Cell size of " + cellSizeInCrsUnits + " " + this.GetSpatialReference().GetLinearUnitsName() + " is not a positive number.");
+            }
+
+            double alignmentScale = 1.0;
+            while (alignmentScale < cellSizeInCrsUnits)
+            {
+                alignmentScale *= 10.0;
+            }
+
+            double cloudMinX = this.Header.MinX + trimInCrsUnits;
+            double floorX = alignmentScale * Double.Floor(cloudMinX / alignmentScale);
+            double gridMinX = floorX + cellSizeInCrsUnits * Double.Floor((cloudMinX - floorX) / cellSizeInCrsUnits);
+
+            double cloudMaxX = this.Header.MaxX - trimInCrsUnits;
+            double ceilingX = alignmentScale * Double.Ceiling(cloudMaxX / alignmentScale);
+            double gridMaxX = ceilingX - cellSizeInCrsUnits * Double.Floor((ceilingX - cloudMaxX) / cellSizeInCrsUnits);
+
+            int xSize = (int)Math.Ceiling((gridMaxX - gridMinX) / cellSizeInCrsUnits);
+
+            double cloudMaxY = this.Header.MaxY - trimInCrsUnits;
+            double ceilingY = alignmentScale * Double.Ceiling(cloudMaxY / alignmentScale);
+            double gridMaxY = ceilingY - cellSizeInCrsUnits * Double.Floor((ceilingY - cloudMaxY) / cellSizeInCrsUnits);
+
+            double cloudMinY = this.Header.MinY + trimInCrsUnits;
+            double floorY = alignmentScale * Double.Floor(cloudMinY / alignmentScale);
+            double gridMinY = floorY + cellSizeInCrsUnits * Double.Floor((cloudMinY - floorY) / cellSizeInCrsUnits);
+
+            int ySize = (int)Math.Ceiling((gridMaxY - gridMinY) / cellSizeInCrsUnits);
+
+            return (new(gridMinX, gridMaxY, cellSizeInCrsUnits, -cellSizeInCrsUnits), xSize, ySize);
+        }
+
         //public virtual string GetExtentString()
         //{
         //    return this.Header.MinX + ", " + this.Header.MaxX + ", " + this.Header.MinY + ", " + this.Header.MaxY;

@@ -85,10 +85,16 @@ namespace Mars.Clouds.Las
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryToOnGridIndices(ReadOnlySpan<byte> pointBytes, out Int64 xIndex, out Int64 yIndex)
         {
+            return this.TryToOnGridIndices(BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]), BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]), out xIndex, out yIndex);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryToOnGridIndices(int pointX, int pointY, out Int64 xIndex, out Int64 yIndex)
+        {
             Debug.Assert(this.cellSizeYscaled < 0);
 
-            Int64 lasXscaled = LasToGridTransform.FixedPointScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
-            Int64 lasYscaled = LasToGridTransform.FixedPointScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+            Int64 lasXscaled = LasToGridTransform.FixedPointScale * pointX;
+            Int64 lasYscaled = LasToGridTransform.FixedPointScale * pointY;
 
             Int64 gridXscaled = lasXscaled - this.gridOriginXscaled;
             Int64 gridYscaled = lasYscaled - this.gridOriginYscaled;

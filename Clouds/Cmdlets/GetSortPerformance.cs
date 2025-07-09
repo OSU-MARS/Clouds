@@ -13,8 +13,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "SortPerformance")]
     public class GetSortPerformance : LasTilesCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(HelpMessage = "List of sort sizes to benchmark. Each tiles' points' z and intensity values are concatenated in grid metrics cell order and the combined list is then sequentially chunked by each sort size. Chunks are sorted until no full size chunk remains and the time to sort all of the chunks is added to total time reported for the sort size.")]
         [ValidateNotNullOrEmpty]
         [ValidateRange(0, Int32.MaxValue)]
@@ -34,8 +32,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetSortPerformance()
         {
-            this.cancellationTokenSource = new();
-
             this.CellSize = Double.NaN;
             this.Iterations = 100;
             this.SortSizes = [ 128, 256, 384, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072 ];
@@ -212,7 +208,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     totalSortTimings.Add(sortTimings);
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
             TimedProgressRecord sortProgress = new(cmdletName, sortsCompleted + " of " + totalSorts + " sort sizes on " + lasGrid.NonNullCells + (lasGrid.NonNullCells > 1 ? " point clouds..." : " point cloud..."));
@@ -228,12 +224,6 @@ namespace Mars.Clouds.Cmdlets
             sortProgress.Stopwatch.Stop();
             this.WriteVerbose("Timed " + sortsCompleted + " sort sizes over " + lasGrid.NonNullCells + (lasGrid.NonNullCells > 1 ? " point clouds in " : " point cloud in ") + sortProgress.Stopwatch.ToElapsedString() + ": " + totalSortTimings.AcceptedPoints.ToString("n0") + " points in " + totalSortTimings.GridMetricsCells.ToString("n0") + " cells (" + ((float)totalSortTimings.AcceptedPoints / (float)totalSortTimings.GridMetricsCells).ToString("0") + " points/cell).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            base.StopProcessing();
-            this.cancellationTokenSource.Cancel();
         }
 
         public class SortTimings

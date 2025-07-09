@@ -10,7 +10,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsDiagnostic.Repair, "NoisePoints")]
     public class RepairNoisePoints : LasTilesCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
         private RepairNoiseReadWrite? tileChecks;
 
         [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles.")]
@@ -31,7 +30,6 @@ namespace Mars.Clouds.Cmdlets
 
         public RepairNoisePoints()
         {
-            this.cancellationTokenSource = new();
             this.tileChecks = null;
 
             this.Dtm = String.Empty;
@@ -56,7 +54,7 @@ namespace Mars.Clouds.Cmdlets
                 // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
                 // the metrics task has faulted and the queue is full. (Locking could be used to remove the race condition
                 // entirely, but currently seems unnecessary as this appears to be an edge case.)
-                if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                 {
                     break;
                 }
@@ -113,12 +111,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.CancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private class RepairNoiseReadWrite : TileRead

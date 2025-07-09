@@ -11,8 +11,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "LayerCounts")]
     public class GetLayerCounts : FileCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, HelpMessage = "List of directories or wildcarded file paths to read files from.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Files { get; set; }
@@ -25,7 +23,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetLayerCounts()
         {
-            this.cancellationTokenSource = new CancellationTokenSource();
             this.Files = [];
             this.MetadataThreads = Environment.ProcessorCount;
         }
@@ -48,15 +45,9 @@ namespace Mars.Clouds.Cmdlets
                     string layerName = layer.GetName();
                     layer.GetFeatureCount(force: 0);
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

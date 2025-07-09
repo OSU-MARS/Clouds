@@ -8,6 +8,12 @@ namespace Mars.Clouds
         public static readonly TimeSpan DefaultProgressInterval = TimeSpan.FromSeconds(1.5);
         public const float Sqrt2 = 1.41421356237F;
 
+        public static class Crs
+        {
+            public const string LinearUnitFoot = "ft";
+            public const string LinearUnitMeter = "m";
+        }
+
         public static class Epsg
         {
             public const int Min = 1024;
@@ -30,6 +36,8 @@ namespace Mars.Clouds
 
         public static class Gdal
         {
+            public const double LinearUnitFoot = 0.3048;
+            public const double LinearUnitMeter = 1.0;
             public const string OverwriteLayer = "OVERWRITE=YES";
             public const string TargetLinearUnitsProjectedCrs = "PROJCS";
             public const string TargetLinearUnitsVerticalCrs = "VERT_CS";

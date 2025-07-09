@@ -7,15 +7,12 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
-using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "LocalMaxima")]
     public class GetLocalMaxima : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(HelpMessage = "Whether or not to compress output rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
@@ -33,8 +30,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetLocalMaxima() 
         {
-            this.cancellationTokenSource = new();
-
             this.CompressRasters = false;
             this.Dsm = String.Empty;
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
@@ -127,7 +122,7 @@ namespace Mars.Clouds.Cmdlets
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
                 return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary | DigitalSurfaceModelBands.SourceIDSurface);
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
             Debug.Assert(dsm.TileGrid != null);
 
             bool localMaximaPathIsDirectory = GdalCmdlet.ValidateOrCreateOutputPath(this.LocalMaxima, dsm, nameof(this.Dsm), nameof(this.LocalMaxima));
@@ -156,9 +151,9 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // assist in read until neighborhood complete or no more tiles left to read
-                    if (maximaReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
+                    if (maximaReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.CancellationTokenSource) == false)
                     {
-                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        Debug.Assert(this.CancellationTokenSource.IsCancellationRequested);
                         return; // reading was aborted
                     }
 
@@ -184,7 +179,7 @@ namespace Mars.Clouds.Cmdlets
                         // DSM is default neighborhood
                         dsmMaximaFound = this.FindLocalMaxima(tileState);
                     }
-                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -198,7 +193,7 @@ namespace Mars.Clouds.Cmdlets
                         tileState.CurrentNeighborhood = tileState.CmmNeighborhood;
                         cmmMaximaFound = this.FindLocalMaxima(tileState);
                     }
-                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -212,7 +207,7 @@ namespace Mars.Clouds.Cmdlets
                         tileState.CurrentNeighborhood = tileState.ChmNeighborhood;
                         chmMaximaFound = this.FindLocalMaxima(tileState);
                     }
-                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -229,7 +224,7 @@ namespace Mars.Clouds.Cmdlets
                         chmMaximaTotal += chmMaximaFound;
                     }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+ " + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)..."));
             this.WriteProgress(progress);
@@ -249,12 +244,6 @@ namespace Mars.Clouds.Cmdlets
             progress.Stopwatch.Stop();
             this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.NonNullTileCount + " " + (dsm.NonNullTileCount > 1 ? "tiles" : "tile") + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " DSM maxima/tile).");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
 
         private static bool TryGetLocalMaximaRadiusAndStatistics(int tileXindex, int tileYindex, bool hasPreviousSurfaceZ, float previousSurfaceZ, float surfaceZ, bool hasNextSurfaceZ, float nextSurfaceZ, LocalMaximaState tileState)

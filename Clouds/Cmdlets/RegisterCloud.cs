@@ -14,8 +14,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsLifecycle.Register, "Cloud")]
     public class RegisterCloud : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to set origin and coordinate system of.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
@@ -58,19 +56,20 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(-100.0F, 100.0F)]
         public double[] NudgeY { get; set; }
 
-        [Parameter(HelpMessage = "Fallback date to use if .las header is missing year or day of year information.")]
+        [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
         public DateOnly? FallbackDate { get; set; }
+
+        [Parameter(HelpMessage = "Set x and y ranges in header to actual point extents (Faro Zeb Horizon, possibly FJ Dynamics).")]
+        public SwitchParameter RepairBoundsXY { get; set; }
 
         [Parameter(HelpMessage = "Change never classified points to unclassified and unclassified points to ground (FJ Dynamics Trion Model).")]
         public SwitchParameter RepairClassification { get; set; }
 
-        [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Zeb Horizon, FJ Dynamics Trion S1) to single returns and return number 1.")]
+        [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Zeb Horizon, FJ Dynamics P1 and S1) to single returns and return number 1.")]
         public SwitchParameter RepairReturn { get; set; }
 
         public RegisterCloud()
         {
-            this.cancellationTokenSource = new();
-
             this.Las = [];
             this.Lat = Double.NaN;
             this.Long = Double.NaN;
@@ -148,6 +147,7 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // translate cloud
+                    // BUGBUG: bounding box is not updated for rotation
                     double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
                     double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
                     double originX = scanAnchorX + nudgeXinCrsUnits;
@@ -170,11 +170,41 @@ namespace Mars.Clouds.Cmdlets
                     LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, scaledTransformInSourceCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
+                    bool updateHeader = false;
+                    if (this.RepairBoundsXY)
+                    {
+                        if ((Double.IsNaN(writeResult.MinX) == false) && (cloud.Header.MinX != writeResult.MinX))
+                        {
+                            cloud.Header.MinX = writeResult.MinX;
+                            updateHeader = true;
+                        }
+                        if ((Double.IsNaN(writeResult.MaxX) == false) && (cloud.Header.MaxX != writeResult.MaxX))
+                        {
+                            cloud.Header.MaxX = writeResult.MaxX;
+                            updateHeader = true;
+                        }
+                        if ((Double.IsNaN(writeResult.MinY) == false) && (cloud.Header.MinY != writeResult.MinY))
+                        {
+                            cloud.Header.MinY = writeResult.MinY;
+                            updateHeader = true;
+                        }
+                        if ((Double.IsNaN(writeResult.MaxY) == false) && (cloud.Header.MaxY != writeResult.MaxY))
+                        {
+                            cloud.Header.MaxY = writeResult.MaxY;
+                            updateHeader = true;
+                        }
+                    }
+
                     if (writeResult.ReturnNumbersRepaired > 0)
                     {
                         // debatable: should synthetic return numbers flag be set for LAS 1.3+ files if return numbers are, in fact, repaired?
                         // cloud.Header13.GlobalEncoding |= GlobalEncoding.SyntheticReturnNumbers
                         cloud.Header.IncrementFirstReturnCount(writeResult.ReturnNumbersRepaired);
+                        updateHeader = true;
+                    }
+
+                    if (updateHeader)
+                    {
                         writer.WriteHeader(cloud);
                     }
 
@@ -184,7 +214,7 @@ namespace Mars.Clouds.Cmdlets
                         break;
                     }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new("Register-Cloud", "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false) 
@@ -195,12 +225,6 @@ namespace Mars.Clouds.Cmdlets
             }
 
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource.Cancel();
-            base.StopProcessing();
         }
     }
 }

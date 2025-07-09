@@ -47,7 +47,7 @@ namespace Mars.Clouds.Las
 
         // constructor from point cloud tile and cell size for accumulation of mean point RGB[+NIR] intensity values in pixels
         public ImageRaster(SpatialReference crs, GridGeoTransform transform, int xSize, int ySize, bool includeNearInfrared)
-            : base(crs, transform, xSize, ySize)
+            : base(crs, transform, xSize, ySize, cloneCrsAndTransform: true)
         {
             this.nearInfraredInUse = includeNearInfrared;
 

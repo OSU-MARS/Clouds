@@ -83,8 +83,8 @@ namespace Mars.Clouds.Cmdlets
                     string tileName = Tile.GetName(lasTile.FilePath);
                     string imageTilePath = imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
                     imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY, imageTilePath);
-                    using LasReader pointReader = lasTile.CreatePointReader(unbuffered: this.Unbuffered, enableAsync: false);
-                    pointReader.ReadPointsToImage(lasTile, imageTile, ref pointReadBuffer);
+                    using LasReader reader = lasTile.CreatePointReader(unbuffered: this.Unbuffered, enableAsync: false);
+                    reader.ReadPointsToImage(lasTile, imageTile, ref pointReadBuffer);
                     readSemaphore.Release();
                     imageReadWrite.IncrementTilesReadThreadSafe();
 

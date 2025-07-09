@@ -13,8 +13,6 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "DsmSlopeAspect")]
     public class GetDsmSlopeAspect : GdalCmdlet
     {
-        private readonly CancellationTokenSource cancellationTokenSource;
-
         [Parameter(Mandatory = true, Position = 0, HelpMessage = "1) path to a single surface model (DSM, DTM, CHM...) to calculate slope and aspect of, 2) wildcarded path to a set of surface tiles to process, or 3) path to a directory of GeoTIFF files (.tif extension) to process. Each tile must contain DigitalSurfaceModel's required bands.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
@@ -36,8 +34,6 @@ namespace Mars.Clouds.Cmdlets
 
         public GetDsmSlopeAspect()
         {
-            this.cancellationTokenSource = new();
-
             this.CmmBand = DigitalSurfaceModel.CanopyMaximaBandName;
             this.Dsm = String.Empty; // mandatory
             this.DsmBand = DigitalSurfaceModel.SurfaceBandName;
@@ -48,7 +44,7 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             const string cmdletName = "Get-DsmSlopeAspect";
-            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.cancellationTokenSource);
+            VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.CancellationTokenSource);
             Debug.Assert(dsm.TileGrid != null);
 
             GridNullable<List<RasterBandStatistics>>? slopeAspectStatistics = this.Vrt ? new(dsm.TileGrid, cloneCrsAndTransform: false) : null;
@@ -66,9 +62,9 @@ namespace Mars.Clouds.Cmdlets
 
                     // assist in read until neighborhood complete or no more tiles left to read
                     // Tiles are created with only primary DSM bands so that only primary band data is read.
-                    if (slopeAspectReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.cancellationTokenSource) == false)
+                    if (slopeAspectReadWrite.TryEnsureNeighborhoodRead(tileWriteIndex, dsm, this.CancellationTokenSource) == false)
                     {
-                        Debug.Assert(this.cancellationTokenSource.IsCancellationRequested);
+                        Debug.Assert(this.CancellationTokenSource.IsCancellationRequested);
                         return; // reading was aborted
                     }
 
@@ -82,7 +78,7 @@ namespace Mars.Clouds.Cmdlets
                         dsmTile.EnsureSupportingBandsCreated(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.RasterBandPool);
                     }
                     dsmTile.CalculateSlopeAndAspect(dsmNeighborhood, cmmNeighborhood);
-                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
@@ -105,12 +101,12 @@ namespace Mars.Clouds.Cmdlets
                         dsmTile.ReturnBandData(DigitalSurfaceModelBands.SlopeAspect, slopeAspectReadWrite.RasterBandPool);
                         slopeAspectReadWrite.OnTileWritten(tileIndexX, tileIndexY);
                     }
-                    if (this.Stopping || this.cancellationTokenSource.IsCancellationRequested)
+                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
                     }
                 }
-            }, this.cancellationTokenSource);
+            }, this.CancellationTokenSource);
 
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (slopeAspectTasks.WaitAll(Constant.DefaultProgressInterval) == false)
@@ -142,12 +138,6 @@ namespace Mars.Clouds.Cmdlets
             string tileOrTiles = dsm.NonNullTileCount > 1 ? "tiles" : "tile";
             this.WriteVerbose("Found slope and aspect in " + dsm.NonNullTileCount + " " + tileOrTiles + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + ".");
             base.ProcessRecord();
-        }
-
-        protected override void StopProcessing()
-        {
-            this.cancellationTokenSource?.Cancel();
-            base.StopProcessing();
         }
     }
 }

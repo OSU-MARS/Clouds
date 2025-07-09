@@ -1,12 +1,12 @@
-﻿using System;
+﻿using Mars.Clouds.Cmdlets.Hardware;
+using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Laz;
+using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Mars.Clouds.Cmdlets.Hardware;
-using Mars.Clouds.GdalExtensions;
-using Mars.Clouds.Laz;
 
 namespace Mars.Clouds.Las
 {
@@ -358,6 +358,83 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
+        public void ReadIntensitySlice(LasFile openedFile, IntensitySlice intensitySlice, RasterBand<float> dtmBand, double minHeightInCrsUnits, double maxHeightInCrsUnits, double trim, ref byte[]? pointReadBuffer)
+        {
+            LasHeader10 lasHeader = openedFile.Header;
+            this.MoveToPoints(openedFile);
+
+            UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
+            byte pointFormat = lasHeader.PointDataRecordFormat;
+            int pointRecordLength = lasHeader.PointDataRecordLength;
+            float zOffset = (float)lasHeader.ZOffset;
+            float zScaleFactor = (float)lasHeader.ZScaleFactor;
+
+            LasToGridTransform lasToDtmTransformXY = new(lasHeader, dtmBand);
+            LasToGridTransform lasToSliceTransformXY = new(lasHeader, intensitySlice);
+
+            int pointBufferLength = LasReader.ReadBufferSizeInPoints * pointRecordLength;
+            if ((pointReadBuffer == null) || (pointReadBuffer.Length != pointBufferLength))
+            {
+                pointReadBuffer = new byte[pointBufferLength];
+            }
+            for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
+            {
+                UInt64 pointsRemainingToRead = numberOfPoints - lasPointIndex;
+                int pointsToRead = pointsRemainingToRead >= LasReader.ReadBufferSizeInPoints ? LasReader.ReadBufferSizeInPoints : (int)pointsRemainingToRead;
+                int bytesToRead = pointsToRead * pointRecordLength;
+                this.BaseStream.ReadExactly(pointReadBuffer, 0, bytesToRead);
+
+                for (int batchOffset = 0; batchOffset < bytesToRead; batchOffset += pointRecordLength)
+                {
+                    ReadOnlySpan<byte> pointBytes = pointReadBuffer.AsSpan(batchOffset, pointRecordLength);
+                    bool notNoiseOrWithheld = LasReader.ReadClassification(pointBytes, pointFormat, out PointClassification _);
+                    if (notNoiseOrWithheld == false)
+                    {
+                        // point isn't valid data => skip
+                        continue;
+                    }
+
+                    int pointX = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
+                    int pointY = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+                    if (lasToDtmTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 dtmIndexX, out Int64 dtmIndexY) == false)
+                    {
+                        double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
+                        double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
+                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DTM extents (" + dtmBand.GetExtentString() + ") and thus has off DTM indices " + dtmIndexX + ", " + dtmIndexY + ".");
+                    }
+
+                    float z = zOffset + zScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
+                    // TODO: bilinear interpolation
+                    Int64 dtmCellIndex = dtmBand.ToCellIndex(dtmIndexX, dtmIndexY);
+                    float dtm = dtmBand[dtmCellIndex];
+                    float height = z - dtm;
+                    if (height < minHeightInCrsUnits || height > maxHeightInCrsUnits)
+                    {
+                        continue;
+                    }
+
+                    if ((lasToSliceTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 sliceIndexX, out Int64 sliceIndexY) == false))
+                    {
+                        // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
+                        if (trim <= 0.0)
+                        {
+                            double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
+                            double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
+                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside intensity slice extents (" + intensitySlice.GetExtentString() + ") and thus has off slice indices " + sliceIndexX + ", " + sliceIndexY + ".");
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    Int64 sliceCellIndex = intensitySlice.ToCellIndex(sliceIndexX, sliceIndexY);
+
+                    intensitySlice.Intensity[sliceCellIndex] += BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
+                    ++intensitySlice.PointCount[sliceCellIndex];
+                }
+            }
+        }
+
         public void ReadPointsToDsm(LasTile openedTile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, ref float[]? subsurfaceBuffer)
         {
             LasReader.ThrowOnUnsupportedPointFormat(openedTile.Header);
@@ -373,6 +450,7 @@ namespace Mars.Clouds.Las
                 subsurfaceBuffer = GC.AllocateUninitializedArray<float>(subsurfaceBufferLength);
             }
 
+            this.MoveToPoints(openedTile);
             if (this.Unbuffered)
             {
                 this.ReadPointsToDsmUnbuffered(openedTile, dsmTile, ref pointReadBuffer, subsurfaceBuffer);
@@ -388,7 +466,6 @@ namespace Mars.Clouds.Las
             Debug.Assert((dsmTile.AerialPoints != null) && (dsmTile.SourceIDSurface != null));
 
             LasHeader10 lasHeader = openedTile.Header;
-            this.MoveToPoints(openedTile);
 
             // read points
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
@@ -1031,7 +1108,7 @@ namespace Mars.Clouds.Las
         //            }
 
         //            int cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
-        //            UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
+        //            UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
         //            if (returnNumber == 1)
         //            {
         //                // assume first returns are always the most representative => only first returns contribute to RGB+NIR
@@ -1204,7 +1281,7 @@ namespace Mars.Clouds.Las
                     }
 
                     Int64 cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
-                    UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..]);
+                    UInt16 intensity = BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);
                     if (returnNumber == 1)
                     {
                         // assume first returns are always the most representative => only first returns contribute to RGB+NIR
