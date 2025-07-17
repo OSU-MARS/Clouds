@@ -103,9 +103,14 @@ namespace Mars.Clouds.GdalExtensions
             return true;
         }
 
-        public static int ParseEpsg(this SpatialReference crs)
+        public static int ParseProjectedEpsg(this SpatialReference crs)
         {
             return Int32.Parse(crs.GetAuthorityCode("PROJCS"));
+        }
+
+        public static int ParseVerticalEpsg(this SpatialReference crs)
+        {
+            return Int32.Parse(crs.GetAuthorityCode("VERT_CS"));
         }
     }
 }

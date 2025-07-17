@@ -87,8 +87,18 @@ namespace Mars.Clouds.Cmdlets
                 singleDtmBand = singleDtm.GetBand(this.DtmBand);
             }
 
-            bool slicePathSet = String.IsNullOrWhiteSpace(this.Slice) == false;
-            bool slicePathIsDirectory = slicePathSet && Directory.Exists(this.Slice);
+            string slicePath = this.Slice;
+            bool slicePathIsExistingDirectory = false;
+            bool slicePathSet = false;
+            if (String.IsNullOrWhiteSpace(this.Slice) == false)
+            {
+                if (Path.IsPathRooted(slicePath) == false)
+                {
+                    slicePath = Path.Combine(this.SessionState.Path.CurrentLocation.Path, slicePath);
+                }
+                slicePathIsExistingDirectory = Directory.Exists(slicePath);
+                slicePathSet = true;
+            }
 
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToImageBandwidth(unbuffered: false);
             int readThreads = Int32.Min(HardwareCapabilities.Current.GetPracticalReadThreadCount(this.Las, this.SessionState.Path.CurrentLocation.Path, driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs), this.DataThreads);
@@ -149,18 +159,18 @@ namespace Mars.Clouds.Cmdlets
 
                     if (this.NoWrite == false)
                     {
-                        string sliceName = cloudName + " slice " + minHeightInCrsUnits.ToString("0.0##") + "-" + maxHeightInCrsUnits.ToString("0.0##") + " " + cloudCrs.GetVerticalLinearUnitName() + (this.Trim > 0 ? " trim " + this.Trim.ToString("0") : String.Empty) + Constant.File.GeoTiffExtension;
-                        string slicePath;
+                        string cloudSliceName = cloudName + " slice " + minHeightInCrsUnits.ToString("0.0##") + "-" + maxHeightInCrsUnits.ToString("0.0##") + " " + cloudCrs.GetVerticalLinearUnitName() + (this.Trim > 0 ? " trim " + this.Trim.ToString("0") : String.Empty) + Constant.File.GeoTiffExtension;
+                        string cloudSlicePath;
                         if (slicePathSet)
                         {
-                            slicePath = slicePathIsDirectory ? Path.Combine(this.Slice, sliceName) : this.Slice;
+                            cloudSlicePath = slicePathIsExistingDirectory ? Path.Combine(slicePath, cloudSliceName) : slicePath;
                         }
                         else
                         {
                             string? cloudDirectoryPath = Path.GetDirectoryName(cloudPath);
-                            slicePath = cloudDirectoryPath != null ? Path.Combine(cloudDirectoryPath, sliceName) : sliceName;
+                            cloudSlicePath = cloudDirectoryPath != null ? Path.Combine(cloudDirectoryPath, cloudSliceName) : cloudSliceName;
                         }
-                        intensitySlice.WriteMean(slicePath, this.CompressRasters);
+                        intensitySlice.WriteMean(cloudSlicePath, this.CompressRasters);
                     }
 
                     Interlocked.Increment(ref slicesWritten);

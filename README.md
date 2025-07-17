@@ -7,7 +7,7 @@ clouds.
 - `Get-Treetops`: simple unsupervised classification of local maxima as treetop candidates in a digital surface or canopy height model
 - `Get-Crowns`: treetop seeded segmentation of individual tree crowns from a digital surface model using path cost functions
 - `Get-GridMetrics`: get z, intensity, and other common grid metrics from a set of point cloud tiles
-- `Register-Cloud`: set .las files' origin, coordinate system, source ID, and repair LAS compliance issues left by SLAM tools
+- `Register-Clouds`: set .las files' origin, coordinate system, source ID, and repair LAS compliance issues left by SLAM tools
 - `Export-Slices`: extract mean intensity rasters for stem mapping using points between a minimum and maximum height
 
 The cmdlets are multithreaded at the tile level and attempt to self configure to reasonable defaults. The current configuration logic is 

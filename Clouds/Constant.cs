@@ -63,5 +63,10 @@ namespace Mars.Clouds
             //public const int Circular64Up1 = (0x1 << 0) | (0x0 << 1); // shufpd
             //public const byte ExtractUpper64 = 0x1; // pextrq
         }
+
+        public static class Units
+        {
+            public const double FeetPerMeter = 0.3048;
+        }
     }
 }
