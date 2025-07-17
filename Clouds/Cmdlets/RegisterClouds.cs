@@ -11,8 +11,8 @@ using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
-    [Cmdlet(VerbsLifecycle.Register, "Cloud")]
-    public class RegisterCloud : GdalCmdlet
+    [Cmdlet(VerbsLifecycle.Register, "Clouds")]
+    public class RegisterClouds : GdalCmdlet
     {
         [Parameter(Mandatory = true, HelpMessage = "Point clouds to set origin and coordinate system of.")]
         [ValidateNotNullOrEmpty]
@@ -59,16 +59,16 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
         public DateOnly? FallbackDate { get; set; }
 
-        [Parameter(HelpMessage = "Set x and y ranges in header to actual point extents (Faro Zeb Horizon, possibly FJ Dynamics).")]
-        public SwitchParameter RepairBoundsXY { get; set; }
+        [Parameter(HelpMessage = "Set x, y, and z ranges in header to actual point extents (Faro Connect oversizes x and y, possibly FJ Dynamics).")]
+        public SwitchParameter RepairBounds { get; set; }
 
         [Parameter(HelpMessage = "Change never classified points to unclassified and unclassified points to ground (FJ Dynamics Trion Model).")]
         public SwitchParameter RepairClassification { get; set; }
 
-        [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Zeb Horizon, FJ Dynamics P1 and S1) to single returns and return number 1.")]
+        [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Connect, FJ Dynamics P1 and S1) to single returns and return number 1.")]
         public SwitchParameter RepairReturn { get; set; }
 
-        public RegisterCloud()
+        public RegisterClouds()
         {
             this.Las = [];
             this.Lat = Double.NaN;
@@ -147,7 +147,6 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // translate cloud
-                    // BUGBUG: bounding box is not updated for rotation
                     double nudgeXinCrsUnits = this.NudgeX.Length == 1 ? this.NudgeX[0] : this.NudgeX[cloudIndex];
                     double nudgeYinCrsUnits = this.NudgeY.Length == 1 ? this.NudgeY[0] : this.NudgeY[cloudIndex];
                     double originX = scanAnchorX + nudgeXinCrsUnits;
@@ -163,15 +162,15 @@ namespace Mars.Clouds.Cmdlets
                     writer.WriteHeader(cloud);
                     writer.WriteVariableLengthRecordsAndUserData(cloud);
 
-                    CoordinateTransform scaledTransformInSourceCrsUnits = new()
+                    LinearCoordinateTransform scaledTransformInSourceCrsUnits = new()
                     {
                         RotationXYinRadians = rotationXYinRadians
                     };
-                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, scaledTransformInSourceCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairClassification, this.RepairReturn);
+                    LasWriteTransformedResult writeResult = writer.WriteTransformedAndRepairedPoints(reader, cloud, scaledTransformInSourceCrsUnits, (UInt16)(this.SourceID + cloudIndex), this.RepairBounds, this.RepairClassification, this.RepairReturn);
                     writer.WriteExtendedVariableLengthRecords(cloud);
 
                     bool updateHeader = false;
-                    if (this.RepairBoundsXY)
+                    if (this.RepairBounds)
                     {
                         if ((Double.IsNaN(writeResult.MinX) == false) && (cloud.Header.MinX != writeResult.MinX))
                         {
@@ -191,6 +190,16 @@ namespace Mars.Clouds.Cmdlets
                         if ((Double.IsNaN(writeResult.MaxY) == false) && (cloud.Header.MaxY != writeResult.MaxY))
                         {
                             cloud.Header.MaxY = writeResult.MaxY;
+                            updateHeader = true;
+                        }
+                        if ((Double.IsNaN(writeResult.MinZ) == false) && (cloud.Header.MinZ != writeResult.MinZ))
+                        {
+                            cloud.Header.MinZ = writeResult.MinZ;
+                            updateHeader = true;
+                        }
+                        if ((Double.IsNaN(writeResult.MaxZ) == false) && (cloud.Header.MaxZ != writeResult.MaxZ))
+                        {
+                            cloud.Header.MaxZ = writeResult.MaxZ;
                             updateHeader = true;
                         }
                     }
@@ -216,7 +225,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Register-Cloud", "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Register-Clouds", "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false) 
             {
                 progress.StatusDescription = "Registered " + cloudRegistrationsCompleted + " of " + cloudPaths.Count + " point clouds...";
