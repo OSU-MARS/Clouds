@@ -47,6 +47,16 @@ namespace Mars.Clouds.GdalExtensions
             return compoundCrs;
         }
 
+        public static double GetLinearUnitInM(string unit)
+        {
+            return unit switch
+            {
+                Constant.Crs.LinearUnitFoot => Constant.Gdal.LinearUnitFoot,
+                Constant.Crs.LinearUnitMeter => Constant.Gdal.LinearUnitMeter,
+                _ => throw new ArgumentOutOfRangeException(nameof(unit), "Unhandled linear unit name '" + unit + "'.")
+            };
+        }
+
         public static double GetProjectedLinearUnitInM(this SpatialReference crs)
         {
             return crs.GetTargetLinearUnits(Constant.Gdal.TargetLinearUnitsProjectedCrs);

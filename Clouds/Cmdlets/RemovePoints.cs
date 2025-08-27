@@ -78,7 +78,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Register-Cloud", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Remove-Points", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...";

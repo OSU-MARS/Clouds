@@ -26,7 +26,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(-180.0, 180.0)]
         public double Long { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Elevation of point cloud's origin in meters, WGS84.")]
+        [Parameter(Mandatory = true, HelpMessage = "Elevation of point cloud's origin in the units of the coordinate system specified by -VerticalEpsg.")]
         [ValidateRange(-420.0, 8848.0)]
         public double Z { get; set; }
 
@@ -34,7 +34,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int HorizontalEpsg { get; set; }
 
-        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters).")]
+        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters), NAVD88 feet is 8228.")]
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int VerticalEpsg { get; set; }
 
@@ -68,6 +68,10 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Set points with return number zero and zero total returns (Faro Connect, FJ Dynamics P1 and S1) to single returns and return number 1.")]
         public SwitchParameter RepairReturn { get; set; }
 
+        [Parameter(HelpMessage = "Units of the input point cloud. Meters ('m') or feet ('ft'). Default is meters.")]
+        [ValidateSet(Constant.Crs.LinearUnitMeter, Constant.Crs.LinearUnitFoot)]
+        public string ScannerUnit { get; set; }
+
         public RegisterClouds()
         {
             this.Las = [];
@@ -83,6 +87,7 @@ namespace Mars.Clouds.Cmdlets
             this.FallbackDate = null;
             this.RepairClassification = false;
             this.RepairReturn = false;
+            this.ScannerUnit = Constant.Crs.LinearUnitMeter;
         }
 
         protected override void ProcessRecord()
@@ -106,7 +111,9 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.NudgeY), "-" + nameof(this.NudgeY) + " must have either single value or as many values as there are clouds to register. There are " + this.NudgeY.Length + " values in -" + nameof(this.NudgeY) + " and " + cloudPaths.Count + " clouds.");
             }
 
-            // reproject point cloud origin from WGS84 to cloud's coordinate system
+            // reproject point cloud's horizontal origin from WGS84 to cloud's coordinate system
+            // Vertical origin from -Z is passed through transformation since no vertical CRS is attached to the WGS84 CRS. This shouldn't be necessary but GDAL
+            // lacks a Geometry.AddPoint(double x, double y) overload.
             SpatialReference wgs84 = SpatialReferenceExtensions.Create(Constant.Epsg.Wgs84);
             SpatialReference cloudCrs = SpatialReferenceExtensions.CreateCompound(this.HorizontalEpsg, this.VerticalEpsg);
 
@@ -122,6 +129,11 @@ namespace Mars.Clouds.Cmdlets
             double scanAnchorX = commonOriginXyz[0];
             double scanAnchorY = commonOriginXyz[1];
             double scanAnchorZ = commonOriginXyz[2];
+
+            // point cloud scale requires adjustement if the scanner and destination CRSes use different units
+            double scannerLinearUnitInM = SpatialReferenceExtensions.GetLinearUnitInM(this.ScannerUnit);
+            double horizontalScaleFactorChange = scannerLinearUnitInM / cloudCrs.GetProjectedLinearUnitInM();
+            double verticalScaleFactorChange = scannerLinearUnitInM / cloudCrs.GetVerticalLinearUnitInM();
 
             // set point clouds' origins, coordinate systems, and source IDs
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetPointCopyEditBandwidth();
@@ -152,6 +164,17 @@ namespace Mars.Clouds.Cmdlets
                     double originX = scanAnchorX + nudgeXinCrsUnits;
                     double originY = scanAnchorY + nudgeYinCrsUnits;
                     cloud.SetOriginAndUpdateExtents(originX, originY, scanAnchorZ);
+
+                    // update scale factors when linear units change
+                    if (horizontalScaleFactorChange != 1.0)
+                    {
+                        cloud.Header.XScaleFactor *= horizontalScaleFactorChange;
+                        cloud.Header.YScaleFactor *= horizontalScaleFactorChange;
+                    }
+                    if (verticalScaleFactorChange != 1.0)
+                    {
+                        cloud.Header.ZScaleFactor *= verticalScaleFactorChange;
+                    }
 
                     // assign cloud coordinate system
                     cloud.SetSpatialReference(cloudCrs);
