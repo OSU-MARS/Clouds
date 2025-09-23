@@ -752,15 +752,24 @@ namespace Mars.Clouds.UnitTests
             RasterBand<float> dtmBand = this.ReadDtm().TileGrid![0, 0]!.GetBand(name: null);
             pointReader.ReadIntensitySlice(lasTile, intensitySlice, dtmBand, minHeightInCrsUnits: 1.37, maxHeightInCrsUnits: 2.0, trim: 0.0, ref pointReadBuffer);
             UInt32 pointsInSlice = 0;
+            UInt32 sliceCellsWithPoints = 0;
+            UInt64 sliceIntensityTotal = 0;
             for (int cellIndex = 0; cellIndex < intensitySlice.PointCount.Data.Length; ++cellIndex)
             {
                 UInt32 pointsInCell = intensitySlice.PointCount[cellIndex];
                 UInt64 intensitySumInCell = intensitySlice.Intensity[cellIndex];
-                Assert.IsTrue(((pointsInCell <= 1) && (intensitySumInCell == 0)) || ((pointsInCell > 0) && (intensitySumInCell > 0))); // occasionally there is a point with an intensity of zero
+                float meanCellIntensity = (float)intensitySumInCell / (float)pointsInCell;
+                Assert.IsTrue(((pointsInCell <= 1) && (intensitySumInCell == 0)) || ((pointsInCell > 0) && (pointsInCell < 1100) && (intensitySumInCell > 0) && (meanCellIntensity < 10000))); // occasionally there is a point with an intensity of zero
 
                 pointsInSlice += pointsInCell;
+                if (pointsInCell > 0)
+                {
+                    ++sliceCellsWithPoints;
+                }
+
+                sliceIntensityTotal += intensitySumInCell;
             }
-            Assert.IsTrue((pointsInSlice == 32220) && (pointsInSlice < lasTile.Header.GetNumberOfPoints()));
+            Assert.IsTrue((pointsInSlice == 32164) && (pointsInSlice < lasTile.Header.GetNumberOfPoints()) && (sliceCellsWithPoints == 968) && (sliceIntensityTotal == 159190426));
         }
 
         private LasTile ReadLasTile()

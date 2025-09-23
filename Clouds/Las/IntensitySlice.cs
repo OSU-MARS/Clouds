@@ -126,7 +126,7 @@ namespace Mars.Clouds.Las
                 UInt32 pointsInCell = this.PointCount[cellIndex];
                 if (pointsInCell > 0)
                 {
-                    intensityMean.Data[cellIndex] = (UInt16)(this.Intensity[cellIndex] / pointsInCell); // can be zero if scanner records points with zero intensity
+                    intensityMean.Data[cellIndex] = (UInt16)(this.Intensity[cellIndex] / pointsInCell); // mean intensity can be zero if scanner records points with zero intensity
                 }
             }
 

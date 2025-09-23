@@ -54,6 +54,9 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Turn off writing of output rasters. This is useful in certain benchmarking and development situations.")]
         public SwitchParameter NoWrite { get; set; }
 
+        [Parameter(HelpMessage = "If set, write the bands calculated for the slice rather than writing mean intensity.")]
+        public SwitchParameter WriteBands { get; set; }
+
         [Parameter(HelpMessage = "Whether or not to compress slice rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
@@ -170,7 +173,14 @@ namespace Mars.Clouds.Cmdlets
                             string? cloudDirectoryPath = Path.GetDirectoryName(cloudPath);
                             cloudSlicePath = cloudDirectoryPath != null ? Path.Combine(cloudDirectoryPath, cloudSliceName) : cloudSliceName;
                         }
-                        intensitySlice.WriteMean(cloudSlicePath, this.CompressRasters);
+                        if (this.WriteBands)
+                        {
+                            intensitySlice.Write(cloudSlicePath, this.CompressRasters);
+                        }
+                        else
+                        {
+                            intensitySlice.WriteMean(cloudSlicePath, this.CompressRasters);
+                        }
                     }
 
                     Interlocked.Increment(ref slicesWritten);

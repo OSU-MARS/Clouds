@@ -20,12 +20,14 @@ namespace Mars.Clouds.UnitTests
             sbyte signedArrayLength = signedArrayLengths[Random.Shared.Next(signedArrayLengths.Length)];
             byte unsignedArrayLength = unsignedArrayLengths[Random.Shared.Next(unsignedArrayLengths.Length)];
 
+            float[] sourceFloat = new float[signedArrayLength];
             sbyte[] sourceInt8 = new sbyte[signedArrayLength];
             Int16[] sourceInt16 = new Int16[signedArrayLength];
             Int32[] sourceInt32 = new Int32[signedArrayLength];
             for (sbyte sign = -1, signedIndex = 0; signedIndex < signedArrayLength; sign *= -1, ++signedIndex)
             {
                 sbyte value = (sbyte)(sign * signedIndex);
+                sourceFloat[signedIndex] = value;
                 sourceInt8[signedIndex] = value;
                 sourceInt16[signedIndex] = value;
                 sourceInt32[signedIndex] = value;
@@ -41,18 +43,21 @@ namespace Mars.Clouds.UnitTests
                 sourceUInt32[unsignedIndex] = unsignedIndex;
             }
 
+            double[] destinationFloatToDouble = new double[signedArrayLength];
+            DataTypeExtensions.ConvertToKnownType(sourceFloat, destinationFloatToDouble);
+
             Int16[] destinationInt8toInt16 = new Int16[signedArrayLength];
             Int32[] destinationInt8toInt32 = new Int32[signedArrayLength];
             Int64[] destinationInt8toInt64 = new Int64[signedArrayLength];
             Int32[] destinationInt16toInt32 = new Int32[signedArrayLength];
             Int64[] destinationInt16toInt64 = new Int64[signedArrayLength];
             Int64[] destinationInt32toInt64 = new Int64[signedArrayLength];
-            DataTypeExtensions.Convert(sourceInt8, destinationInt8toInt16);
-            DataTypeExtensions.Convert(sourceInt8, destinationInt8toInt32);
-            DataTypeExtensions.Convert(sourceInt8, destinationInt8toInt64);
-            DataTypeExtensions.Convert(sourceInt16, destinationInt16toInt32);
-            DataTypeExtensions.Convert(sourceInt16, destinationInt16toInt64);
-            DataTypeExtensions.Convert(sourceInt32, destinationInt32toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt8, destinationInt8toInt16);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt8, destinationInt8toInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt8, destinationInt8toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt16, destinationInt16toInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt16, destinationInt16toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceInt32, destinationInt32toInt64);
 
             Int16[] destinationUInt8toInt16 = new Int16[unsignedArrayLength];
             Int32[] destinationUInt8toInt32 = new Int32[unsignedArrayLength];
@@ -60,12 +65,12 @@ namespace Mars.Clouds.UnitTests
             Int32[] destinationUInt16toInt32 = new Int32[unsignedArrayLength];
             Int64[] destinationUInt16toInt64 = new Int64[unsignedArrayLength];
             Int64[] destinationUInt32toInt64 = new Int64[unsignedArrayLength];
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toInt16);
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toInt32);
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toInt64);
-            DataTypeExtensions.Convert(sourceUInt16, destinationUInt16toInt32);
-            DataTypeExtensions.Convert(sourceUInt16, destinationUInt16toInt64);
-            DataTypeExtensions.Convert(sourceUInt32, destinationUInt32toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toInt16);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt16, destinationUInt16toInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt16, destinationUInt16toInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt32, destinationUInt32toInt64);
 
             UInt16[] destinationUInt8toUInt16 = new UInt16[unsignedArrayLength];
             UInt32[] destinationUInt8toUInt32 = new UInt32[unsignedArrayLength];
@@ -73,39 +78,40 @@ namespace Mars.Clouds.UnitTests
             UInt32[] destinationUInt16toUInt32 = new UInt32[unsignedArrayLength];
             UInt64[] destinationUInt16toUInt64 = new UInt64[unsignedArrayLength];
             UInt64[] destinationUInt32toUInt64 = new UInt64[unsignedArrayLength];
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toUInt16);
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toUInt32);
-            DataTypeExtensions.Convert(sourceUInt8, destinationUInt8toUInt64);
-            DataTypeExtensions.Convert(sourceUInt16, destinationUInt16toUInt32);
-            DataTypeExtensions.Convert(sourceUInt16, destinationUInt16toUInt64);
-            DataTypeExtensions.Convert(sourceUInt32, destinationUInt32toUInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toUInt16);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toUInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt8, destinationUInt8toUInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt16, destinationUInt16toUInt32);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt16, destinationUInt16toUInt64);
+            DataTypeExtensions.ConvertFromKnownType(sourceUInt32, destinationUInt32toUInt64);
 
             for (sbyte sign = -1, signedIndex = 0; signedIndex < signedArrayLength; sign *= -1, ++signedIndex)
             {
                 sbyte value = (sbyte)(sign * signedIndex);
-                Assert.IsTrue(destinationInt8toInt16[signedIndex] == value);
-                Assert.IsTrue(destinationInt8toInt32[signedIndex] == value);
-                Assert.IsTrue(destinationInt8toInt64[signedIndex] == value);
-                Assert.IsTrue(destinationInt16toInt32[signedIndex] == value);
-                Assert.IsTrue(destinationInt16toInt64[signedIndex] == value);
-                Assert.IsTrue(destinationInt32toInt64[signedIndex] == value);
+                Assert.IsTrue(destinationFloatToDouble[signedIndex] == value, "float to double");
+                Assert.IsTrue(destinationInt8toInt16[signedIndex] == value, "Int8 (sbyte) to Int16");
+                Assert.IsTrue(destinationInt8toInt32[signedIndex] == value, "Int8 (sbyte) to Int32");
+                Assert.IsTrue(destinationInt8toInt64[signedIndex] == value, "Int8 (sbyte) to Int64");
+                Assert.IsTrue(destinationInt16toInt32[signedIndex] == value, "Int16 to Int32");
+                Assert.IsTrue(destinationInt16toInt64[signedIndex] == value, "Int16 to Int64");
+                Assert.IsTrue(destinationInt32toInt64[signedIndex] == value, "Int32 to Int64");
             }
 
             for (byte unsignedIndex = 0; unsignedIndex < unsignedArrayLength; ++unsignedIndex)
             {
-                Assert.IsTrue(destinationUInt8toInt16[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt8toInt32[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt8toInt64[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt16toInt32[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt16toInt64[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt32toInt64[unsignedIndex] == unsignedIndex);
+                Assert.IsTrue(destinationUInt8toInt16[unsignedIndex] == unsignedIndex, "UInt8 (byte) to Int16");
+                Assert.IsTrue(destinationUInt8toInt32[unsignedIndex] == unsignedIndex, "UInt8 (byte) to Int32");
+                Assert.IsTrue(destinationUInt8toInt64[unsignedIndex] == unsignedIndex, "UInt8 (byte) to Int64");
+                Assert.IsTrue(destinationUInt16toInt32[unsignedIndex] == unsignedIndex, "UInt16  to Int32");
+                Assert.IsTrue(destinationUInt16toInt64[unsignedIndex] == unsignedIndex, "UInt16  to Int64");
+                Assert.IsTrue(destinationUInt32toInt64[unsignedIndex] == unsignedIndex, "UInt32  to Int64");
 
-                Assert.IsTrue(destinationUInt8toUInt16[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt8toUInt32[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt8toUInt64[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt16toUInt32[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt16toUInt64[unsignedIndex] == unsignedIndex);
-                Assert.IsTrue(destinationUInt32toUInt64[unsignedIndex] == unsignedIndex);
+                Assert.IsTrue(destinationUInt8toUInt16[unsignedIndex] == unsignedIndex, "UInt8 (byte) to UInt16");
+                Assert.IsTrue(destinationUInt8toUInt32[unsignedIndex] == unsignedIndex, "UInt8 (byte) to UInt32");
+                Assert.IsTrue(destinationUInt8toUInt64[unsignedIndex] == unsignedIndex, "UInt8 (byte) to UInt64");
+                Assert.IsTrue(destinationUInt16toUInt32[unsignedIndex] == unsignedIndex, "UInt16 to UInt32");
+                Assert.IsTrue(destinationUInt16toUInt64[unsignedIndex] == unsignedIndex, "UInt16 to UInt64");
+                Assert.IsTrue(destinationUInt32toUInt64[unsignedIndex] == unsignedIndex, "UInt16 to UInt32");
             }
         }
 
@@ -136,7 +142,7 @@ namespace Mars.Clouds.UnitTests
 
             Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(AvxExtensions.BroadcastScalarToVector256(1.0F), Vector256.Create(1.0F)).AsSingle()) == 0xff);
 
-            // AvxExtensions.Convert() methods are covered by convert test case
+            // AvxExtensions.Convert() methods are covered by ConvertToWiderTypes() and, in the double -> float case, PackToNarrowerTypes() test case
 
             int[] counts = new int[8];
             Vector256<int> indices = Vector256.Create(6, 1, 1, 5, 1, 2, 6, 0);
@@ -179,7 +185,7 @@ namespace Mars.Clouds.UnitTests
             //Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(zero256x32, Vector256<int>.Zero).AsSingle()) == 0xff);
             //Assert.IsTrue(Avx.MoveMask(Avx2.CompareEqual(invert256x32, Vector256.Create(-1, 0, -1, 0, -1, 0, -1, 0)).AsSingle()) == 0xff);
 
-            // AvxExtensions.Pack() methods are covered by pack test case
+            // AvxExtensions.Pack() methods are covered by PackToNarrowerTypes()
 
             Vector128<float> shuffleFloat = AvxExtensions.ShuffleInAndUp(4.0F, Vector128.Create(3.0F, 2.0F, 1.0F, 0.0F));
             Vector128<byte> shuffleByte = AvxExtensions.ShuffleInAndUp(18, 17, 16, Vector128.Create((byte)15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0));
@@ -195,6 +201,7 @@ namespace Mars.Clouds.UnitTests
         [TestMethod]
         public void PackToNarrowerTypes()
         {
+            double[] sourceDouble = [ Double.NegativeInfinity, Double.MinValue, -1.0, Double.NegativeZero, 0.0, 1.0, Double.E, Double.Pi, Double.Tau, Double.MaxValue, Double.PositiveInfinity, Double.NaN ];
             Int16[] sourceInt16 = [ Int16.MinValue, Int16.MinValue + 1, Int16.MinValue + 2, Int16.MinValue + 3, SByte.MinValue, SByte.MinValue + 1, SByte.MinValue + 2, SByte.MinValue + 3, 
                                     -4, -3, -2, -1, 0, 1, 2, 3,
                                     Int16.MaxValue, Int16.MaxValue - 1, Int16.MaxValue - 2, Int16.MaxValue - 3, SByte.MaxValue, SByte.MaxValue - 1, SByte.MaxValue - 2, SByte.MaxValue - 3, 
@@ -216,6 +223,7 @@ namespace Mars.Clouds.UnitTests
             UInt64[] sourceUInt64 = [ 0, 1, 2, 3, 4, 5, 6, 7, UInt64.MaxValue, UInt32.MaxValue, UInt16.MaxValue, Byte.MaxValue, UInt32.MaxValue - 1, UInt16.MaxValue - 1, Byte.MaxValue - 1, UInt32.MaxValue - 2, 
                                       0, UInt32.MaxValue, UInt16.MaxValue, Byte.MaxValue ];
 
+            sourceDouble.RandomizeOrder();
             sourceInt16.RandomizeOrder();
             sourceInt32.RandomizeOrder();
             sourceInt64.RandomizeOrder();
@@ -224,6 +232,10 @@ namespace Mars.Clouds.UnitTests
             sourceUInt64.RandomizeOrder();
 
             // signed packs
+            // double -> float
+            float[] destinationDoubleToFloat = new float[sourceDouble.Length];
+            DataTypeExtensions.Pack(sourceDouble, destinationDoubleToFloat);
+
             // { 16, 32, 64 } -> 8
             sbyte[] destinationInt16toInt8noDataSaturating = new sbyte[sourceInt16.Length];
             DataTypeExtensions.Pack(sourceInt16, destinationInt16toInt8noDataSaturating, noDataSaturatingFromBelow: true);
@@ -251,12 +263,12 @@ namespace Mars.Clouds.UnitTests
             Int16[] destinationInt64toInt16noDataUnsaturating = new Int16[sourceInt64.Length];
             DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt16noDataUnsaturating, noDataSaturatingFromBelow: false);
 
-
             // 64 -> 32
             Int32[] destinationInt64toInt32noDataSaturating = new Int32[sourceInt64.Length];
             DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt32noDataSaturating, noDataSaturatingFromBelow: true);
             Int32[] destinationInt64toInt32noDataUnsaturating = new Int32[sourceInt64.Length];
             DataTypeExtensions.Pack(sourceInt64, destinationInt64toInt32noDataUnsaturating, noDataSaturatingFromBelow: false);
+
 
             // unsigned packs
             // { 16, 32, 64 } -> 8
@@ -293,6 +305,44 @@ namespace Mars.Clouds.UnitTests
             DataTypeExtensions.Pack(sourceUInt64, destinationUInt64toUInt32noDataUnsaturating, noDataSaturatingFromAbove: false);
 
             // signed validation
+            // double -> float
+            for (int index = 0; index < sourceDouble.Length; ++index)
+            {
+                double valueDouble = sourceDouble[index];
+                float valueFloat = destinationDoubleToFloat[index];
+                switch(valueDouble)
+                {
+                    case Double.E:
+                        Assert.IsTrue(valueFloat == Single.E);
+                        break;
+                    case Double.MaxValue:
+                        Assert.IsTrue(valueFloat == Single.PositiveInfinity);
+                        break;
+                    case Double.MinValue:
+                        Assert.IsTrue(valueFloat == Single.NegativeInfinity);
+                        break;
+                    case Double.NaN:
+                        Assert.IsTrue(Single.IsNaN(valueFloat));
+                        break;
+                    case Double.NegativeInfinity:
+                        Assert.IsTrue(valueFloat == Single.NegativeInfinity);
+                        break;
+                    case Double.Pi:
+                        Assert.IsTrue(valueFloat == Single.Pi);
+                        break;
+                    case Double.PositiveInfinity:
+                        Assert.IsTrue(valueFloat == Single.PositiveInfinity);
+                        break;
+                    case Double.Tau:
+                        Assert.IsTrue(valueFloat == Single.Tau);
+                        break;
+                    default:
+                        // 0.0 and ±1.0 should match exactly
+                        Assert.IsTrue(valueDouble == valueFloat);
+                        break;
+                }
+            }
+
             // Int16 -> 8
             for (int index = 0; index < sourceInt16.Length; ++index)
             {

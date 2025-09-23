@@ -1,4 +1,5 @@
-﻿using OSGeo.GDAL;
+﻿using Mars.Clouds.Extensions;
+using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -450,52 +451,6 @@ namespace Mars.Clouds.GdalExtensions
             throw new InvalidOperationException("No data value requested but band does not have a no data value.");
         }
 
-        private GCHandle GetPinnedDataHandleWithRetypedNoData<TOutput>(TOutput outputNoDataValue) where TOutput : INumber<TOutput>
-        {
-            TypeCode thisDataType = Type.GetTypeCode(typeof(TBand));
-            TypeCode outputDataType = Type.GetTypeCode(typeof(TOutput));
-            if (thisDataType == outputDataType)
-            {
-                // no type conversion needed
-                return GCHandle.Alloc(this.Data, GCHandleType.Pinned);
-            }
-
-            // type conversion needed
-            TOutput[] retypedData = new TOutput[this.Cells];
-            if (this.HasNoDataValue)
-            {
-                bool outputNoDataIsNaN = TOutput.IsNaN(outputNoDataValue);
-                for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
-                {
-                    TBand value = this.Data[cellIndex];
-                    if (this.IsNoData(value))
-                    {
-                        retypedData[cellIndex] = outputNoDataValue;
-                    }
-                    else
-                    {
-                        TOutput outputValue = TOutput.CreateChecked(value);
-                        bool valueCollapsesToNoData = outputNoDataIsNaN ? TOutput.IsNaN(outputValue) : outputValue == outputNoDataValue; // same as IsNoData()
-                        if (valueCollapsesToNoData)
-                        {
-                            throw new NotSupportedException("Data value " + value + " in cell " + cellIndex + " converts to " + outputValue + ", which is the same as the no data value " + outputNoDataValue + ".");
-                        }
-
-                        retypedData[cellIndex] = outputValue;
-                    }
-                }
-            }
-            else
-            {
-                for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
-                {
-                    retypedData[cellIndex] = TOutput.CreateChecked(this.Data[cellIndex]);
-                }
-            }
-
-            return GCHandle.Alloc(retypedData, GCHandleType.Pinned);
-        }
-
         public override RasterBandStatistics GetStatistics()
         {
             switch (Type.GetTypeCode(typeof(TBand)))
@@ -684,32 +639,32 @@ namespace Mars.Clouds.GdalExtensions
                     case DataType.GDT_Byte:
                         byte[] bufferUInt8 = GC.AllocateUninitializedArray<byte>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt8);
-                        DataTypeExtensions.Convert(bufferUInt8, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferUInt8, this.Data);
                         break;
                     case DataType.GDT_Int8:
                         sbyte[] bufferInt8 = GC.AllocateUninitializedArray<sbyte>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt8);
-                        DataTypeExtensions.Convert(bufferInt8, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferInt8, this.Data);
                         break;
                     case DataType.GDT_Int16:
                         Int16[] bufferInt16 = GC.AllocateUninitializedArray<Int16>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt16);
-                        DataTypeExtensions.Convert(bufferInt16, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferInt16, this.Data);
                         break;
                     case DataType.GDT_Int32:
                         Int32[] bufferInt32 = GC.AllocateUninitializedArray<Int32>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferInt32);
-                        DataTypeExtensions.Convert(bufferInt32, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferInt32, this.Data);
                         break;
                     case DataType.GDT_UInt16:
                         UInt16[] bufferUInt16 = GC.AllocateUninitializedArray<UInt16>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt16);
-                        DataTypeExtensions.Convert(bufferUInt16, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferUInt16, this.Data);
                         break;
                     case DataType.GDT_UInt32:
                         UInt32[] bufferUInt32 = GC.AllocateUninitializedArray<UInt32>(this.Cells);
                         RasterBand.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, gdalBand.DataType, bufferUInt32);
-                        DataTypeExtensions.Convert(bufferUInt32, this.Data);
+                        DataTypeExtensions.ConvertFromKnownType(bufferUInt32, this.Data);
                         break;
                     default:
                         throw new NotSupportedException("Cannot expand band source data type " + gdalBand.DataType + " to " + thisDataType + ".");
@@ -944,10 +899,22 @@ namespace Mars.Clouds.GdalExtensions
             }
             else
             {
-                // type conversion needed: currently only integer compactions are supported
+                // type conversion needed
                 bool noDataIsSaturating = false; // true if saturating from below (signed integers) or from above (unsigned integers)
                 switch (gdalBand.DataType)
                 {
+                    // compactions to smaller data types
+                    case DataType.GDT_Float64:
+                        if (this.HasNoDataValue)
+                        {
+                            noDataIsSaturating = (this.NoDataValue < TBand.CreateChecked(Single.MinValue)) || (TBand.CreateChecked(Single.MaxValue) < this.NoDataValue);
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Single.CreateSaturating(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        float[] bufferFloat = GC.AllocateUninitializedArray<float>(this.Cells);
+                        DataTypeExtensions.Pack(this.Data, bufferFloat);
+                        dataPin = GCHandle.Alloc(bufferFloat, GCHandleType.Pinned);
+                        break;
                     case DataType.GDT_Int8:
                         if (this.HasNoDataValue)
                         {
@@ -1014,10 +981,40 @@ namespace Mars.Clouds.GdalExtensions
                         DataTypeExtensions.Pack(this.Data, bufferUInt32, noDataIsSaturating);
                         dataPin = GCHandle.Alloc(bufferUInt32, GCHandleType.Pinned);
                         break;
-                    case DataType.GDT_Int64: // not a compaction target, should be Int64 passthrough
-                    case DataType.GDT_Float32: // not compatable
-                    case DataType.GDT_Float64: // lossy compaction not currently supported (is AVX convertible; vcvtpd2ps)
-                    case DataType.GDT_UInt64: // not a compaction target, should be UInt64 passthrough
+                    // expansions to larger data types
+                    case DataType.GDT_Float32: // not compatible
+                        if (this.HasNoDataValue)
+                        {
+                            // noDataIsSaturating remains false
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Double.CreateChecked(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        double[] bufferDouble = GC.AllocateUninitializedArray<double>(this.Cells);
+                        DataTypeExtensions.ConvertToKnownType(this.Data, bufferDouble);
+                        dataPin = GCHandle.Alloc(bufferDouble, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_Int64:
+                        if (this.HasNoDataValue)
+                        {
+                            // noDataIsSaturating remains false
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(Int64.CreateChecked(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        Int64[] bufferInt64 = GC.AllocateUninitializedArray<Int64>(this.Cells);
+                        DataTypeExtensions.ConvertToKnownType(this.Data, bufferInt64);
+                        dataPin = GCHandle.Alloc(bufferInt64, GCHandleType.Pinned);
+                        break;
+                    case DataType.GDT_UInt64:
+                        if (this.HasNoDataValue)
+                        {
+                            // noDataIsSaturating remains false
+                            CPLErr gdalErrorCode = gdalBand.SetNoDataValue(UInt64.CreateChecked(this.NoDataValue));
+                            GdalException.ThrowIfError(gdalErrorCode, nameof(gdalBand.SetNoDataValue));
+                        }
+                        UInt64[] bufferUInt64 = GC.AllocateUninitializedArray<UInt64>(this.Cells);
+                        DataTypeExtensions.ConvertToKnownType(this.Data, bufferUInt64);
+                        dataPin = GCHandle.Alloc(bufferUInt64, GCHandleType.Pinned);
+                        break;
                     default:
                         throw new NotSupportedException("Unhandled conversion of " + thisGdalDataType + " raster band to " + gdalBand.DataType + ".");
                 }

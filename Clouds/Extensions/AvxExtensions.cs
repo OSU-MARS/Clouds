@@ -108,11 +108,65 @@ namespace Mars.Clouds.Extensions
         //    return Avx2.BroadcastScalarToVector256(value128);
         //}
 
+        public static unsafe void Convert(ReadOnlySpan<double> source, Span<float> destination)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 64; // read 4 floats, convert to 4 doubles
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (double* sourceStart = &source[0])
+            fixed (float* destinationStart = &destination[0])
+            {
+                float* destinationAddress = destinationStart;
+                double* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                for (double* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                {
+                    Vector256<double> doubleQuad = Avx.LoadVector256(sourceAddress);
+                    Vector128<float> floatQuad = Avx.ConvertToVector128Single(doubleQuad);
+                    Avx.Store(destinationAddress, floatQuad);
+                }
+            }
+            for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+            {
+                destination[scalarIndex] = (float)source[scalarIndex];
+            }
+        }
+
+        public static unsafe void Convert(ReadOnlySpan<float> source, Span<double> destination)
+        {
+            if (source.Length != destination.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+            }
+
+            const int stride = 256 / 64; // read 4 floats, convert to 4 doubles
+            int sourceEndIndexAvx = stride * (source.Length / stride);
+            fixed (float* sourceStart = &source[0])
+            fixed (double* destinationStart = &destination[0])
+            {
+                double* destinationAddress = destinationStart;
+                float* sourceEndAvx = sourceStart + sourceEndIndexAvx;
+                for (float* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
+                {
+                    Vector128<float> floatQuad = Avx.LoadVector128(sourceAddress);
+                    Vector256<double> doubleQuad = Avx.ConvertToVector256Double(floatQuad);
+                    Avx.Store(destinationAddress, doubleQuad);
+                }
+            }
+            for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
+            {
+                destination[scalarIndex] = source[scalarIndex];
+            }
+        }
+
         public static unsafe void Convert(ReadOnlySpan<sbyte> source, Span<Int16> destination)
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 UInt16s
@@ -124,8 +178,8 @@ namespace Mars.Clouds.Extensions
                 sbyte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (sbyte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int16> hextet = Avx2.ConvertToVector256Int16(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int16> hexadectet = Avx2.ConvertToVector256Int16(sourceAddress);
+                    Avx.Store(destinationAddress, hexadectet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -138,7 +192,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 UInt32s
@@ -150,8 +204,8 @@ namespace Mars.Clouds.Extensions
                 sbyte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (sbyte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> octet = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -164,7 +218,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 UInt64s
@@ -176,8 +230,8 @@ namespace Mars.Clouds.Extensions
                 sbyte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (sbyte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -190,7 +244,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 Int16s, convert to 8 UInt32s
@@ -202,8 +256,8 @@ namespace Mars.Clouds.Extensions
                 Int16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (Int16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> octet = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -216,7 +270,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 Int16s, convert to 4 UInt64s
@@ -228,8 +282,8 @@ namespace Mars.Clouds.Extensions
                 Int16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (Int16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -242,7 +296,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 Int32s, convert to 4 UInt64s
@@ -254,8 +308,8 @@ namespace Mars.Clouds.Extensions
                 Int32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (Int32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -268,7 +322,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 Int16s
@@ -280,8 +334,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int16> hextet = Avx2.ConvertToVector256Int16(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int16> hexadectet = Avx2.ConvertToVector256Int16(sourceAddress);
+                    Avx.Store(destinationAddress, hexadectet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -294,7 +348,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 Int32s
@@ -306,8 +360,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> octet = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -320,7 +374,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 Int64s
@@ -332,8 +386,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -346,7 +400,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 UInt16s
@@ -358,8 +412,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int16> hextet = Avx2.ConvertToVector256Int16(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int16> hexadectet = Avx2.ConvertToVector256Int16(sourceAddress);
+                    Avx.Store(destinationAddress, hexadectet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -372,7 +426,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 UInt32s
@@ -384,8 +438,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> octet = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -398,7 +452,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 UInt64s
@@ -410,8 +464,8 @@ namespace Mars.Clouds.Extensions
                 byte* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (byte* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -424,7 +478,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 UInt16s, convert to 8 Int32s
@@ -436,8 +490,8 @@ namespace Mars.Clouds.Extensions
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> octet = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -450,7 +504,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 UInt16s, convert to 4 Int64s
@@ -462,8 +516,8 @@ namespace Mars.Clouds.Extensions
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -476,7 +530,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 UInt16s, convert to 8 UInt32s
@@ -488,8 +542,8 @@ namespace Mars.Clouds.Extensions
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int32> hextet = Avx2.ConvertToVector256Int32(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int32> quad = Avx2.ConvertToVector256Int32(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -502,7 +556,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 UInt16s, convert to 4 UInt64s
@@ -514,8 +568,8 @@ namespace Mars.Clouds.Extensions
                 UInt16* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt16* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> octet = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, octet);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -528,7 +582,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 UInt32s, convert to 4 Int64s
@@ -540,8 +594,8 @@ namespace Mars.Clouds.Extensions
                 UInt32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -554,7 +608,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 64; // read 4 UInt32s, convert to 4 UInt64s
@@ -566,8 +620,8 @@ namespace Mars.Clouds.Extensions
                 UInt32* sourceEndAvx = sourceStart + sourceEndIndexAvx;
                 for (UInt32* sourceAddress = sourceStart; sourceAddress < sourceEndAvx; destinationAddress += stride, sourceAddress += stride)
                 {
-                    Vector256<Int64> hextet = Avx2.ConvertToVector256Int64(sourceAddress);
-                    Avx.Store(destinationAddress, hextet);
+                    Vector256<Int64> quad = Avx2.ConvertToVector256Int64(sourceAddress);
+                    Avx.Store(destinationAddress, quad);
                 }
             }
             for (int scalarIndex = sourceEndIndexAvx; scalarIndex < source.Length; ++scalarIndex)
@@ -1137,7 +1191,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 16; // read 16 Int16s, convert to 16 Int64s
@@ -1197,7 +1251,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 2 * 256 / 32; // read 16 Int32s, convert to 16 sbytes
@@ -1272,7 +1326,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 Int32s, convert to 8 Int16s
@@ -1332,7 +1386,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 16; // read 16 UInt16s, convert to 16 UInt64s
@@ -1392,7 +1446,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 2 * 256 / 32; // read 16 UInt32s, convert to 16 bytes
@@ -1467,7 +1521,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source array length " + source.Length + " does not match destination array length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
             }
 
             const int stride = 256 / 32; // read 8 UInt32s, convert to 8 UInt16s
@@ -1554,7 +1608,7 @@ namespace Mars.Clouds.Extensions
         //}
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector256<float> ToFloat(this Vector256<UInt32> value) 
+        public static Vector256<float> ToFloat(this Vector256<UInt32> value)
         {
             // FMA implementation of
             // https://stackoverflow.com/questions/34066228/how-to-perform-uint32-float-conversion-with-sse

@@ -8,17 +8,7 @@ namespace Mars.Clouds.GdalExtensions
 {
     internal static class DataTypeExtensions
     {
-        //public static void Convert<TSource, TDestination>(TSource[] source, TDestination[] destination) 
-        //    where TSource : INumber<TSource> 
-        //    where TDestination : INumber<TDestination>
-        //{
-        //    for (int index = 0; index < source.Length; ++index)
-        //    {
-        //        destination[index] = TDestination.CreateChecked(source[index]);
-        //    }
-        //}
-
-        public static void Convert<TBand>(ReadOnlySpan<byte> source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<byte> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -57,7 +47,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        public static void Convert<TBand>(ReadOnlySpan<Int16> source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<Int16> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -72,11 +62,11 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding Int16 data.");
             }
         }
 
-        public static void Convert<TBand>(Int32[] source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<Int32> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -86,11 +76,11 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding Int32 data.");
             }
         }
 
-        public static void Convert<TBand>(ReadOnlySpan<sbyte> source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<sbyte> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -110,11 +100,11 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding signed byte data.");
             }
         }
 
-        public static void Convert<TBand>(ReadOnlySpan<UInt16> source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<UInt16> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -139,11 +129,11 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationUInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding UInt16 data.");
             }
         }
 
-        public static void Convert<TBand>(ReadOnlySpan<UInt32> source, TBand[] destination) where TBand : INumber<TBand>
+        public static void ConvertFromKnownType<TBand>(ReadOnlySpan<UInt32> source, TBand[] destination) where TBand : INumber<TBand>
         {
             switch (Type.GetTypeCode(typeof(TBand)))
             {
@@ -158,7 +148,69 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationUInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding UInt32 data.");
+            }
+        }
+
+        public static void ConvertToKnownType<TBand>(TBand[] source, Span<double> destination) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Single:
+                    float[]? sourceFloat = source as float[];
+                    Debug.Assert(sourceFloat != null);
+                    AvxExtensions.Convert(sourceFloat, destination);
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to double data.");
+            }
+        }
+
+        public static void ConvertToKnownType<TBand>(TBand[] source, Span<Int64> destination) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.SByte:
+                    Int16[]? sourceInt8 = source as Int16[];
+                    Debug.Assert(sourceInt8 != null);
+                    AvxExtensions.Convert(sourceInt8, destination);
+                    break;
+                case TypeCode.Int16:
+                    Int16[]? sourceInt16 = source as Int16[];
+                    Debug.Assert(sourceInt16 != null);
+                    AvxExtensions.Convert(sourceInt16, destination);
+                    break;
+                case TypeCode.Int32:
+                    Int32[]? sourceInt32 = source as Int32[];
+                    Debug.Assert(sourceInt32 != null);
+                    AvxExtensions.Convert(sourceInt32, destination);
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to Int64 data.");
+            }
+        }
+
+        public static void ConvertToKnownType<TBand>(TBand[] source, Span<UInt64> destination) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Byte:
+                    byte[]? sourceUInt8 = source as byte[];
+                    Debug.Assert(sourceUInt8 != null);
+                    AvxExtensions.Convert(sourceUInt8, destination);
+                    break;
+                case TypeCode.UInt16:
+                    UInt16[]? sourceUInt16 = source as UInt16[];
+                    Debug.Assert(sourceUInt16 != null);
+                    AvxExtensions.Convert(sourceUInt16, destination);
+                    break;
+                case TypeCode.UInt32:
+                    UInt32[]? sourceUInt32 = source as UInt32[];
+                    Debug.Assert(sourceUInt32 != null);
+                    AvxExtensions.Convert(sourceUInt32, destination);
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to UInt64.");
             }
         }
 
@@ -423,6 +475,21 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_UInt64 => false,
                 _ => throw new NotSupportedException("Unhandled GDAL data type " + from + ".")
             }; ;
+        }
+
+        public static void Pack<TBand>(TBand[] source, Span<float> destination) where TBand : INumber<TBand>
+        {
+            switch (Type.GetTypeCode(typeof(TBand)))
+            {
+                case TypeCode.Double:
+                    // vcvtpd2ps seems to be always saturating
+                    double[]? sourceDouble = source as double[];
+                    Debug.Assert(sourceDouble != null);
+                    AvxExtensions.Convert(sourceDouble, destination);
+                    break;
+                default:
+                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to sbyte data.");
+            }
         }
 
         public static void Pack<TBand>(TBand[] source, Span<sbyte> destination, bool noDataSaturatingFromBelow) where TBand : INumber<TBand>

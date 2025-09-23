@@ -396,30 +396,26 @@ namespace Mars.Clouds.Las
 
                     int pointX = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                     int pointY = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
+                    double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
+                    double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
                     if (lasToDtmTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 dtmIndexX, out Int64 dtmIndexY) == false)
                     {
-                        double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
-                        double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
                         throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DTM extents (" + dtmBand.GetExtentString() + ") and thus has off DTM indices " + dtmIndexX + ", " + dtmIndexY + ".");
                     }
 
                     float z = zOffset + zScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
-                    // TODO: bilinear interpolation
-                    Int64 dtmCellIndex = dtmBand.ToCellIndex(dtmIndexX, dtmIndexY);
-                    float dtm = dtmBand[dtmCellIndex];
+                    float dtm = dtmBand.InterpolateBilinear(x, y);
                     float height = z - dtm;
-                    if (height < minHeightInCrsUnits || height > maxHeightInCrsUnits)
+                    if ((height < minHeightInCrsUnits) || (height > maxHeightInCrsUnits))
                     {
                         continue;
                     }
 
-                    if ((lasToSliceTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 sliceIndexX, out Int64 sliceIndexY) == false))
+                    if (lasToSliceTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 sliceIndexX, out Int64 sliceIndexY) == false)
                     {
                         // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
                         if (trim <= 0.0)
                         {
-                            double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
-                            double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
                             throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside intensity slice extents (" + intensitySlice.GetExtentString() + ") and thus has off slice indices " + sliceIndexX + ", " + sliceIndexY + ".");
                         }
                         else
