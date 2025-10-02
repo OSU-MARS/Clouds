@@ -6,6 +6,7 @@ using OSGeo.OGR;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Management.Automation;
 using System.Threading;
 
@@ -18,13 +19,21 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Latitude of point cloud's origin in WGS84 coordinates.")]
+        [Parameter(HelpMessage = "Latitude of point cloud's origin in WGS84 coordinates.")]
         [ValidateRange(-90.0, 90.0)]
         public double Lat { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Longitude of point cloud's origin in WGS84 coordinates.")]
+        [Parameter(HelpMessage = "Longitude of point cloud's origin in WGS84 coordinates.")]
         [ValidateRange(-180.0, 180.0)]
         public double Long { get; set; }
+
+        [Parameter(HelpMessage = "X coordinate of point cloud's origin in the units of the coordinate system specified by -HorizontalEpsg.")]
+        [ValidateRange(0.0, 10.0 * 1000.0 * 1000.0)]
+        public double X { get; set; }
+
+        [Parameter(HelpMessage = "Y coordinate of point cloud's origin in the units of the coordinate system specified by -HorizontalEpsg.")]
+        [ValidateRange(0.0, 10.0 * 1000.0 * 1000.0)]
+        public double Y { get; set; }
 
         [Parameter(Mandatory = true, HelpMessage = "Elevation of point cloud's origin in the units of the coordinate system specified by -VerticalEpsg.")]
         [ValidateRange(-420.0, 8848.0)]
@@ -77,6 +86,8 @@ namespace Mars.Clouds.Cmdlets
             this.Las = [];
             this.Lat = Double.NaN;
             this.Long = Double.NaN;
+            this.X = Double.NaN;
+            this.Y = Double.NaN;
             this.Z = Double.NaN;
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
             this.VerticalEpsg = Constant.Epsg.Navd88m;
@@ -93,6 +104,13 @@ namespace Mars.Clouds.Cmdlets
         protected override void ProcessRecord()
         {
             // check inputs
+            bool hasLatitudeAndLongitude = (Double.IsNaN(this.Lat) == false) && (Double.IsNaN(this.Long) == false);
+            bool hasXandY = (Double.IsNaN(this.X) == false) && (Double.IsNaN(this.Y) == false);
+            if ((hasLatitudeAndLongitude && hasXandY) || ((hasLatitudeAndLongitude == false) && (hasXandY == false)))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.Lat), "Specify one of { -" + nameof(this.Lat) + ", -" + nameof(this.Long) + " } or { =" + nameof(this.X) + ", -" + nameof(this.Y) + " }', not a combination thereof.");
+            }
+
             List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             if (cloudPaths.Count < 1)
             {
@@ -114,21 +132,35 @@ namespace Mars.Clouds.Cmdlets
             // reproject point cloud's horizontal origin from WGS84 to cloud's coordinate system
             // Vertical origin from -Z is passed through transformation since no vertical CRS is attached to the WGS84 CRS. This shouldn't be necessary but GDAL
             // lacks a Geometry.AddPoint(double x, double y) overload.
-            SpatialReference wgs84 = SpatialReferenceExtensions.Create(Constant.Epsg.Wgs84);
             SpatialReference cloudCrs = SpatialReferenceExtensions.CreateCompound(this.HorizontalEpsg, this.VerticalEpsg);
-
-            CoordinateTransformation transform = new(wgs84, cloudCrs, new());
             Geometry origin = new(wkbGeometryType.wkbPoint25D);
-            origin.AddPoint(this.Lat, this.Long, this.Z); // GDAL reverses x and y for WGS84
-            if (origin.Transform(transform) != 0)
+            double scanAnchorX;
+            double scanAnchorY;
+            double scanAnchorZ;
+            if (hasLatitudeAndLongitude)
             {
-                throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), "Could not transform point cloud origin " + this.Lat + ", " + this.Long + ", " + this.Z + " to EPSG:" + this.HorizontalEpsg + ".");
+                SpatialReference wgs84 = SpatialReferenceExtensions.Create(Constant.Epsg.Wgs84);
+                CoordinateTransformation transform = new(wgs84, cloudCrs, new());
+                origin.AddPoint(this.Lat, this.Long, this.Z); // GDAL reverses x and y for WGS84
+                if (origin.Transform(transform) != 0)
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), "Could not transform point cloud origin " + this.Lat + ", " + this.Long + ", " + this.Z + " to EPSG:" + this.HorizontalEpsg + ".");
+                }
+
+                double[] commonOriginXyz = new double[3]; // can't use stackalloc as GDAL 3.8.3 C# bindings don't support Span<T>
+                origin.GetPoint(0, commonOriginXyz);
+
+                scanAnchorX = commonOriginXyz[0];
+                scanAnchorY = commonOriginXyz[1];
+                scanAnchorZ = commonOriginXyz[2];
             }
-            double[] commonOriginXyz = new double[3]; // can't use stackalloc as GDAL 3.8.3 C# bindings don't support Span<T>
-            origin.GetPoint(0, commonOriginXyz);
-            double scanAnchorX = commonOriginXyz[0];
-            double scanAnchorY = commonOriginXyz[1];
-            double scanAnchorZ = commonOriginXyz[2];
+            else
+            {
+                Debug.Assert(hasXandY);
+                scanAnchorX = this.X;
+                scanAnchorY = this.Y;
+                scanAnchorZ = this.Z;
+            }
 
             // point cloud scale requires adjustement if the scanner and destination CRSes use different units
             double scannerLinearUnitInM = SpatialReferenceExtensions.GetLinearUnitInM(this.ScannerUnit);

@@ -150,18 +150,18 @@ namespace Mars.Clouds.Cmdlets
                     newZoriginMinMax[2] = currentBoundingBoxMaxZ;
                     transform.TransformPoints(newXoriginMinMin.Length, newXoriginMinMin, newYoriginMinMax, newZoriginMinMax);
 
-                    // work around https://github.com/OSGeo/gdal/issues/12762
+                    // work around https://github.com/OSGeo/gdal/issues/12762 (fixed 2025-07-28)
                     // TBD if this is sufficient to allow -InputScale to be changed to -InputScaleXY.
-                    if (this.VerticalEpsg == Constant.Epsg.Navd88m)
-                    {
-                        int cloudVerticalEpsg = cloudCrs.ParseVerticalEpsg();
-                        if (cloudVerticalEpsg == Constant.Epsg.Navd88ft)
-                        {
-                            newZoriginMinMax[0] *= Constant.Units.FeetPerMeter;
-                            newZoriginMinMax[1] *= Constant.Units.FeetPerMeter;
-                            newZoriginMinMax[2] *= Constant.Units.FeetPerMeter;
-                        }
-                    }
+                    //if (this.VerticalEpsg == Constant.Epsg.Navd88m)
+                    //{
+                    //    int cloudVerticalEpsg = cloudCrs.ParseVerticalEpsg();
+                    //    if (cloudVerticalEpsg == Constant.Epsg.Navd88ft)
+                    //    {
+                    //        newZoriginMinMax[0] *= Constant.Units.FeetPerMeter;
+                    //        newZoriginMinMax[1] *= Constant.Units.FeetPerMeter;
+                    //        newZoriginMinMax[2] *= Constant.Units.FeetPerMeter;
+                    //    }
+                    //}
 
                     Debug.Assert((newBoundingBox[0] < newBoundingBox[2]) && (newBoundingBox[1] < newBoundingBox[3]));
                     cloud.Header.MinX = newBoundingBox[0]; // min and max x and y are refreshed here for zero rotation
