@@ -39,7 +39,7 @@ namespace Mars.Clouds.GdalExtensions
             TTile? existingTile = this.TileGrid[tileIndexX, tileIndexY];
             if (existingTile != null)
             {
-                throw new InvalidOperationException("Tile cannot be added at (" + tileIndexX + ", " + tileIndexY + ") because a tile is already present at that location.");
+                throw new InvalidOperationException($"Tile cannot be added at ({tileIndexX}, {tileIndexY}) because a tile is already present at that location.");
             }
 
             this.TileGrid[tileIndexX, tileIndexY] = tile;

@@ -16,11 +16,11 @@ namespace Mars.Clouds.Las
             LasHeader10 lasHeader = lasFile.Header;
             if (reader.BaseStream.Position != lasHeader.OffsetToPointData)
             {
-                throw new ArgumentOutOfRangeException(nameof(reader), "Reader is at offset " + reader.BaseStream.Position + " rather than at the " + lasHeader.OffsetToPointData + " byte offset to the start of point data.");
+                throw new ArgumentOutOfRangeException(nameof(reader), $"Reader is at offset {reader.BaseStream.Position} rather than at the {lasHeader.OffsetToPointData} byte offset to the start of point data.");
             }
             if (this.BaseStream.Position != lasHeader.OffsetToPointData)
             {
-                throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasHeader.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+                throw new InvalidOperationException($".las writer must be positioned at the start of point data (offset {lasHeader.OffsetToPointData} bytes) to write points. The writer is currently positioned at {this.BaseStream.Position} bytes.");
             }
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
 
@@ -118,7 +118,7 @@ namespace Mars.Clouds.Las
         //{
         //    if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
         //    {
-        //        throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasFile.Header.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+        //        throw new InvalidOperationException($".las writer must be positioned at the start of point data (offset {lasFile.Header.OffsetToPointData} bytes) to write points. The writer is currently positioned at {this.BaseStream.Position} bytes.");
         //    }
 
         //    // points don't need to be unpacked so both uncompressed .las and compressed .laz points can be copied
@@ -153,18 +153,18 @@ namespace Mars.Clouds.Las
                 UInt32 extendedVariableLengthRecords = lasHeader14.NumberOfExtendedVariableLengthRecords;
                 if ((extendedVariableLengthRecords > 0) && (this.BaseStream.Position != (long)lasHeader14.StartOfFirstExtendedVariableLengthRecord))
                 {
-                    throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated extended variable length record offset (" + lasHeader14.StartOfFirstExtendedVariableLengthRecord + " bytes). Extended variable length records should begin immediately after the points.");
+                    throw new InvalidOperationException($".las file stream is at position {this.BaseStream.Position} rather than at the file header's indicated extended variable length record offset ({lasHeader14.StartOfFirstExtendedVariableLengthRecord} bytes). Extended variable length records should begin immediately after the points.");
                 }
                 // if there are no extended variable length records then StartOfFirstExtendedVariableLengthRecord may be zero
 
                 if (extendedVariableLengthRecords != lasFile.ExtendedVariableLengthRecords.Count)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + extendedVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + " records are present. This may be because the header's number of extended variable length records is set incorrectly or because the header uses a LAS version prior to 1.4.");
+                    throw new ArgumentOutOfRangeException(nameof(lasFile), $".las file's header indicates {extendedVariableLengthRecords} variable length records but {lasFile.VariableLengthRecords.Count} records are present. This may be because the header's number of extended variable length records is set incorrectly or because the header uses a LAS version prior to 1.4.");
                 }
             }
             else if (lasFile.ExtendedVariableLengthRecords.Count > 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), "LAS file version " + lasFile.Header.VersionMajor + "." + lasFile.Header.VersionMinor + " does not support extended variable length records (EVLRs) but the file has " + lasFile.ExtendedVariableLengthRecords.Count + " EVLRs.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), $"LAS file version {lasFile.Header.VersionMajor}.{lasFile.Header.VersionMinor} does not support extended variable length records (EVLRs) but the file has {lasFile.ExtendedVariableLengthRecords.Count} EVLRs.");
             }
 
             for (int evlrIndex = 0; evlrIndex < lasFile.ExtendedVariableLengthRecords.Count; ++evlrIndex)
@@ -179,7 +179,7 @@ namespace Mars.Clouds.Las
             int bytesWritten = Encoding.UTF8.GetBytes(fixedLengthString, buffer);
             if (bytesWritten != length)
             {
-                throw new ArgumentOutOfRangeException(nameof(fixedLengthString), "Fixed length string '" + fixedLengthString + "' did not encode to the expected length of " + length + " bytes.");
+                throw new ArgumentOutOfRangeException(nameof(fixedLengthString), $"Fixed length string '{fixedLengthString}' did not encode to the expected length of {length} bytes.");
             }
         }
 
@@ -191,7 +191,7 @@ namespace Mars.Clouds.Las
             byte versionMinor = lasFile.Header.VersionMinor;
             if (versionMinor < 2)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), "Legacy .las version " + lasFile.Header.VersionMinor + "." + lasFile.Header.VersionMinor + " is not supported.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), $"Legacy .las version {lasFile.Header.VersionMinor}.{lasFile.Header.VersionMinor} is not supported.");
             }
             LasHeader12 lasHeader = (LasHeader12)lasFile.Header;
 
@@ -202,7 +202,7 @@ namespace Mars.Clouds.Las
             BinaryPrimitives.WriteUInt16LittleEndian(headerBytes[6..], (UInt16)lasHeader.GlobalEncoding);
             if (lasHeader.ProjectID.TryWriteBytes(headerBytes[8..]) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), "Failed to write project GUID " + lasHeader.ProjectID + " to header buffer.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), $"Failed to write project GUID {lasHeader.ProjectID} to header buffer.");
             }
 
             headerBytes[24] = lasHeader.VersionMajor;
@@ -268,7 +268,7 @@ namespace Mars.Clouds.Las
             int bytesWritten = Encoding.UTF8.GetBytes(fixedLengthString, buffer);
             if (bytesWritten > length)
             {
-                throw new ArgumentOutOfRangeException(nameof(fixedLengthString), "String '" + fixedLengthString + "' encoded to " + bytesWritten + ", which exceeds the allowed length of " + length + " bytes.");
+                throw new ArgumentOutOfRangeException(nameof(fixedLengthString), $"String '{fixedLengthString}' encoded to {bytesWritten}, which exceeds the allowed length of {length} bytes.");
             }
             for (int index = bytesWritten; index < length; ++index)
             {
@@ -281,7 +281,7 @@ namespace Mars.Clouds.Las
         {
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
-                throw new InvalidOperationException(".las writer must be positioned at the start of point data (offset " + lasFile.Header.OffsetToPointData + " bytes) to write points. The writer is currently positioned at " + this.BaseStream.Position + " bytes.");
+                throw new InvalidOperationException($".las writer must be positioned at the start of point data (offset {lasFile.Header.OffsetToPointData} bytes) to write points. The writer is currently positioned at {this.BaseStream.Position} bytes.");
             }
 
             LasHeader10 lasHeader = lasFile.Header;
@@ -468,11 +468,11 @@ namespace Mars.Clouds.Las
         {
             if (lasFile.Header.NumberOfVariableLengthRecords != lasFile.VariableLengthRecords.Count)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), ".las file's header indicates " + lasFile.Header.NumberOfVariableLengthRecords + " variable length records but " + lasFile.VariableLengthRecords.Count + (lasFile.VariableLengthRecords.Count > 1 ? " records are present." : " record is present."));
+                throw new ArgumentOutOfRangeException(nameof(lasFile), $".las file's header indicates {lasFile.Header.NumberOfVariableLengthRecords} variable length records but {lasFile.VariableLengthRecords.Count} {(lasFile.VariableLengthRecords.Count > 1 ? " records are" : " record is")} present.");
             }
             if (this.BaseStream.Position != lasFile.Header.HeaderSize)
             {
-                throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated size (" + lasFile.Header.HeaderSize + " bytes). Variable length records should begin immediately after the header.");
+                throw new InvalidOperationException($".las file stream is at position {this.BaseStream.Position} rather than at the file header's indicated size ({lasFile.Header.HeaderSize} bytes). Variable length records should begin immediately after the header.");
             }
 
             for (int vlrIndex = 0; vlrIndex < lasFile.VariableLengthRecords.Count; ++vlrIndex)
@@ -488,7 +488,7 @@ namespace Mars.Clouds.Las
 
             if (this.BaseStream.Position != lasFile.Header.OffsetToPointData)
             {
-                throw new InvalidOperationException(".las file stream is at position " + this.BaseStream.Position + " rather than at the file header's indicated point offset (" + lasFile.Header.OffsetToPointData + " bytes). A valid variable length record write needs to end at the beginning of the point data.");
+                throw new InvalidOperationException($".las file stream is at position {this.BaseStream.Position} rather than at the file header's indicated point offset ({lasFile.Header.OffsetToPointData} bytes). A valid variable length record write needs to end at the beginning of the point data.");
             }
         }
     }

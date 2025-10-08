@@ -29,7 +29,7 @@ namespace Mars.Clouds.Vrt
                 case "SourceProperties":
                     if ((reader.AttributeCount != 3) && (reader.AttributeCount != 5))
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.RasterXSize = reader.ReadAttributeAsUInt32("RasterXSize");
                     this.RasterYSize = reader.ReadAttributeAsUInt32("RasterYSize");
@@ -42,7 +42,7 @@ namespace Mars.Clouds.Vrt
                     reader.Read();
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 

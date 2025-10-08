@@ -136,7 +136,7 @@ namespace Mars.Clouds.Cmdlets
 
             progress.Stopwatch.Stop();
             string tileOrTiles = dsm.NonNullTileCount > 1 ? "tiles" : "tile";
-            this.WriteVerbose("Found slope and aspect in " + dsm.NonNullTileCount + " " + tileOrTiles + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + ".");
+            this.WriteVerbose($"Found slope and aspect in {dsm.NonNullTileCount} {tileOrTiles}{(this.Vrt ? " and generated .vrt" : String.Empty)} in {progress.Stopwatch.ToElapsedString()}.");
             base.ProcessRecord();
         }
     }

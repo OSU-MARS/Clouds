@@ -42,7 +42,7 @@ namespace Mars.Clouds.Cmdlets
         {
             this.Classification = String.Empty;
             this.Crowns = String.Empty;
-            this.Merge = "treetops" + Constant.File.GeoPackageExtension;
+            this.Merge = $"treetops{Constant.File.GeoPackageExtension}";
             this.Treetops = [];
         }
 
@@ -53,14 +53,14 @@ namespace Mars.Clouds.Cmdlets
             if (treetopTilePaths.Count < 1)
             {
                 // nothing to do
-                this.WriteVerbose("Exiting without performing any processing. -" + nameof(this.Treetops) + " = '" + String.Join(", ", this.Treetops) + "' must indicate at least one treetop tile to count classifications over.");
+                this.WriteVerbose($"Exiting without performing any processing. -{nameof(this.Treetops)} = '{String.Join(", ", this.Treetops)}' must indicate at least one treetop tile to count classifications over.");
                 return;
             }
 
             int geopackageSqlBackgroundThreads = GdalCmdlet.EstimateGeopackageSqlBackgroundThreads();
             if (this.DataThreads <= geopackageSqlBackgroundThreads)
             {
-                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least " + (geopackageSqlBackgroundThreads + 1) + " to allow for local maxima to be identified concurrent with " + geopackageSqlBackgroundThreads + (geopackageSqlBackgroundThreads == 1 ? " SQL thread." : " SQL threads."));
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least {(geopackageSqlBackgroundThreads + 1)} to allow for local maxima to be identified concurrent with {geopackageSqlBackgroundThreads} SQL {(geopackageSqlBackgroundThreads == 1 ? "thread" : "threads")}.");
             }
 
             // build treetop tile dictionary
@@ -102,11 +102,11 @@ namespace Mars.Clouds.Cmdlets
             VirtualRaster<LandCoverRaster> classification = this.ReadVirtualRasterMetadata(cmdletName, this.Classification, LandCoverRaster.CreateFromBandMetadata, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(crowns.Crs, classification.Crs) == false)
             {
-                throw new NotSupportedException("Crown virtual raster '" + this.Crowns + "' is in '" + crowns.Crs.GetName() + "' while classification virtual raster '" + this.Classification + "' is in '" + classification.Crs.GetName() + "'.");
+                throw new NotSupportedException($"Crown virtual raster '{this.Crowns}' is in '{crowns.Crs.GetName()}' while classification virtual raster '{this.Classification}' is in '{classification.Crs.GetName()}'.");
             }
             if (crowns.IsSameExtentAndSpatialResolution(classification) == false)
             {
-                throw new NotSupportedException("Crown and classification virtual rasters '" + this.Crowns + "' and '" + this.Classification + "' differ in spatial extent or resolution. Sizes are " + crowns.SizeInTilesX + " by " + crowns.SizeInTilesY + " and " + classification.SizeInTilesX + " by " + classification.SizeInTilesY + " tiles with tiles being " + crowns.TileSizeInCellsX + " by " + crowns.TileSizeInCellsY + " and " + classification.TileSizeInCellsX + " by " + classification.TileSizeInCellsY + " cells, respectively.");
+                throw new NotSupportedException($"Crown and classification virtual rasters '{this.Crowns}' and '{this.Classification}' differ in spatial extent or resolution. Sizes are {crowns.SizeInTilesX} by {crowns.SizeInTilesY} and {classification.SizeInTilesX} by {classification.SizeInTilesY} tiles with tiles being {crowns.TileSizeInCellsX} by {crowns.TileSizeInCellsY} and {classification.TileSizeInCellsX} by {classification.TileSizeInCellsY} cells, respectively.");
             }
 
             // create output layer
@@ -138,7 +138,7 @@ namespace Mars.Clouds.Cmdlets
                     string tileName = Tile.GetName(classificationTile.FilePath);
                     if (crownTile.IsSameExtentAndSpatialResolution(classificationTile) == false)
                     {
-                        throw new NotSupportedException("Crown and classification extent or resolution is mismatched for tile " + tileName + "");
+                        throw new NotSupportedException($"Crown and classification extent or resolution is mismatched for tile {tileName}");
                     }
 
                     // read treetop tile matching this classification tile
@@ -149,25 +149,25 @@ namespace Mars.Clouds.Cmdlets
                     SpatialReference treetopTileCrs = treetopLayer.GetSpatialReference();
                     if (SpatialReferenceExtensions.IsSameCrs(treetopTileCrs, classification.Crs) == false)
                     {
-                        throw new NotSupportedException("Tile '" + treetopTilePathAndIsMerged + "' does not have the same coordinate system ('" + treetopTileCrs.GetName() + "') as other tiles ('" + classification.Crs.GetName() + "').");
+                        throw new NotSupportedException($"Tile '{treetopTilePathAndIsMerged}' does not have the same coordinate system ('{treetopTileCrs.GetName()}') as other tiles ('{classification.Crs.GetName()}').");
                     }
 
                     (double crownXmin, double crownXmax, double crownYmin, double crownYmax) = crownTile.GetExtent();
                     Extent treetopExtent = treetopLayer.GetExtent();
                     if (treetopExtent.IsSameOrWithin(crownXmin, crownXmax, crownXmin, crownYmax) == false)
                     {
-                        throw new NotSupportedException("Treetop tile '" + treetopTilePathAndIsMerged.Path + "' with extent (" + treetopExtent.GetExtentString() + ") does not lie within crown tile '" + crownTile.FilePath + "' with extents (" + crownTile.GetExtentString() + ").");
+                        throw new NotSupportedException($"Treetop tile '{treetopTilePathAndIsMerged.Path}' with extent ({treetopExtent.GetExtentString()}) does not lie within crown tile '{crownTile.FilePath}' with extents ({crownTile.GetExtentString()}).");
                     }
 
                     treetopLayer.GetTreetops(ref treetops);
                     (double tileCentroidX, double tileCentroidY) = crownTile.GetCentroid();
                     if (crowns.TryGetNeighborhood8(tileCentroidX, tileCentroidY, bandName: null, out RasterNeighborhood8<int>? crownNeighborhood) == false)
                     {
-                        throw new InvalidOperationException("Could not form crown neighborhood for treetop tile centered at (" + tileCentroidX + ", " + tileCentroidY + ").");
+                        throw new InvalidOperationException($"Could not form crown neighborhood for treetop tile centered at ({tileCentroidX}, {tileCentroidY}).");
                     }
                     if (classification.TryGetNeighborhood8(tileCentroidX, tileCentroidY, bandName: null, out RasterNeighborhood8<byte>? classificationNeighborhood) == false)
                     {
-                        throw new InvalidOperationException("Could not form classification neighborhood for treetop tile centered at (" + tileCentroidX + ", " + tileCentroidY + ").");
+                        throw new InvalidOperationException($"Could not form classification neighborhood for treetop tile centered at ({tileCentroidX}, {tileCentroidY}).");
                     }
 
                     // count classes appearing within each tree's delineated, connected crown
@@ -205,7 +205,7 @@ namespace Mars.Clouds.Cmdlets
             // CLR doesn't have to Dispose() when a using() { } ends and tends not to, so relying on using() and not synchronously waiting
             // on the flush creates problems with reporting incomplete execution times and the cmdlet appearing to have exited while the
             // write is still continuing to disk.
-            progress.StatusDescription = "Waiting for GDAL to finish committing treetops to '" + Path.GetFileName(this.Merge) + "'...";
+            progress.StatusDescription = $"Waiting for GDAL to finish committing treetops to '{Path.GetFileName(this.Merge)}'...";
             progress.PercentComplete = 0;
             progress.SecondsRemaining = -1;
             this.WriteProgress(progress);
@@ -219,13 +219,13 @@ namespace Mars.Clouds.Cmdlets
             {
                 if (treetopTile.IsMerged == false)
                 {
-                    this.WriteWarning("Treetop tile '" + treetopTile.Path + "' was not merged, likely because no corresponding classification tile was found.");
+                    this.WriteWarning($"Treetop tile '{treetopTile.Path}' was not merged, likely because no corresponding classification tile was found.");
                     ++unmergedTiles;
                 }
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Merged " + totalTreetops.ToString("#,#,0") + " treetops from " + treetopReadWrite.TilesWritten + (treetopReadWrite.TilesWritten == 1 ? " tile " : " tiles ") + "in " + progress.Stopwatch.ToElapsedString() + " with " + unmergedTiles + (unmergedTiles == 1 ? " unmerged tile." : " unmerged tiles."));
+            this.WriteVerbose($"Merged {totalTreetops:#,#,0} treetops from {treetopReadWrite.TilesWritten + (treetopReadWrite.TilesWritten == 1 ? " tile " : " tiles ")}in {progress.Stopwatch.ToElapsedString()} with {unmergedTiles} unmerged {(unmergedTiles == 1 ? "tile" : "tiles")}.");
         }
 
         private class TilePathAndIsMerged

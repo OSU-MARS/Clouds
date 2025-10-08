@@ -19,7 +19,7 @@ namespace Mars.Clouds.DiskSpd
         {
             if (reader.AttributeCount != 2)
             {
-                throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
             }
 
             switch (reader.Name)
@@ -30,7 +30,7 @@ namespace Mars.Clouds.DiskSpd
                     reader.Read();
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
     }

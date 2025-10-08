@@ -115,17 +115,17 @@ namespace Mars.Clouds.Segmentation
         {
             if ((treetopCellIndexX < 0) || (treetopCellIndexX >= this.SizeX - 1))
             {
-                throw new ArgumentOutOfRangeException(nameof(treetopCellIndexX), nameof(treetopCellIndexX) + " must be in [ 0, " + (this.SizeX - 2) + "] to indicate an eight-way neighborhood that fully within the cost grid (grid is " + this.SizeX + " by " + this.SizeY + ").");
+                throw new ArgumentOutOfRangeException(nameof(treetopCellIndexX), $"{nameof(treetopCellIndexX)} must be in [ 0, {(this.SizeX - 2)}] to indicate an eight-way neighborhood that fully within the cost grid (grid is {this.SizeX} by {this.SizeY}).");
             }
             if ((treetopCellIndexY < 0) || (treetopCellIndexY >= this.SizeY - 1))
             {
-                throw new ArgumentOutOfRangeException(nameof(treetopCellIndexY), nameof(treetopCellIndexY) + " must be in [ 0, " + (this.SizeY - 2) + "] to indicate an eight-way neighborhood that fully within the cost grid (grid is " + this.SizeX + " by " + this.SizeY + ").");
+                throw new ArgumentOutOfRangeException(nameof(treetopCellIndexY), $"{nameof(treetopCellIndexY)} must be in [ 0, {(this.SizeY - 2)}] to indicate an eight-way neighborhood that fully within the cost grid (grid is {this.SizeX} by {this.SizeY}).");
             }
 
             GridNeighborhood8<TreetopsGrid, TreetopsIndexed>? treetopsNeighborhood = segmentationState.TreetopNeighborhood;
             if (treetopsNeighborhood == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state's treetop neighborhood is missing. Call " + nameof(segmentationState.SetNeighborhoodsAndCellSize) + "() before calling " + nameof(this.EnumerateCostFields) + "().");
+                throw new ArgumentOutOfRangeException(nameof(segmentationState), $"Segmentation state's treetop neighborhood is missing. Call {nameof(segmentationState.SetNeighborhoodsAndCellSize)}() before calling {nameof(this.EnumerateCostFields)}().");
             }
 
             int cellIndexX = treetopCellIndexX + 1; // guaranteed to be in [ 1, this.SizeX ]
@@ -218,11 +218,11 @@ namespace Mars.Clouds.Segmentation
             // inherited from Grid
             if ((this.SizeX != treetopsTile.SizeX + 2) || (this.SizeY != treetopsTile.SizeY + 2))
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the grid size from " + this.SizeX + " x " + this.SizeY + " cells to " + treetopsTile.SizeX + " x " + treetopsTile.SizeY + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing the grid size from {this.SizeX} x {this.SizeY} cells to {treetopsTile.SizeX} x {treetopsTile.SizeY}.");
             }
             if ((treetopsTile.Transform.CellWidth != this.Transform.CellWidth) || (treetopsTile.Transform.CellHeight != this.Transform.CellHeight))
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the cell size from " + this.Transform.CellWidth + " x " + this.Transform.CellHeight + " cells to " + treetopsTile.Transform.CellWidth + " x " + treetopsTile.Transform.CellHeight + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing the cell size from {this.Transform.CellWidth} x {this.Transform.CellHeight} cells to {treetopsTile.Transform.CellWidth} x {treetopsTile.Transform.CellHeight}.");
             }
             if ((treetopsTile.Transform.RowRotation != 0.0) || (treetopsTile.Transform.ColumnRotation != 0.0))
             {

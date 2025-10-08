@@ -16,7 +16,7 @@ namespace Mars.Clouds.Extensions
         {
             if (taskCount < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(taskCount), "Creation of at least one task must be requested. A " + nameof(taskCount) + " of " + taskCount + " was requested.");
+                throw new ArgumentOutOfRangeException(nameof(taskCount), $"Creation of at least one task must be requested. A {nameof(taskCount)} of {taskCount} was requested.");
             }
 
             this.cancellationTokenSource = cancellationTokenSource;
@@ -91,8 +91,7 @@ namespace Mars.Clouds.Extensions
                     this.cancellationTokenSource.Cancel(); // cancel any tasks stil running
                 }
 
-                string message = tasksFaulted + " of " + this.tasks.Length + " parallel tasks faulted.";
-                throw new AggregateException(message, this.taskExceptions);
+                throw new AggregateException($"{tasksFaulted} of {this.tasks.Length} parallel tasks faulted.", this.taskExceptions);
             }
 
             return false;

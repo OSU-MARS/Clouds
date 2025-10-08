@@ -56,7 +56,7 @@ namespace Mars.Clouds.Cmdlets
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
             if (this.DataThreads < 2)
             {
-                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least two.");
             }
 
             const string cmdletName = "Get-Dsm";
@@ -134,7 +134,7 @@ namespace Mars.Clouds.Cmdlets
                             // tilePoints must be in the same CRS as the DTM but can have any extent equal to or smaller than the DSM and DTM tiles
                             if (dtmTile.IsSameExtent(lasTile.GridExtent) == false)
                             {
-                                throw new NotSupportedException(tileName + ": DTM tile extent (" + dtmTile.GetExtentString() + ") does not match point cloud tile extent (" + lasTile.GridExtent.GetExtentString() + ").");
+                                throw new NotSupportedException($"{tileName}: DTM tile extent ({dtmTile.GetExtentString()}) does not match point cloud tile extent ({lasTile.GridExtent.GetExtentString()}).");
                             }
 
                             // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
@@ -206,7 +206,7 @@ namespace Mars.Clouds.Cmdlets
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose(dsmReadCreateWrite.CellsWritten.ToString("n0") + " DSM cells from " + lasGrid.NonNullCells + (lasGrid.NonNullCells == 1 ? " tile (" : " tiles (") + (dsmReadCreateWrite.TotalNumberOfPoints / 1E6).ToString("0.0") + " Mpoints) in " + progress.Stopwatch.ToElapsedString() + ": " + dsmReadCreateWrite.TotalPointDataInGB.ToString("0.00") + " GB at " + (dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.00") + " tiles/s (" + (dsmReadCreateWrite.MeanPointsPerTile / 1E6).ToString("0.0") + " Mpoints/tile, " + (dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " GB/s).");
+            this.WriteVerbose($"{dsmReadCreateWrite.CellsWritten:n0} DSM cells from {lasGrid.NonNullCells} {(lasGrid.NonNullCells == 1 ? " tile" : " tiles")} ({dsmReadCreateWrite.TotalNumberOfPoints / 1E6:0.0} Mpoints) in {progress.Stopwatch.ToElapsedString()}: {dsmReadCreateWrite.TotalPointDataInGB:0.00} GB at {dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.00} tiles/s ({dsmReadCreateWrite.MeanPointsPerTile / 1E6:0.0} Mpoints/tile, {dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds:0.0} GB/s).");
             base.ProcessRecord();
         }
 
@@ -228,7 +228,7 @@ namespace Mars.Clouds.Cmdlets
                 Debug.Assert(SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dsm.Crs));
                 if (lasGrid.IsSameExtentAndTileResolution(dsm) == false)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(dsm), "Point cloud tile grid is " + lasGrid.SizeX + " x " + lasGrid.SizeY + " with extent (" + lasGrid.GetExtentString() + ") while the DSM tile grid is " + dsm.SizeInTilesX + " x " + dsm.SizeInTilesY + " with extent " + dsm.GetExtentString() + ". Are the LAS and DTM tiles matched?");
+                    throw new ArgumentOutOfRangeException(nameof(dsm), $"Point cloud tile grid is {lasGrid.SizeX} x {lasGrid.SizeY} with extent ({lasGrid.GetExtentString()}) while the DSM tile grid is {dsm.SizeInTilesX} x {dsm.SizeInTilesY} with extent {dsm.GetExtentString()}. Are the LAS and DTM tiles matched?");
                 }
 
                 this.BypassOutputRasterWriteToDisk = false;

@@ -33,7 +33,7 @@ Get-Treetops -Method DsmRing -Dsm "$dataPath\DSM v3\*.tif" -Treetops ([System.IO
 Get-Crowns -Dsm "$dataPath\DSM v3" -Treetops "$dataPath\treetops\rf v1" -Crowns "$dataPath\treetops\crowns rf v1" -Vrt -Verbose
 
 # merge treetop and taxa classification tiles into a single treetop file with class prevalence counts within each tree's nominal radius
-Merge-Treetops -Treetops "$dataPath\treetops\rf v1" -Classification "$dataPath\classification\PCA10iQ17 3800 1.8m m8n25 cubic subclass" -Crowns "$dataPath\treetops\crowns rf v1" -Merge "$dataPath\treetops\treetops merged rf v1.gpkg" -Verbose
+Merge-Treetops -Treetops "$dataPath\treetops\rf v1" -Classification "$dataPath\classification\PCA10iQ27 3800 1.8m m8n22 cubic subclass" -Crowns "$dataPath\treetops\crowns rf v1" -Merge "$dataPath\treetops\treetops merged rf v1 (transitory).gpkg" -Verbose
 
 # single threaded recalc of selected tiles
 #$tiles = ("s03450w06540", "s03480w06570", "s03480w06690", "s03570w06900", "s03570w06960", "s03570w06990", "s03600w07140", "s03630w07170", "s03660w07200", "s03720w06360", "s03930w07260", "s04050w07260", "s04080w07230", "s04200w07170", "s04230w07170", "s04290w07140", "s04320w07110")

@@ -67,17 +67,17 @@ namespace Mars.Clouds.Las
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {
-                throw new ArgumentOutOfRangeException(nameof(bands), nameof(bands) + " must include " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.Primary) + ".");
+                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}.");
             }
             if (this.Crs.IsCompound() == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(lasFile), dsmPrimaryFilePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
+                throw new ArgumentOutOfRangeException(nameof(lasFile), $"{dsmPrimaryFilePath}: point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
             }
 
             SpatialReference lasTileCrs = lasFile.GetSpatialReference();
             if (SpatialReferenceExtensions.IsSameCrs(lasTileCrs, dtmTile.Crs) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(dtmTile), dsmPrimaryFilePath + ": point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
+                throw new ArgumentOutOfRangeException(nameof(dtmTile), $"{dsmPrimaryFilePath}: point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '{lasTileCrs.GetName()}' while the DTM CRS is {dtmTile.Crs.GetName()}.");
             }
 
             this.Bands = DigitalSurfaceModelBands.Primary;
@@ -107,7 +107,7 @@ namespace Mars.Clouds.Las
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {
-                throw new ArgumentOutOfRangeException(nameof(bands), nameof(bands) + " must include " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.Primary) + ".");
+                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}.");
             }
 
             for (int gdalBandIndex = 1; gdalBandIndex <= dsmDataset.RasterCount; ++gdalBandIndex)
@@ -174,22 +174,22 @@ namespace Mars.Clouds.Las
                         this.Bands |= DigitalSurfaceModelBands.SourceIDSurface;
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "'.");
+                        throw new NotSupportedException($"Unhandled band '{bandName}'.");
                 }
             }
             
             // primary bands
             if (this.Surface == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.SurfaceBandName + "'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), $"DSM raster does not contain a band named '{DigitalSurfaceModel.SurfaceBandName}'.");
             }
             if (this.CanopyMaxima3 == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.CanopyMaximaBandName + "'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), $"DSM raster does not contain a band named '{DigitalSurfaceModel.CanopyMaximaBandName}'.");
             }
             if (this.CanopyHeight == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), "DSM raster does not contain a band named '" + DigitalSurfaceModel.CanopyHeightBandName + "'.");
+                throw new ArgumentOutOfRangeException(nameof(dsmDataset), $"DSM raster does not contain a band named '{DigitalSurfaceModel.CanopyHeightBandName}'.");
             }
             Debug.Assert((this.Bands & DigitalSurfaceModelBands.Primary) == DigitalSurfaceModelBands.Primary);
 
@@ -201,7 +201,7 @@ namespace Mars.Clouds.Las
         {
             if ((this.DsmSlope == null) || (this.DsmAspect == null) || (this.CmmSlope3 == null) || (this.CmmAspect3 == null))
             {
-                throw new InvalidOperationException("DSM and CMM slope and aspect cannot be calculated because at least one slope or aspect band was not instantiated. Current bands are " + this.Bands + ". Was the surface model tile created with " + nameof(DigitalSurfaceModelBands) + "." + nameof(DigitalSurfaceModelBands.SlopeAspect) + "?");
+                throw new InvalidOperationException($"DSM and CMM slope and aspect cannot be calculated because at least one slope or aspect band was not instantiated. Current bands are {this.Bands}. Was the surface model tile created with {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.SlopeAspect)}?");
             }
 
             Debug.Assert((this.Bands &= DigitalSurfaceModelBands.SlopeAspect) == DigitalSurfaceModelBands.SlopeAspect);
@@ -641,11 +641,11 @@ namespace Mars.Clouds.Las
 
             if (SpatialReferenceExtensions.IsSameCrs(this.Crs, dtm.Crs) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(dtm), "DSMs and DTMs are currently required to be in the same CRS. The DSM CRS is '" + this.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
+                throw new ArgumentOutOfRangeException(nameof(dtm), $"DSMs and DTMs are currently required to be in the same CRS. The DSM CRS is '{this.Crs.GetName()}' while the DTM CRS is {dtm.Crs.GetName()}.");
             }
             if (this.IsSameExtentAndSpatialResolution(dtm) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(dtm), "DTM extent (" + dtm.GetExtentString() + ") or size (" + dtm.SizeX + " x " + dtm.SizeY + ") does not match DSM extent (" + this.GetExtentString() + ") or size (" + this.SizeX + " by " + this.SizeY + ").");
+                throw new ArgumentOutOfRangeException(nameof(dtm), $"DTM extent ({dtm.GetExtentString()}) or size ({dtm.SizeX} x {dtm.SizeY}) does not match DSM extent ({this.GetExtentString()}) or size ({this.SizeX} by {this.SizeY}).");
             }
 
             // nothing to do for this.Surface
@@ -800,7 +800,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in DSM tile '" + this.FilePath + ".");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in DSM tile '{this.FilePath}.");
                     }
                 }
 
@@ -871,7 +871,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in z diagnostics tile '" + slopeAspectTilePath + "'.");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in z diagnostics tile '{slopeAspectTilePath}'.");
                     }
                 }
 
@@ -929,7 +929,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in z diagnostics tile '" + zTilePath + "'.");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in z diagnostics tile '{zTilePath}'.");
                     }
                 }
 
@@ -974,7 +974,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in point count diagnostics tile '" + pointCountTilePath + "'.");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in point count diagnostics tile '{pointCountTilePath}'.");
                     }
                 }
 
@@ -1006,7 +1006,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in source ID diagnostics tile '" + returnNumberTilePath + "'.");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in source ID diagnostics tile '{returnNumberTilePath}'.");
                     }
                 }
 
@@ -1038,7 +1038,7 @@ namespace Mars.Clouds.Las
                             }
                             break;
                         default:
-                            throw new NotSupportedException("Unhandled band '" + bandName + "' in source ID diagnostics tile '" + sourceIDtilePath + "'.");
+                            throw new NotSupportedException($"Unhandled band '{bandName}' in source ID diagnostics tile '{sourceIDtilePath}'.");
                     }
                 }
 
@@ -1051,7 +1051,7 @@ namespace Mars.Clouds.Las
             // inherited from Grid
             if ((this.SizeX != newExtents.SizeX) || (this.SizeY != newExtents.SizeY))
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the DSM's size from " + this.SizeX + " x " + this.SizeY + " cells to " + newExtents.SizeX + " x " + newExtents.SizeY + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing the DSM's size from {this.SizeX} x {this.SizeY} cells to {newExtents.SizeX} x {newExtents.SizeY}.");
             }
 
             SpatialReference lasFileCrs = lasFile.GetSpatialReference();
@@ -1060,7 +1060,7 @@ namespace Mars.Clouds.Las
                 // for now, be tolerant of .las files missing vertical CRSes when testing sameness but maintain vertical CRS requirement for adoption
                 if (lasFileCrs.IsCompound() == 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(lasFile), filePath + ": point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
+                    throw new ArgumentOutOfRangeException(nameof(lasFile), $"{filePath}: point cloud's coordinate reference system (CRS) is not a compound CRS. Both a horizontal and vertical CRS are needed to fully geolocate a digital surface model's elevations.");
                 }
                 this.SetCrs(lasFileCrs);
             }

@@ -75,14 +75,14 @@ namespace Mars.Clouds.Cmdlets
         {
             if ((String.IsNullOrWhiteSpace(this.Cells) == false) && this.Vrt)
             {
-                throw new NotSupportedException("A virtual raster cannot be generated when the output is a single metrics raster. Specify either -" + nameof(this.Cells) + " or -" + nameof(this.Vrt) + " but not both.");
+                throw new NotSupportedException($"A virtual raster cannot be generated when the output is a single metrics raster. Specify either -{nameof(this.Cells)} or -{nameof(this.Vrt)} but not both.");
             }
 
             const string cmdletName = "Get-GridMetrics";
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if ((lasGrid.Transform.ColumnRotation != 0.0) || (lasGrid.Transform.RowRotation != 0.0))
             {
-                throw new NotSupportedException("-" + nameof(this.Las) + " indicates a point cloud or point cloud tiles ('" + this.Las + "') which are rotated with respect to their coordinate system. Currently only tiles aligned with their coordinate system's axes are supported.");
+                throw new NotSupportedException($"-{nameof(this.Las)} indicates a point cloud or point cloud tiles ('{this.Las}') which are rotated with respect to their coordinate system. Currently only tiles aligned with their coordinate system's axes are supported.");
             }
 
             RasterBand? metricsCellMask = null;
@@ -93,7 +93,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 if (Double.IsNaN(this.CellSize) || (this.CellSize <= 0.0))
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.CellSize), "If -" + nameof(this.Cells) + " is not specified then -" + nameof(this.CellSize) + " must be set to a positive value.");
+                    throw new ParameterOutOfRangeException(nameof(this.CellSize), $"If -{nameof(this.Cells)} is not specified then -{nameof(this.CellSize)} must be set to a positive value.");
                 }
 
                 double tileSizeInFractionalCellsX = lasGrid.Transform.CellWidth / this.CellSize;
@@ -102,25 +102,25 @@ namespace Mars.Clouds.Cmdlets
                 tileSizeInCellsY = (int)tileSizeInFractionalCellsY;
                 if ((Double.Abs(tileSizeInFractionalCellsX - tileSizeInCellsX) > 1E-9) || (Double.Abs(tileSizeInFractionalCellsY - tileSizeInCellsY) > 1E-9)) // integer truncation and tolerances mean Abs() shouldn't be needed but Abs() just in case of unanticipated numerical edge conditions
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.CellSize), "A -" + nameof(this.CellSize) + " of " + this.CellSize + " results in grid metrics tiles of " + tileSizeInFractionalCellsX + " by " + tileSizeInFractionalCellsY + " cells. The tile size (" + lasGrid.Transform.CellWidth + " by " + lasGrid.Transform.CellHeight + ") must be an integer multiple of the cell size. If the point clouds' bounding boxes do not entirely fill their tile size specifying -" + nameof(this.Snap) + " may help.");
+                    throw new ParameterOutOfRangeException(nameof(this.CellSize), $"A -{nameof(this.CellSize)} of {this.CellSize} results in grid metrics tiles of {tileSizeInFractionalCellsX} by {tileSizeInFractionalCellsY} cells. The tile size ({lasGrid.Transform.CellWidth} by {lasGrid.Transform.CellHeight}) must be an integer multiple of the cell size. If the point clouds' bounding boxes do not entirely fill their tile size specifying -{nameof(this.Snap)} may help.");
                 }
             }
             else
             {
                 if (Double.IsNaN(this.CellSize) == false)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.CellSize), "If -" + nameof(this.Cells) + " is not specified then -" + nameof(this.CellSize) + " must not be specified.");
+                    throw new ParameterOutOfRangeException(nameof(this.CellSize), $"If -{nameof(this.Cells)} is not specified then -{nameof(this.CellSize)} must not be specified.");
                 }
 
                 using Dataset gridCellDefinitionDataset = Gdal.Open(this.Cells, Access.GA_ReadOnly);
                 Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: false);
                 if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, cellDefinitions.Crs) == false)
                 {
-                    throw new NotSupportedException("The point clouds and cell definitions are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while cells are defined in " + cellDefinitions.Crs.GetName() + ".");
+                    throw new NotSupportedException($"The point clouds and cell definitions are currently required to be in the same CRS. The point cloud CRS is '{lasGrid.Crs.GetName()}' while cells are defined in {cellDefinitions.Crs.GetName()}.");
                 }
                 if ((cellDefinitions.Transform.ColumnRotation != 0.0) || (cellDefinitions.Transform.RowRotation != 0.0))
                 {
-                    throw new NotSupportedException("'" + this.Cells + "' is rotated with respect to its coordinate system. Rotated metrics cell definition rasters are not currently supported.");
+                    throw new NotSupportedException($"'{this.Cells}' is rotated with respect to its coordinate system. Rotated metrics cell definition rasters are not currently supported.");
                 }
 
                 metricsCellMask = cellDefinitions.GetBand(this.CellBand);
@@ -139,7 +139,7 @@ namespace Mars.Clouds.Cmdlets
             VirtualRaster<Raster<float>> dtm = this.ReadVirtualRasterMetadata<Raster<float>>(cmdletName, this.Dtm, Raster<float>.CreateFromBandMetadata, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(lasGrid.Crs, dtm.Crs) == false)
             {
-                throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasGrid.Crs.GetName() + "' while the DTM CRS is " + dtm.Crs.GetName() + ".");
+                throw new NotSupportedException($"The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '{lasGrid.Crs.GetName()}' while the DTM CRS is {dtm.Crs.GetName()}.");
             }
 
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
@@ -236,7 +236,7 @@ namespace Mars.Clouds.Cmdlets
                         (double tileCentroidX, double tileCentroidY) = tilePoints.GetCentroid();
                         if (dtm.TryGetNeighborhood8(tileCentroidX, tileCentroidY, this.DtmBand, out RasterNeighborhood8<float>? dtmNeighborhood) == false)
                         {
-                            throw new InvalidOperationException("Could not form DTM neighborhood for metrics grid cell at (" + tileCentroidX + ", " + tileCentroidY + ").");
+                            throw new InvalidOperationException($"Could not form DTM neighborhood for metrics grid cell at ({tileCentroidX}, {tileCentroidY}).");
                         }
 
                         int metricsCellsCompleted = tilePoints.EvaluateCompleteAndAccumulateIncompleteCells(metricsRaster, dtmNeighborhood, oneMeterHeightClass, twoMeterHeightThreshold, pointListPool);
@@ -270,12 +270,12 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord gridMetricsProgress = new(cmdletName, metricsReadCreateWrite.TilesRead + " of " + lasGrid.NonNullCells + " tiles, " + metricsReadCreateWrite.MetricsCellsCompleted.ToString("#,#,0") + " metrics cells (" + gridMetricsTasks.Count + " threads, " + activeReadThreads + " reading)...");
+            TimedProgressRecord gridMetricsProgress = new(cmdletName, $"{metricsReadCreateWrite.TilesRead} of {lasGrid.NonNullCells} tiles, {metricsReadCreateWrite.MetricsCellsCompleted:#,#,0} metrics cells ({gridMetricsTasks.Count} threads, {activeReadThreads} reading)...");
             this.WriteProgress(gridMetricsProgress);
             while (gridMetricsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                gridMetricsProgress.StatusDescription = metricsReadCreateWrite.TilesRead + " of " + lasGrid.NonNullCells + " tiles, " + metricsReadCreateWrite.MetricsCellsCompleted.ToString("#,#,0") + " metrics cells (" + gridMetricsTasks.Count + " threads, " + activeReadThreads + " reading)...";
+                gridMetricsProgress.StatusDescription = $"{metricsReadCreateWrite.TilesRead} of {lasGrid.NonNullCells} tiles, {metricsReadCreateWrite.MetricsCellsCompleted:#,#,0} metrics cells ({gridMetricsTasks.Count} threads, {activeReadThreads} reading)...";
                 gridMetricsProgress.Update(metricsReadCreateWrite.TilesCreated, lasGrid.NonNullCells);
                 this.WriteProgress(gridMetricsProgress);
             }
@@ -306,7 +306,7 @@ namespace Mars.Clouds.Cmdlets
             gridMetricsProgress.Stopwatch.Stop();
             double cellsPerSecond = metricsReadCreateWrite.MetricsCellsCompleted / gridMetricsProgress.Stopwatch.Elapsed.TotalSeconds;
             string cellsPerSecondFormat = cellsPerSecond >= 9999.5 ? "n0" : "0";
-            this.WriteVerbose("Calculated metrics for " + metricsReadCreateWrite.MetricsCellsCompleted.ToString("n0") + " grid cells from " + metricsReadCreateWrite.PointsCompleted.ToString("n0") + " points in " + metricsReadCreateWrite.TilesRead + (metricsReadCreateWrite.TilesRead == 1 ? " tile in " : " tiles in ") + gridMetricsProgress.Stopwatch.ToElapsedString() + ": " + cellsPerSecond.ToString(cellsPerSecondFormat) + " cells/s.");
+            this.WriteVerbose($"Calculated metrics for {metricsReadCreateWrite.MetricsCellsCompleted:n0} grid cells from {metricsReadCreateWrite.PointsCompleted:n0} points in {metricsReadCreateWrite.TilesRead + (metricsReadCreateWrite.TilesRead == 1 ? " tile in " : " tiles in ") + gridMetricsProgress.Stopwatch.ToElapsedString()}: {cellsPerSecond.ToString(cellsPerSecondFormat)} cells/s.");
             base.ProcessRecord();
         }
 

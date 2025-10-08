@@ -195,7 +195,7 @@ namespace Mars.Clouds.Las
                 {
                     0 or 1 or 4 or 6 or 9 => false,
                     2 or 3 or 5 or 7 or 8 or 10 => true,
-                    _ => throw new NotSupportedException("Unhandled point format " + this.PointDataRecordFormat + ".")
+                    _ => throw new NotSupportedException($"Unhandled point format {this.PointDataRecordFormat}.")
                 };
             }
         }
@@ -227,7 +227,7 @@ namespace Mars.Clouds.Las
                 return Constant.Las.ReturnNumberMask14; // returns numbers 0-15 supported by point types 6-10
             }
 
-            throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".");
+            throw new NotSupportedException($"Unhandled point data record format {this.PointDataRecordFormat}.");
         }
 
         public virtual void IncrementFirstReturnCount(long returnNumbersRepaired)
@@ -249,7 +249,7 @@ namespace Mars.Clouds.Las
             {
                 if (numberOfPointsByReturn[returnIndex] != 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), "Return " + (returnIndex + 1) + " has " + numberOfPointsByReturn[returnIndex] + " points but a maximum of " + this.LegacyNumberOfPointsByReturn.Length + " returns is supported.");
+                    throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), $"Return {returnIndex + 1} has {numberOfPointsByReturn[returnIndex]} points but a maximum of {this.LegacyNumberOfPointsByReturn.Length} returns is supported.");
                 }
             }
 
@@ -274,7 +274,7 @@ namespace Mars.Clouds.Las
             else if (this.FileCreationYear != fallbackYear)
             {
                 // for now, assume scan sets don't cross over December 31-January 1
-                throw new ArgumentOutOfRangeException(nameof(fallbackFileCreationDate), "Fallback file creation date has year " + fallbackYear + " but .las has year " + this.FileCreationYear);
+                throw new ArgumentOutOfRangeException(nameof(fallbackFileCreationDate), $"Fallback file creation date has year {fallbackYear} but .las has year {this.FileCreationYear}");
             }
 
             UInt16 fallbackDayOfYear = (UInt16)fallbackFileCreationDate.DayOfYear;
@@ -297,27 +297,27 @@ namespace Mars.Clouds.Las
         {
             if (this.SystemIdentifier.Length > 32)
             {
-                throw new InvalidDataException("SystemIdentifier length of " + this.SystemIdentifier.Length + " characters exceeds the maximum of 32 characters.");
+                throw new InvalidDataException($"SystemIdentifier length of {this.SystemIdentifier.Length} characters exceeds the maximum of 32 characters.");
             }
             if (this.GeneratingSoftware.Length > 32) 
             {
-                throw new InvalidDataException("GeneratingSoftware has length of " + this.GeneratingSoftware.Length + " characters exceeds the maximum of 32 characters.");
+                throw new InvalidDataException($"GeneratingSoftware has length of {this.GeneratingSoftware.Length} characters exceeds the maximum of 32 characters.");
             }
 
             // for now, assume CE
             if ((this.FileCreationDayOfYear == 0) || (this.FileCreationDayOfYear > 366))
             {
                 // if needed, can also check for leap years
-                throw new InvalidDataException("FileCreationDayOfYear is " + this.FileCreationDayOfYear + ".");
+                throw new InvalidDataException($"FileCreationDayOfYear is {this.FileCreationDayOfYear}.");
             }
             if ((this.FileCreationYear < 2003) || (this.FileCreationYear > 3000))
             {
-                throw new InvalidDataException("FileCreationYear is " + this.FileCreationYear + ".");
+                throw new InvalidDataException($"FileCreationYear is {this.FileCreationYear}.");
             }
 
             if (this.OffsetToPointData < this.HeaderSize)
             {
-                throw new InvalidDataException("Header's offset to point data of " + this.OffsetToPointData + " bytes is less than the LAS " + this.VersionMajor + "." + this.VersionMinor + " header size of " + this.HeaderSize + " bytes.");
+                throw new InvalidDataException($"Header's offset to point data of {this.OffsetToPointData} bytes is less than the LAS {this.VersionMajor}.{this.VersionMinor} header size of {this.HeaderSize} bytes.");
             }
             // currently permissive: allows any point format with any LAS version
             // Can be made more restrictive if needed.
@@ -344,7 +344,7 @@ namespace Mars.Clouds.Las
                 8 => 38,
                 9 => 59,
                 10 => 57,
-                _ => throw new NotSupportedException("Unhandled point data record format " + this.PointDataRecordFormat + ".")
+                _ => throw new NotSupportedException($"Unhandled point data record format {this.PointDataRecordFormat}.")
             };
             if (this.PointDataRecordLength < minimumPointDataRecordLength) 
             {

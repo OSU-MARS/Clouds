@@ -43,7 +43,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationUInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding byte data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding byte data.");
             }
         }
 
@@ -62,7 +62,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding Int16 data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding Int16 data.");
             }
         }
 
@@ -76,7 +76,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding Int32 data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding Int32 data.");
             }
         }
 
@@ -100,7 +100,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding signed byte data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding signed byte data.");
             }
         }
 
@@ -129,7 +129,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationUInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding UInt16 data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding UInt16 data.");
             }
         }
 
@@ -148,7 +148,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(source, destinationUInt64);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled destination type " + typeof(TBand).Name + " for expanding UInt32 data.");
+                    throw new NotSupportedException($"Unhandled destination type {typeof(TBand).Name} for expanding UInt32 data.");
             }
         }
 
@@ -162,7 +162,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(sourceFloat, destination);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to double data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for expanding to double data.");
             }
         }
 
@@ -186,7 +186,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(sourceInt32, destination);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to Int64 data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for expanding to Int64 data.");
             }
         }
 
@@ -210,7 +210,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(sourceUInt32, destination);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for expanding to UInt64.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for expanding to UInt64.");
             }
         }
 
@@ -222,7 +222,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (band1 == null)
                 {
-                    throw new ArgumentNullException(nameof(band1), nameof(band1) + " is null but " + nameof(considerBand1) + " is true.");
+                    throw new ArgumentNullException(nameof(band1), $"{nameof(band1)} is null but {nameof(considerBand1)} is true.");
                 }
                 hasMaxValue1 = band1.TryGetMaximumValue(out maxValue1);
             }
@@ -233,7 +233,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (band2 == null)
                 {
-                    throw new ArgumentNullException(nameof(band2), nameof(band2) + " is null but " + nameof(considerBand2) + " is true.");
+                    throw new ArgumentNullException(nameof(band2), $"{nameof(band2)} is null but {nameof(considerBand2)} is true.");
                 }
                 hasMaxValue2 = band2.TryGetMaximumValue(out maxValue2);
             }
@@ -450,7 +450,7 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_UInt16 => 2,
                 DataType.GDT_UInt32 => 4,
                 DataType.GDT_UInt64 => 8,
-                _ => throw new NotSupportedException("Unhandled GDAL data type " + dataType + ".")
+                _ => throw new NotSupportedException($"Unhandled GDAL data type {dataType}.")
             }; ;
         }
 
@@ -473,7 +473,7 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_UInt16 => (to == DataType.GDT_UInt32) || (to == DataType.GDT_UInt64) || (to == DataType.GDT_Int32) || (to == DataType.GDT_Int64),
                 DataType.GDT_UInt32 => (to == DataType.GDT_UInt64) || (to == DataType.GDT_Int64),
                 DataType.GDT_UInt64 => false,
-                _ => throw new NotSupportedException("Unhandled GDAL data type " + from + ".")
+                _ => throw new NotSupportedException($"Unhandled GDAL data type {from}.")
             }; ;
         }
 
@@ -488,7 +488,7 @@ namespace Mars.Clouds.GdalExtensions
                     AvxExtensions.Convert(sourceDouble, destination);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to sbyte data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to sbyte data.");
             }
         }
 
@@ -529,7 +529,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to sbyte data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to sbyte data.");
             }
         }
 
@@ -565,7 +565,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int16 data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to Int16 data.");
             }
         }
 
@@ -595,7 +595,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to Int32 data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to Int32 data.");
             }
         }
 
@@ -636,7 +636,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to byte data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to byte data.");
             }
         }
 
@@ -672,7 +672,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt16 data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to UInt16 data.");
             }
         }
 
@@ -702,7 +702,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled source type " + typeof(TBand).Name + " for packing to UInt32 data.");
+                    throw new NotSupportedException($"Unhandled source type {typeof(TBand).Name} for packing to UInt32 data.");
             }
         }
     }

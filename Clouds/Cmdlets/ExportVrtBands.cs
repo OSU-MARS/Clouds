@@ -33,7 +33,7 @@ namespace Mars.Clouds.Cmdlets
             VrtDataset vrt = new(this.Input);
             if (vrt.Bands.Count == 0)
             {
-                throw new ParameterOutOfRangeException(nameof(this.Input), "No are present in virtual raster '" + this.Input + "'. Output .vrt would also be empty.");
+                throw new ParameterOutOfRangeException(nameof(this.Input), $"No are present in virtual raster '{this.Input}'. Output .vrt would also be empty.");
             }
 
             int bandsRemoved = 0;
@@ -53,11 +53,11 @@ namespace Mars.Clouds.Cmdlets
 
             if (bandsRemoved == 0)
             {
-                throw new ParameterOutOfRangeException(nameof(this.Bands), "No bands were removed from virtual raster so output .vrt would be the same as the input. Are -" + nameof(this.Bands) + " and -" + nameof(this.Input) + " correct?");
+                throw new ParameterOutOfRangeException(nameof(this.Bands), $"No bands were removed from virtual raster so output .vrt would be the same as the input. Are -{nameof(this.Bands)} and -{nameof(this.Input)} correct?");
             }
             if (vrt.Bands.Count == 0)
             {
-                throw new ParameterOutOfRangeException(nameof(this.Bands), "No bands were retained in the input virtual raster so output .vrt would be empty. Are -" + nameof(this.Bands) + " and -" + nameof(this.Input) + " correct?");
+                throw new ParameterOutOfRangeException(nameof(this.Bands), $"No bands were retained in the input virtual raster so output .vrt would be empty. Are -{nameof(this.Bands)} and -{nameof(this.Input)} correct?");
             }
 
             // update virtual raster band numbering

@@ -74,7 +74,7 @@ namespace Mars.Clouds.DiskSpd
                 float duration = results.TimeSpan.TestTimeSeconds;
                 if (duration <= 0.0F)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(resultsByFile), "File " + fileIndex + " has a test duration of " + duration + " s.");
+                    throw new ArgumentOutOfRangeException(nameof(resultsByFile), $"File {fileIndex} has a test duration of {duration} s.");
                 }
                 for (int threadIndex = 0; threadIndex < results.TimeSpan.Threads.Count; ++threadIndex)
                 {
@@ -110,33 +110,33 @@ namespace Mars.Clouds.DiskSpd
         private Row CreateDataRow(int index)
         {
             Row row = new() { RowIndex = (UInt32)(index + 2) };
-            row.Append(new Cell() { CellReference = "A" + row.RowIndex, CellValue = new(this.Host[index]), DataType = CellValues.String });
-            row.Append(new Cell() { CellReference = "B" + row.RowIndex, CellValue = new(this.RandomSize[index] == -1 ? "sequential" : "random"), DataType = CellValues.String });
-            row.Append(new Cell() { CellReference = "C" + row.RowIndex, CellValue = new(this.BlockSize[index] / 1024.0F), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "D" + row.RowIndex, CellValue = new(this.QueueDepth[index]), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "E" + row.RowIndex, CellValue = new(this.ThreadsPerFile[index]), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "F" + row.RowIndex, CellValue = new(this.Targets[index]), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "G" + row.RowIndex, CellValue = new(this.TargetPath[index]), DataType = CellValues.String });
-            row.Append(new Cell() { CellReference = "H" + row.RowIndex, CellValue = new(this.ThreadID[index]), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"A{row.RowIndex}", CellValue = new(this.Host[index]), DataType = CellValues.String });
+            row.Append(new Cell() { CellReference = $"B{row.RowIndex}", CellValue = new(this.RandomSize[index] == -1 ? "sequential" : "random"), DataType = CellValues.String });
+            row.Append(new Cell() { CellReference = $"C{row.RowIndex}", CellValue = new(this.BlockSize[index] / 1024.0F), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"D{row.RowIndex}", CellValue = new(this.QueueDepth[index]), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"E{row.RowIndex}", CellValue = new(this.ThreadsPerFile[index]), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"F{row.RowIndex}", CellValue = new(this.Targets[index]), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"G{row.RowIndex}", CellValue = new(this.TargetPath[index]), DataType = CellValues.String });
+            row.Append(new Cell() { CellReference = $"H{row.RowIndex}", CellValue = new(this.ThreadID[index]), DataType = CellValues.Number });
 
             long readBytes = this.ReadBytes[index];
             long writeBytes = this.WriteBytes[index];
             float duration = this.DurationInS[index];
             float readInMBs = readBytes == -1 ? 0.0F : readBytes / (1024 * 1024 * duration);
             float writeInMBs = writeBytes == -1 ? 0.0F : writeBytes / (1024 * 1024 * duration);
-            row.Append(new Cell() { CellReference = "I" + row.RowIndex, CellValue = new(duration), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "J" + row.RowIndex, CellValue = new(readInMBs), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "K" + row.RowIndex, CellValue = new(writeInMBs), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"I{row.RowIndex}", CellValue = new(duration), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"J{row.RowIndex}", CellValue = new(readInMBs), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"K{row.RowIndex}", CellValue = new(writeInMBs), DataType = CellValues.Number });
 
             if (readInMBs > 0.0F)
             {
-                row.Append(new Cell() { CellReference = "L" + row.RowIndex, CellValue = new(1000.0F * this.AverageReadLatencyMilliseconds[index]), DataType = CellValues.Number });
-                row.Append(new Cell() { CellReference = "M" + row.RowIndex, CellValue = new(1000.0F * this.ReadLatencyStdev[index]), DataType = CellValues.Number });
+                row.Append(new Cell() { CellReference = $"L{row.RowIndex}", CellValue = new(1000.0F * this.AverageReadLatencyMilliseconds[index]), DataType = CellValues.Number });
+                row.Append(new Cell() { CellReference = $"M{row.RowIndex}", CellValue = new(1000.0F * this.ReadLatencyStdev[index]), DataType = CellValues.Number });
             }
             if (writeInMBs > 0.0F)
             {
-                row.Append(new Cell() { CellReference = "N" + row.RowIndex, CellValue = new(1000.0F * this.AverageWriteLatencyMilliseconds[index]), DataType = CellValues.Number });
-                row.Append(new Cell() { CellReference = "O" + row.RowIndex, CellValue = new(1000.0F * this.WriteLatencyStdev[index]), DataType = CellValues.Number });
+                row.Append(new Cell() { CellReference = $"N{row.RowIndex}", CellValue = new(1000.0F * this.AverageWriteLatencyMilliseconds[index]), DataType = CellValues.Number });
+                row.Append(new Cell() { CellReference = $"O{row.RowIndex}", CellValue = new(1000.0F * this.WriteLatencyStdev[index]), DataType = CellValues.Number });
             }
 
             return row;

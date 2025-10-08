@@ -64,7 +64,7 @@ namespace Mars.Clouds.Las
                 SpatialReference tileCrs = tile.GetSpatialReference();
                 if (SpatialReferenceExtensions.IsSameCrs(firstTileCrs, tileCrs) == false)
                 {
-                    throw new NotSupportedException("Tile '" + tile.FilePath + "'s coordinate system ('" + tileCrs.GetName() + "') does not match the first tile's coordinate system ('" + firstTileCrs.GetName() + "').");
+                    throw new NotSupportedException($"Tile '{tile.FilePath}'s coordinate system ('{tileCrs.GetName()}') does not match the first tile's coordinate system ('{firstTileCrs.GetName()}').");
                 }
 
                 Extent tileExtent = tile.GridExtent;
@@ -73,7 +73,7 @@ namespace Mars.Clouds.Las
                 if ((Double.Abs(tileXextentInCrsUnits / tileReportedWidth - 1.0) > 0.000001) ||
                     (Double.Abs(tileYextentInCrsUnits / tileReportedHeight - 1.0) > 0.000001))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(tiles), "Tile " + tileIndex + " has extents (" + tileExtent.XMin + ", " + tileExtent.XMax + ", " + tileExtent.YMin + ", " + tileExtent.YMax + ") in CRS " + tileCrs.GetName() + " with a width of " + tileXextentInCrsUnits + " and height of " + tileYextentInCrsUnits + ".  This does not match the expected width " + tileReportedWidth + " and height " + tileReportedHeight + ".");
+                    throw new ArgumentOutOfRangeException(nameof(tiles), $"Tile {tileIndex} has extents ({tileExtent.XMin}, {tileExtent.XMax}, {tileExtent.YMin}, {tileExtent.YMax}) in CRS {tileCrs.GetName()} with a width of {tileXextentInCrsUnits} and height of {tileYextentInCrsUnits}.  This does not match the expected width {tileReportedWidth} and height {tileReportedHeight}.");
                 }
 
                 // LAS files have only a bounding box, so no way to check whether tile is in fact a rectangle (or square) aligned to its

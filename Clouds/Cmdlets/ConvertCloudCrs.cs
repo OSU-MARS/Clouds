@@ -101,7 +101,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         if (inputVerticalCrs == null)
                         {
-                            throw new ParameterOutOfRangeException(nameof(this.InputVerticalEpsg), "Input file '" + cloudPath + "' lacks a vertical coordinate system so the transformantion to -" + nameof(this.VerticalEpsg) + " " + this.VerticalEpsg + " is not well defined. Specify -" + nameof(this.InputVerticalEpsg) + " to indicate the vertical coordinate system of input files which do not define one. Common choices in the United States are EPSG " + Constant.Epsg.Navd88m + " (NAVD88 meters) and " + Constant.Epsg.Navd88ft + " (NAVD88 feet).");
+                            throw new ParameterOutOfRangeException(nameof(this.InputVerticalEpsg), $"Input file '{cloudPath}' lacks a vertical coordinate system so the transformantion to -{nameof(this.VerticalEpsg)} {this.VerticalEpsg} is not well defined. Specify -{nameof(this.InputVerticalEpsg)} to indicate the vertical coordinate system of input files which do not define one. Common choices in the United States are EPSG {Constant.Epsg.Navd88m} (NAVD88 meters) and {Constant.Epsg.Navd88ft} (NAVD88 feet).");
                         }
                         else
                         {
@@ -232,10 +232,10 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Convert-CloudCrs", "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Convert-CloudCrs", $"Reprojected {cloudReprojectionsCompleted} of {cloudPaths.Count} point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Reprojected " + cloudReprojectionsCompleted + " of " + cloudPaths.Count + " point clouds...";
+                progress.StatusDescription = $"Reprojected {cloudReprojectionsCompleted} of {cloudPaths.Count} point clouds...";
                 progress.Update(cloudReprojectionsCompleted, cloudPaths.Count);
                 this.WriteProgress(progress);
             }

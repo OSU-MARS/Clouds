@@ -102,7 +102,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (padfTransform.Length != 6)
             {
-                throw new ArgumentOutOfRangeException(nameof(padfTransform), "Transform array has length " + padfTransform.Length + " rather than 6.");
+                throw new ArgumentOutOfRangeException(nameof(padfTransform), $"Transform array has length {padfTransform.Length} rather than 6.");
             }
 
             this.OriginX = padfTransform[0];

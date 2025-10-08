@@ -77,7 +77,7 @@ namespace Mars.Clouds.Cmdlets
         {
             if (this.MaxHeight <= this.MinHeight)
             {
-                throw new ParameterOutOfRangeException(nameof(this.MaxHeight), "Maximum slice height " + this.MaxHeight + " is less than or equal to the minimum height " + this.MinHeight + ", indicating a slice whose thickness is negative or zero. -" + nameof(this.MaxHeight) + " must be greater than -" + nameof(this.MinHeight) + " so the slice has a positive thickness and thus can contain points.");
+                throw new ParameterOutOfRangeException(nameof(this.MaxHeight), $"Maximum slice height {this.MaxHeight} is less than or equal to the minimum height {this.MinHeight}, indicating a slice whose thickness is negative or zero. -{nameof(this.MaxHeight)} must be greater than -{nameof(this.MinHeight)} so the slice has a positive thickness and thus can contain points.");
             }
 
             List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
@@ -136,7 +136,7 @@ namespace Mars.Clouds.Cmdlets
 
                     if (SpatialReferenceExtensions.IsSameCrs(dtmBand.Crs, cloudCrs) == false)
                     {
-                        throw new NotSupportedException("Point cloud '" + cloudPath + "'s coordinate system ('" + cloudCrs.GetName() + "') does not match the DTM's coordinate system ('" + dtmBand.Crs.GetName() + "'). DTM path is '" + (dtmPathIsDirectory ? Path.Combine(this.Dtm, cloudName + Constant.File.GeoTiffExtension) : this.Dtm) + "'.");
+                        throw new NotSupportedException($"Point cloud '{cloudPath}'s coordinate system ('{cloudCrs.GetName()}') does not match the DTM's coordinate system ('{dtmBand.Crs.GetName()}'). DTM path is '{(dtmPathIsDirectory ? Path.Combine(this.Dtm, cloudName + Constant.File.GeoTiffExtension) : this.Dtm)}'.");
                     }
 
                     double cellSizeInCrsUnits;
@@ -162,7 +162,7 @@ namespace Mars.Clouds.Cmdlets
 
                     if (this.NoWrite == false)
                     {
-                        string cloudSliceName = cloudName + " slice " + minHeightInCrsUnits.ToString("0.0##") + "-" + maxHeightInCrsUnits.ToString("0.0##") + " " + cloudCrs.GetVerticalLinearUnitName() + (this.Trim > 0 ? " trim " + this.Trim.ToString("0") : String.Empty) + Constant.File.GeoTiffExtension;
+                        string cloudSliceName = $"{cloudName} slice {minHeightInCrsUnits:0.0##}-{maxHeightInCrsUnits:0.0##} {cloudCrs.GetVerticalLinearUnitName()} {(this.Trim > 0 ? $"trim {this.Trim:0}" : String.Empty)}{Constant.File.GeoTiffExtension}";
                         string cloudSlicePath;
                         if (slicePathSet)
                         {
@@ -191,10 +191,10 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Export-Slices", "Sliced " + slicesWritten + " of " + cloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Export-Slices", $"Sliced {slicesWritten} of {cloudPaths.Count} point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Sliced " + slicesWritten + " of " + cloudPaths.Count + " point clouds...";
+                progress.StatusDescription = $"Sliced {slicesWritten} of {cloudPaths.Count} point clouds...";
                 progress.Update(slicesWritten, cloudPaths.Count);
                 this.WriteProgress(progress);
             }

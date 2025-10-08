@@ -1,7 +1,6 @@
 ﻿using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
-using Mars.Clouds.Segmentation;
 using OSGeo.GDAL;
 using System;
 using System.Management.Automation;
@@ -33,7 +32,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if (SpatialReferenceExtensions.IsSameCrs(cellDefinitions.Crs, lasGrid.Crs) == false)
             {
-                throw new NotSupportedException("Cell definition raster '" + this.Cells + "' is not in the same coordinate system ('" + cellDefinitions.Crs.GetName() + "') as the input point clouds ('" + lasGrid.Crs.GetName() + "').");
+                throw new NotSupportedException($"Cell definition raster '{this.Cells}' is not in the same coordinate system ('{cellDefinitions.Crs.GetName()}') as the input point clouds ('{lasGrid.Crs.GetName()}').");
             }
 
             ScanMetricsRaster scanMetrics = new(cellDefinitions);
@@ -70,11 +69,11 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord scanMetricsProgress = new(cmdletName, "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...");
+            TimedProgressRecord scanMetricsProgress = new(cmdletName, $"Loaded {tileRead.TilesRead} of {lasGrid.NonNullCells} point cloud tiles...");
             this.WriteProgress(scanMetricsProgress);
             while (readPoints.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                scanMetricsProgress.StatusDescription = "Loaded " + tileRead.TilesRead + " of " + lasGrid.NonNullCells + " point cloud tiles...";
+                scanMetricsProgress.StatusDescription = $"Loaded {tileRead.TilesRead} of {lasGrid.NonNullCells} point cloud tiles...";
                 scanMetricsProgress.Update(tileRead.TilesRead, lasGrid.NonNullCells);
                 this.WriteProgress(scanMetricsProgress);
             }
@@ -83,7 +82,7 @@ namespace Mars.Clouds.Cmdlets
             this.WriteObject(scanMetrics);
             
             scanMetricsProgress.Stopwatch.Stop();
-            this.WriteVerbose("Calculated metrics for " + tileRead.TilesRead + " tiles in " + scanMetricsProgress.Stopwatch.ToElapsedString() + ".");
+            this.WriteVerbose($"Calculated metrics for {tileRead.TilesRead} tiles in {scanMetricsProgress.Stopwatch.ToElapsedString()}.");
             base.ProcessRecord();
         }
     }

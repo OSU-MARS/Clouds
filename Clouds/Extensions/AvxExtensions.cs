@@ -112,7 +112,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 floats, convert to 4 doubles
@@ -139,7 +139,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 floats, convert to 4 doubles
@@ -166,7 +166,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 UInt16s
@@ -192,7 +192,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 UInt32s
@@ -218,7 +218,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 UInt64s
@@ -244,7 +244,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 Int16s, convert to 8 UInt32s
@@ -270,7 +270,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 Int16s, convert to 4 UInt64s
@@ -296,7 +296,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 Int32s, convert to 4 UInt64s
@@ -322,7 +322,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 Int16s
@@ -348,7 +348,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 Int32s
@@ -374,7 +374,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 Int64s
@@ -400,7 +400,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 16; // read 16 bytes, convert to 16 UInt16s
@@ -426,7 +426,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 bytes, convert to 8 UInt32s
@@ -452,7 +452,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 bytes, convert to 4 UInt64s
@@ -478,7 +478,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 UInt16s, convert to 8 Int32s
@@ -504,7 +504,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 UInt16s, convert to 4 Int64s
@@ -530,7 +530,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 UInt16s, convert to 8 UInt32s
@@ -556,7 +556,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 UInt16s, convert to 4 UInt64s
@@ -582,7 +582,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 UInt32s, convert to 4 Int64s
@@ -608,7 +608,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 64; // read 4 UInt32s, convert to 4 UInt64s
@@ -1191,7 +1191,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 16; // read 16 Int16s, convert to 16 Int64s
@@ -1251,7 +1251,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 2 * 256 / 32; // read 16 Int32s, convert to 16 sbytes
@@ -1326,7 +1326,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 Int32s, convert to 8 Int16s
@@ -1386,7 +1386,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 16; // read 16 UInt16s, convert to 16 UInt64s
@@ -1446,7 +1446,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 2 * 256 / 32; // read 16 UInt32s, convert to 16 bytes
@@ -1521,7 +1521,7 @@ namespace Mars.Clouds.Extensions
         {
             if (source.Length != destination.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(destination), "Source span length " + source.Length + " does not match destination span length " + destination.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(destination), $"Source span length {source.Length} does not match destination span length {destination.Length}.");
             }
 
             const int stride = 256 / 32; // read 8 UInt32s, convert to 8 UInt16s

@@ -24,13 +24,13 @@ namespace Mars.Clouds.Vrt
                 case "SRS":
                     if (reader.AttributeCount != 1)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.DataAxisToSrsAxisMapping = reader.ReadAttributeAsCsvIntegerArray("dataAxisToSRSAxisMapping");
                     this.WktGeogcsOrProj = reader.ReadElementContentAsString();
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 

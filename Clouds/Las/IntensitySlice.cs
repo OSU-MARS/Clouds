@@ -48,7 +48,7 @@ namespace Mars.Clouds.Las
                         this.PointCount.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in intensity slice '" + this.FilePath + "'.");
+                        throw new NotSupportedException($"Unhandled band '{bandName}' in intensity slice '{this.FilePath}'.");
                 }
             }
 

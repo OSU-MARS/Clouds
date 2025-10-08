@@ -226,7 +226,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                         }
                         if (virtualDiskFound == false)
                         {
-                            throw new InvalidOperationException("Failed to find virtual disk containing physical disk number " + diskNumber + "(physical disk object ID " + physicalDiskGuid + ").");
+                            throw new InvalidOperationException($"Failed to find virtual disk containing physical disk number {diskNumber}(physical disk object ID {physicalDiskGuid}).");
                         }
 
                         if (physicalDisk.BusType == BusType.NVMe)
@@ -305,7 +305,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                             (locationTokens[1].StartsWith(" device ", StringComparison.Ordinal) == false) ||
                             (locationTokens[2].StartsWith(" function ", StringComparison.Ordinal) == false))
                         {
-                            throw new NotSupportedException("Unhandled NVMe controller location format '" + location + "'.");
+                            throw new NotSupportedException($"Unhandled NVMe controller location format '{location}'.");
                         }
 
                         int bus = Int32.Parse(locationTokens[0][8..]);

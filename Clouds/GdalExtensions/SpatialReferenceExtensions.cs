@@ -12,7 +12,7 @@ namespace Mars.Clouds.GdalExtensions
             CPLErr gdalError = (CPLErr)crs.ImportFromEPSG(epsg);
             if (gdalError != CPLErr.CE_None)
             {
-                throw new ArgumentOutOfRangeException(nameof(epsg), "Could not create a spatial reference from EPSG:" + epsg + ". EPSG import failed with GDAL error code " + gdalError + ".");
+                throw new ArgumentOutOfRangeException(nameof(epsg), $"Could not create a spatial reference from EPSG:{epsg}. EPSG import failed with GDAL error code {gdalError}.");
             }
 
             return crs;
@@ -38,10 +38,10 @@ namespace Mars.Clouds.GdalExtensions
             // https://github.com/OSGeo/gdal/blob/master/ogr/ogrspatialreference.cpp
             // Unclear where source for proj_create_compound_crs().
             SpatialReference compoundCrs = new(String.Empty);
-            CPLErr gdalError = (CPLErr)compoundCrs.SetCompoundCS(horizontalCrs.GetName() + " + " + verticalCrs.GetName(), horizontalCrs, verticalCrs);
+            CPLErr gdalError = (CPLErr)compoundCrs.SetCompoundCS($"{horizontalCrs.GetName()} + {verticalCrs.GetName()}", horizontalCrs, verticalCrs);
             if (gdalError != CPLErr.CE_None)
             {
-                throw new GdalException("Creating a compound spatial reference from " + horizontalCrs.GetName() + " and " + verticalCrs.GetName() + " failed with GDAL error code " + gdalError + ".");
+                throw new GdalException($"Creating a compound spatial reference from {horizontalCrs.GetName()} and {verticalCrs.GetName()} failed with GDAL error code {gdalError}.");
             }
 
             return compoundCrs;
@@ -53,7 +53,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 Constant.Crs.LinearUnitFoot => Constant.Gdal.LinearUnitFoot,
                 Constant.Crs.LinearUnitMeter => Constant.Gdal.LinearUnitMeter,
-                _ => throw new ArgumentOutOfRangeException(nameof(unit), "Unhandled linear unit name '" + unit + "'.")
+                _ => throw new ArgumentOutOfRangeException(nameof(unit), $"Unhandled linear unit name '{unit}'.")
             };
         }
 
@@ -73,7 +73,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 Constant.Gdal.LinearUnitFoot => Constant.Crs.LinearUnitFoot,
                 Constant.Gdal.LinearUnitMeter => Constant.Crs.LinearUnitMeter,
-                _ => throw new NotSupportedException("Unhandled CRS vertical linear unit of " + crs.GetVerticalLinearUnitInM() + "m")
+                _ => throw new NotSupportedException($"Unhandled CRS vertical linear unit of {crs.GetVerticalLinearUnitInM()}m")
             };
         }
 
@@ -81,7 +81,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (crs.ExportToWkt(out string wkt, []) != OgrError.NONE)
             {
-                throw new InvalidOperationException("Exporting CRS '" + crs.GetName() + "' to well known text failed.");
+                throw new InvalidOperationException($"Exporting CRS '{crs.GetName()}' to well known text failed.");
             }
 
             return wkt;
@@ -92,7 +92,7 @@ namespace Mars.Clouds.GdalExtensions
             CPLErr gdalError = (CPLErr)crs.ImportFromEPSG(epsg);
             if (gdalError != CPLErr.CE_None)
             {
-                throw new ArgumentOutOfRangeException(nameof(epsg), "Importing EPSG:" + epsg + " into GDAL spatial reference failed with GDAL error code" + gdalError + ".");
+                throw new ArgumentOutOfRangeException(nameof(epsg), $"Importing EPSG:{epsg} into GDAL spatial reference failed with GDAL error code{gdalError}.");
             }
         }
 

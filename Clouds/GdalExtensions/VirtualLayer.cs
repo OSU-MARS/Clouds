@@ -36,7 +36,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (this.crs == null)
                 {
-                    throw new InvalidOperationException("Virtual raster's CRS is unknown as no tiles have been added to it. Call Add() before accessing " + nameof(this.Crs) + " { get; }.");
+                    throw new InvalidOperationException($"Virtual raster's CRS is unknown as no tiles have been added to it. Call Add() before accessing {nameof(this.Crs)} {{ get; }}.");
                 }
                 return this.crs;
             }

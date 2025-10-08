@@ -188,7 +188,7 @@ namespace Mars.Clouds.Segmentation
                     previousCellIndex3 = TreeCrownCostField.ToCellIndex(fieldIndexX + 1, fieldIndexY);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled cell direction " + cellDirection + ".");
+                    throw new NotSupportedException($"Unhandled cell direction {cellDirection}.");
             }
 
             // adjacent cells are directed towards the field's center and therefore usually lie within the field
@@ -376,7 +376,7 @@ namespace Mars.Clouds.Segmentation
                 float chmTreetopHeight = fieldChm[centerIndex];
                 if (chm.IsNoData(chmTreetopHeight))
                 {
-                    throw new NotSupportedException("Digital surface model within or adjacent to tile " + segmentationState.TileName + " at DSM cell indices (" + dsmNeigborhoodTreetopIndexX + ", " + dsmNeighborhoodTreetopIndexY + ") has a DSM elevation but lacks a CHM height.");
+                    throw new NotSupportedException($"Digital surface model within or adjacent to tile {segmentationState.TileName} at DSM cell indices ({dsmNeigborhoodTreetopIndexX}, {dsmNeighborhoodTreetopIndexY}) has a DSM elevation but lacks a CHM height.");
                 }
                 if (chmTreetopHeight > treetopHeight)
                 {

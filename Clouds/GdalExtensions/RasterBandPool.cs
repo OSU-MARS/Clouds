@@ -95,7 +95,7 @@ namespace Mars.Clouds.GdalExtensions
                     this.UInt64Pool.Return(uint64buffer);
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled data type " + gdalType + ".");
+                    throw new NotSupportedException($"Unhandled data type {gdalType}.");
             }
         }
     }

@@ -83,7 +83,7 @@ namespace Mars.Clouds.Las
         //            if ((xIndex < 0) || (yIndex < 0) || (xIndex >= this.SizeX) || (yIndex >= this.SizeY))
         //            {
         //                // point lies outside of the tile and is therefore not of interest
-        //                throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image extents (" + this.GetExtentString() + ") and thus has off image indices " + xIndex + ", " + yIndex + ".");
+        //                throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside image extents ({this.GetExtentString()}) and thus has off image indices {xIndex}, {yIndex}.");
         //            }
 
         //            int cellIndex = this.ToCellIndex(xIndex, yIndex);
@@ -293,7 +293,7 @@ namespace Mars.Clouds.Las
                         this.SecondReturns.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in image raster '" + this.FilePath + "'.");
+                        throw new NotSupportedException($"Unhandled band '{bandName}' in image raster '{this.FilePath}'.");
                 }
             }
 
@@ -458,7 +458,7 @@ namespace Mars.Clouds.Las
                 16 => DataType.GDT_UInt16,
                 32 => DataType.GDT_UInt32,
                 64 => DataType.GDT_UInt64,
-                _ => throw new ArgumentOutOfRangeException(nameof(bitsPerRgbNirIntensityPixel), bitsPerRgbNirIntensityPixel + " bits per pixel is not supported. 16, 32, and 64 bits per pixel are supported.")
+                _ => throw new ArgumentOutOfRangeException(nameof(bitsPerRgbNirIntensityPixel), $"{bitsPerRgbNirIntensityPixel} bits per pixel is not supported. 16, 32, and 64 bits per pixel are supported.")
             };
 
             int nearInfraredOffset = this.nearInfraredInUse ? 1 : 0;

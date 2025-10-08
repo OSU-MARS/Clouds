@@ -115,7 +115,7 @@ namespace Mars.Clouds.Cmdlets
             int geopackageSqlBackgroundThreads = GdalCmdlet.EstimateGeopackageSqlBackgroundThreads();
             if (this.DataThreads <= geopackageSqlBackgroundThreads)
             {
-                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least " + (geopackageSqlBackgroundThreads + 1) + " to allow for local maxima to be identified concurrent with " + geopackageSqlBackgroundThreads + (geopackageSqlBackgroundThreads == 1 ? " SQL thread." : " SQL threads."));
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least {geopackageSqlBackgroundThreads + 1} to allow for local maxima to be identified concurrent with  SQL {geopackageSqlBackgroundThreads}{(geopackageSqlBackgroundThreads == 1 ? "thread" : "threads")}.");
             }
 
             const string cmdletName = "Get-LocalMaxima";
@@ -226,11 +226,11 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new(cmdletName, "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+ " + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)..."));
+            TimedProgressRecord progress = new(cmdletName, $"Found local maxima in {maximaReadWrite.TilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+ {geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...");
             this.WriteProgress(progress);
             while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Found local maxima in " + maximaReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles (" + findLocalMaximaTasks.Count + "[+" + geopackageSqlBackgroundThreads + (findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)...");
+                progress.StatusDescription = $"Found local maxima in {maximaReadWrite.TilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+{geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...";
                 progress.Update(maximaReadWrite.TilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
@@ -242,7 +242,7 @@ namespace Mars.Clouds.Cmdlets
 
             long meanMaximaPerTile = dsmMaximaTotal / dsm.NonNullTileCount;
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Found " + dsmMaximaTotal.ToString("n0") + " DSM, " + cmmMaximaTotal.ToString("n0") + " CMM, and " + chmMaximaTotal.ToString("n0") + " CHM maxima within " + dsm.NonNullTileCount + " " + (dsm.NonNullTileCount > 1 ? "tiles" : "tile") + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanMaximaPerTile.ToString("n0") + " DSM maxima/tile).");
+            this.WriteVerbose($"Found {dsmMaximaTotal:n0} DSM, {cmmMaximaTotal:n0} CMM, and {chmMaximaTotal:n0} CHM maxima within {dsm.NonNullTileCount} {(dsm.NonNullTileCount > 1 ? "tiles" : "tile")} in {progress.Stopwatch.ToElapsedString()} ({meanMaximaPerTile:n0} DSM maxima/tile).");
             base.ProcessRecord();
         }
 
@@ -478,7 +478,7 @@ namespace Mars.Clouds.Cmdlets
                 DigitalSurfaceModel? dsmTile = dsm[tileIndex];
                 if ((dsmTile == null) || (dsmTile.Surface.Data.Length != dsmTile.Cells) || (dsmTile.CanopyMaxima3.Data.Length != dsmTile.Cells) || (dsmTile.CanopyHeight.Data.Length != dsmTile.Cells) || (dsmTile.SourceIDSurface == null) || (dsmTile.SourceIDSurface.Data.Length != dsmTile.Cells))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(dsm), "DSM tile at index " + tileIndex + " is missing or not fully loaded.");
+                    throw new ArgumentOutOfRangeException(nameof(dsm), $"DSM tile at index {tileIndex} is missing or not fully loaded.");
                 }
 
                 (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileIndex);

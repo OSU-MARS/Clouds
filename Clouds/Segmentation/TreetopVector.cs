@@ -37,19 +37,19 @@ namespace Mars.Clouds.Segmentation
 
             if (this.tileFieldIndex < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.TileFieldName + " field is missing from treetop layer.");
+                throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"{LocalMaximaVector.TileFieldName} field is missing from treetop layer.");
             }
             if (this.idFieldIndex < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(gdalLayer), "Treetop layer does not have an " + LocalMaximaVector.IDFieldName + " or treeID field.");
+                throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"Treetop layer does not have an {LocalMaximaVector.IDFieldName} or treeID field.");
             }
             if (this.heightFieldIndex < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.HeightFieldName + " field is missing from treetop layer.");
+                throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"{LocalMaximaVector.HeightFieldName} field is missing from treetop layer.");
             }
             if (this.radiusFieldIndex < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(gdalLayer), LocalMaximaVector.RadiusFieldName + " field is missing from treetop layer.");
+                throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"{LocalMaximaVector.RadiusFieldName} field is missing from treetop layer.");
             }
         }
 
@@ -79,7 +79,7 @@ namespace Mars.Clouds.Segmentation
             Debug.Assert(this.IsInEditMode && (this.tileFieldIndex >= 0));
             if (classNames.Count < treetops.ClassCounts.GetLength(1))
             {
-                throw new ArgumentOutOfRangeException(nameof(classNames), "Names for some class fields are missing. Treetrops have counts for " + treetops.ClassCounts.GetLength(1) + " classes but only " + classNames.Count + " class names were provided.");
+                throw new ArgumentOutOfRangeException(nameof(classNames), $"Names for some class fields are missing. Treetrops have counts for {treetops.ClassCounts.GetLength(1)} classes but only {classNames.Count} class names were provided.");
             }
 
             Span<int> classFieldIndices = stackalloc int[classNames.Count];
@@ -88,7 +88,7 @@ namespace Mars.Clouds.Segmentation
                 int classFieldIndex = this.Definition.GetFieldIndex(classNames[classIndex]);
                 if (classFieldIndex < 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(classNames), "Could not find field '" + classNames[classIndex] + "' in layer definition.");
+                    throw new ArgumentOutOfRangeException(nameof(classNames), $"Could not find field '{classNames[classIndex]}' in layer definition.");
                 }
                 classFieldIndices[classIndex] = classFieldIndex;
             }
@@ -230,7 +230,7 @@ namespace Mars.Clouds.Segmentation
             {
                 if (treetopFile.GetLayerCount() != 1)
                 {
-                    throw new NotSupportedException("Treetop file contains no layers or contains multiple layers, none of which are named " + TreetopVector.DefaultLayerName + ".");
+                    throw new NotSupportedException($"Treetop file contains no layers or contains multiple layers, none of which are named {TreetopVector.DefaultLayerName}.");
                 }
 
                 gdalLayer = treetopFile.GetLayerByIndex(0);

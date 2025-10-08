@@ -34,7 +34,7 @@ namespace Mars.Clouds.Segmentation
             DigitalSurfaceModel? dsmTile = this.Dsm[tileIndexX, tileIndexY];
             if (dsmTile == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(tileIndexX) + ", " + nameof(tileIndexY), "DSM tile at position " + tileIndexX + ", " + tileIndexY + " is null.");
+                throw new ArgumentOutOfRangeException($"{nameof(tileIndexX)}, {nameof(tileIndexY)}", $"DSM tile at position {tileIndexX}, {tileIndexY} is null.");
             }
 
             RasterNeighborhood8<float> surfaceNeighborhood = this.Dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, this.surfaceBandName);

@@ -34,7 +34,7 @@ namespace Mars.Clouds.GdalExtensions
             // Using shared strings for tile names would lead to a smaller .xlsx if tiles have several bands. Shared strings for
             // short band names also result in size increase over fixed strings. For now, just use unshared strings.
             Row row = new() { RowIndex = (UInt32)rowIndex };
-            row.Append(new Cell() { CellReference = "A" + row.RowIndex, CellValue = new(tileName), DataType = CellValues.String });
+            row.Append(new Cell() { CellReference = $"A{row.RowIndex}", CellValue = new(tileName), DataType = CellValues.String });
             //if (bandName.Length > 5) // length threshold for worthwile savings TBD, definitely greater than 4
             //{
             //    int bandSharedStringIndex = this.sharedStringBandNames.IndexOf(bandName);
@@ -44,19 +44,19 @@ namespace Mars.Clouds.GdalExtensions
             //        this.sharedStringBandNames.Add(bandName);
             //    }
             //
-            //    row.Append(new Cell() { CellReference = "B" + row.RowIndex, CellValue = new(bandSharedStringIndex), DataType = CellValues.SharedString });
+            //    row.Append(new Cell() { CellReference = $"B{row.RowIndex}", CellValue = new(bandSharedStringIndex), DataType = CellValues.SharedString });
             //}
             //else
             //{
-            row.Append(new Cell() { CellReference = "B" + row.RowIndex, CellValue = new(bandName), DataType = CellValues.String });
+            row.Append(new Cell() { CellReference = $"B{row.RowIndex}", CellValue = new(bandName), DataType = CellValues.String });
             //}
 
-            row.Append(TileStatisticsTable.CreateCell("C" + row.RowIndex, bandStatistics.CellsSampled));
-            row.Append(TileStatisticsTable.CreateCell("D" + row.RowIndex, bandStatistics.NoDataCells));
-            row.Append(new Cell() { CellReference = "E" + row.RowIndex, CellValue = new(bandStatistics.Minimum), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "F" + row.RowIndex, CellValue = new(bandStatistics.Mean), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "G" + row.RowIndex, CellValue = new(bandStatistics.Maximum), DataType = CellValues.Number });
-            row.Append(new Cell() { CellReference = "H" + row.RowIndex, CellValue = new(bandStatistics.StandardDeviation), DataType = CellValues.Number });
+            row.Append(TileStatisticsTable.CreateCell($"C{row.RowIndex}", bandStatistics.CellsSampled));
+            row.Append(TileStatisticsTable.CreateCell($"D{row.RowIndex}", bandStatistics.NoDataCells));
+            row.Append(new Cell() { CellReference = $"E{row.RowIndex}", CellValue = new(bandStatistics.Minimum), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"F{row.RowIndex}", CellValue = new(bandStatistics.Mean), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"G{row.RowIndex}", CellValue = new(bandStatistics.Maximum), DataType = CellValues.Number });
+            row.Append(new Cell() { CellReference = $"H{row.RowIndex}", CellValue = new(bandStatistics.StandardDeviation), DataType = CellValues.Number });
 
             return row;
         }

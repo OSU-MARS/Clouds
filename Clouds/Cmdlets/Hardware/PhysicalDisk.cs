@@ -52,7 +52,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                 (locationTokens[3].StartsWith(" Function ", StringComparison.Ordinal) == false) ||
                 (locationTokens[4].StartsWith(" Adapter ", StringComparison.Ordinal) == false))
             {
-                throw new NotSupportedException("Unhandled disk physical location format '" + physicalLocation + "'.");
+                throw new NotSupportedException($"Unhandled disk physical location format '{physicalLocation}'.");
             }
 
             this.Bus = Int32.Parse(locationTokens[1][5..]);
@@ -64,7 +64,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
             {
                 if (locationTokens[5].StartsWith(" Port ", StringComparison.Ordinal) == false)
                 {
-                    throw new NotSupportedException("Unhandled disk physical location format '" + physicalLocation + "'.");
+                    throw new NotSupportedException($"Unhandled disk physical location format '{physicalLocation}'.");
                 }
 
                 this.Port = Int32.Parse(locationTokens[5][6..]);
@@ -96,7 +96,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
             {
                 if ((this.PcieLanes < 1) || (this.PcieLanes == 3) || (this.PcieLanes > 4))
                 {
-                    throw new InvalidOperationException("Drive has " + this.PcieLanes + " PCIe lanes, which is unexpected.");
+                    throw new InvalidOperationException($"Drive has {this.PcieLanes} PCIe lanes, which is unexpected.");
                 }
                 float usableBandwidthPerPcieLaneInGBs = this.PcieVersion switch
                 {
@@ -104,7 +104,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                     3 => HardwareCapabilities.Pcie3LaneBandwidthInGBs,
                     4 => HardwareCapabilities.Pcie4LaneBandwidthInGBs,
                     5 => HardwareCapabilities.Pcie5LaneBandwidthInGBs,
-                    _ => throw new NotSupportedException("Unhandled PCIe version " + this.PcieVersion + ".")
+                    _ => throw new NotSupportedException($"Unhandled PCIe version {this.PcieVersion}.")
                 };
                 return usableBandwidthPerPcieLaneInGBs * this.PcieLanes;
             }
@@ -119,7 +119,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                     BusType.RAID => throw new NotSupportedException("RAID arrays are not currently supported."),
                     BusType.StorageSpace => throw new NotSupportedException("Storage spaces are not currently supported."),
                     // Unknown, (i)SCSI, ATAPI, ATA, FireWire, SSA, FibreChannel, SecureDigital, MultimediaCard, ReservedMax, FileBackedVirtual, MicrosoftReserved
-                    _ => throw new NotSupportedException("Unhandled bus type " + this.BusType + ".")
+                    _ => throw new NotSupportedException($"Unhandled bus type {this.BusType}.")
                 };
             }
         }

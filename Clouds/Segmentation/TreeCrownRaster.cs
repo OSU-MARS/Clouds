@@ -16,7 +16,7 @@ namespace Mars.Clouds.Segmentation
         {
             if (crownDataset.RasterCount != 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(crownDataset), "Raster '" + this.FilePath + "' has " + crownDataset.RasterCount + " bands. Currently only single band rasters are supported.");
+                throw new ArgumentOutOfRangeException(nameof(crownDataset), $"Raster '{this.FilePath}' has {crownDataset.RasterCount} bands. Currently only single band rasters are supported.");
             }
             
             this.TreeID = new(crownDataset, crownDataset.GetRasterBand(1), readData);
@@ -61,7 +61,7 @@ namespace Mars.Clouds.Segmentation
                         this.TreeID.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in local maxima raster '" + this.FilePath + "'.");
+                        throw new NotSupportedException($"Unhandled band '{bandName}' in local maxima raster '{this.FilePath}'.");
                 }
             }
 
@@ -84,18 +84,18 @@ namespace Mars.Clouds.Segmentation
                 (segmentationState.SlopeNeighborhood == null) || (segmentationState.AspectNeighborhood == null) ||
                 (segmentationState.TreetopCostTile == null) || (segmentationState.TreetopNeighborhood == null))
             {
-                throw new ArgumentOutOfRangeException(nameof(segmentationState), "Segmentation state is missing one or more neighborhoods. Call " + nameof(segmentationState.SetNeighborhoodsAndCellSize) + "() before calling " + nameof(this.SegmentCrowns) + "().");
+                throw new ArgumentOutOfRangeException(nameof(segmentationState), $"Segmentation state is missing one or more neighborhoods. Call {nameof(segmentationState.SetNeighborhoodsAndCellSize)}() before calling {nameof(this.SegmentCrowns)}().");
             }
 
             RasterBand<float> dsmTile = segmentationState.DsmNeighborhood.Center;
             TreetopsGrid treetopsTile = segmentationState.TreetopNeighborhood.Center;
             if ((dsmTile.Transform.OriginX != treetopsTile.Transform.OriginX) || (dsmTile.Transform.OriginY != treetopsTile.Transform.OriginY))
             {
-                throw new NotSupportedException("DSM and treetop tile origins are not identical. DSM tile origin (" + dsmTile.Transform.OriginX + ", " + dsmTile.Transform.OriginY + "), treetop origin (" + treetopsTile.Transform.OriginX + ", " + treetopsTile.Transform.OriginY + ").");
+                throw new NotSupportedException($"DSM and treetop tile origins are not identical. DSM tile origin ({dsmTile.Transform.OriginX}, {dsmTile.Transform.OriginY}), treetop origin ({treetopsTile.Transform.OriginX}, {treetopsTile.Transform.OriginY}).");
             }
             if ((dsmTile.Transform.CellHeight >= 0.0) || (treetopsTile.Transform.CellHeight >= 0.0))
             {
-                throw new NotSupportedException("Currently, only negative DSM and treetop cell heights are supported. DSM cell height " + dsmTile.Transform.CellHeight + ", treetop cell height " + treetopsTile.Transform.CellHeight + ".");
+                throw new NotSupportedException($"Currently, only negative DSM and treetop cell heights are supported. DSM cell height {dsmTile.Transform.CellHeight}, treetop cell height {treetopsTile.Transform.CellHeight}.");
             }
 
             // clear any previous crown segmentation

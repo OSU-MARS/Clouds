@@ -1193,7 +1193,7 @@ namespace Mars.Clouds.Las
                         break;
 
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in grid metrics raster '" + this.FilePath + ".");
+                        throw new NotSupportedException($"Unhandled band '{bandName}' in grid metrics raster '{this.FilePath}.");
                 }
             }
 

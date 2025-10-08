@@ -17,7 +17,7 @@ namespace Mars.Clouds.Extensions
                 {
                     "1" => true,
                     "0" => false,
-                    _ => throw new XmlException(reader.Name + "@" + attributeName + " has non-boolean value '" + attributeValueAsString + "'.")
+                    _ => throw new XmlException($"{reader.Name}@{attributeName} has non-boolean value '{attributeValueAsString}'.")
                 };
             }
 
@@ -32,7 +32,7 @@ namespace Mars.Clouds.Extensions
             {
                 if (Int32.TryParse(attributeValueAsStringArray[index], out int value) == false)
                 {
-                    throw new XmlException(reader.Name + " contains non-integer point value '" + attributeValueAsStringArray[index] + "'.");
+                    throw new XmlException($"{reader.Name} contains non-integer point value '{attributeValueAsStringArray[index]}'.");
                 }
 
                 attributeValue[index] = value;
@@ -46,7 +46,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadAttributeAsString(attributeName);
             if (Double.TryParse(attributeValueAsString, out double attributeValue) == false)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " has non-floating point value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name}@{attributeName} has non-floating point value '{attributeValueAsString}'.");
             }
 
             return attributeValue;
@@ -57,7 +57,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadAttributeAsString(attributeName);
             if (Single.TryParse(attributeValueAsString, out float attributeValue) == false)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " has non-floating point value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name}@{attributeName} has non-floating point value '{attributeValueAsString}'.");
             }
 
             return attributeValue;
@@ -78,7 +78,7 @@ namespace Mars.Clouds.Extensions
                 "UInt16" => DataType.GDT_UInt16,
                 "UInt32" => DataType.GDT_UInt32,
                 "UInt64" => DataType.GDT_UInt64,
-                _ => throw new NotSupportedException("Unhandled GDAL data type '" + attributeValueAsString + "'.")
+                _ => throw new NotSupportedException($"Unhandled GDAL data type '{attributeValueAsString}'.")
             };
         }
 
@@ -87,7 +87,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadAttributeAsString(attributeName);
             if (Int32.TryParse(attributeValueAsString, out Int32 attributeValue) == false) 
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " has non-integer value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name}@{attributeName} has non-integer value '{attributeValueAsString}'.");
             }
 
             return attributeValue;
@@ -98,7 +98,7 @@ namespace Mars.Clouds.Extensions
             string? attributeValueAsString = reader.GetAttribute(attributeName);
             if (attributeValueAsString == null)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " is not present.");
+                throw new XmlException($"{reader.Name}@{attributeName} is not present.");
             }
 
             return attributeValueAsString;
@@ -109,7 +109,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadAttributeAsString(attributeName);
             if (UInt32.TryParse(attributeValueAsString, out UInt32 attributeValue) == false)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " has non-integer value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name}@{attributeName} has non-integer value '{attributeValueAsString}'.");
             }
 
             return attributeValue;
@@ -120,11 +120,11 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadAttributeAsString(attributeName); 
             if (attributeValueAsString.StartsWith("0x") == false)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " does not start with '0x'.");
+                throw new XmlException($"{reader.Name}@{attributeName} does not start with '0x'.");
             }
             if (UInt32.TryParse(attributeValueAsString[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out UInt32 attributeValue) == false)
             {
-                throw new XmlException(reader.Name + "@" + attributeName + " has non-hexadecimal value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name}@{attributeName} has non-hexadecimal value '{attributeValueAsString}'.");
             }
             return attributeValue;
         }
@@ -136,7 +136,7 @@ namespace Mars.Clouds.Extensions
                 "VRTPansharpenedDataset" => VrtDatasetSubclass.VrtPansharpenedDataset,
                 "VRTProcessedDataset" => VrtDatasetSubclass.VrtProcessedDataset,
                 "VRTWarpedDataset" => VrtDatasetSubclass.VrtWarpedDataset,
-                _ => throw new NotSupportedException("Unhandled VRT dataset subclass '" + attributeValueAsString + "'.")
+                _ => throw new NotSupportedException($"Unhandled VRT dataset subclass '{attributeValueAsString}'.")
             };
         }
 
@@ -149,7 +149,7 @@ namespace Mars.Clouds.Extensions
             {
                 if (Double.TryParse(elementAsStringArray[index], out double value) == false)
                 {
-                    throw new XmlException(reader.Name + " contains non-floating point value '" + elementAsStringArray[index] + "'.");
+                    throw new XmlException($"{reader.Name} contains non-floating point value '{elementAsStringArray[index]}'.");
                 }
 
                 elementValue[index] = value;
@@ -163,7 +163,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadElementContentAsString();
             if (Enum.TryParse<TEnum>(attributeValueAsString, out TEnum elementValue) == false)
             {
-                throw new XmlException(reader.Name + " contains unknown " + typeof(Enum).Name + " value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name} contains unknown {typeof(Enum).Name} value '{attributeValueAsString}'.");
             }
 
             return elementValue;
@@ -177,7 +177,7 @@ namespace Mars.Clouds.Extensions
             {
                 if (UInt32.TryParse(elementAsStringArray[index], out UInt32 value) == false)
                 {
-                    throw new XmlException(reader.Name + " contains non-integer value '" + elementAsStringArray[index] + "'.");
+                    throw new XmlException($"{reader.Name} contains non-integer value '{elementAsStringArray[index]}'.");
                 }
 
                 elementValue[index] = value;
@@ -191,7 +191,7 @@ namespace Mars.Clouds.Extensions
             string attributeValueAsString = reader.ReadElementContentAsString();
             if (UInt32.TryParse(attributeValueAsString, out UInt32 elementValue) == false)
             {
-                throw new XmlException(reader.Name + " contains non-integer or signed integer value '" + attributeValueAsString + "'.");
+                throw new XmlException($"{reader.Name} contains non-integer or signed integer value '{attributeValueAsString}'.");
             }
 
             return elementValue;

@@ -32,7 +32,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
             }
             else
             {
-                throw new NotSupportedException("Unhandled operating system " + RuntimeInformation.OSDescription + ".");
+                throw new NotSupportedException($"Unhandled operating system {RuntimeInformation.OSDescription}.");
             }
         }
 
@@ -61,7 +61,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                     pathRoot = Path.GetPathRoot(currentLocation);
                     if (String.IsNullOrEmpty(pathRoot))
                     {
-                        throw new NotSupportedException("Both the path '" + path + "' and the current directory '" + currentLocation + "' are rootless.");
+                        throw new NotSupportedException($"Both the path '{path}' and the current directory '{currentLocation}' are rootless.");
                     }
                 }
 
@@ -81,7 +81,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
             List<string> pathRoots = HardwareCapabilities.GetPathRoots(drivePaths, currentLocation);
             if (pathRoots.Count < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(drivePaths), drivePaths.Count + " drive paths provided zero path roots.");
+                throw new ArgumentOutOfRangeException(nameof(drivePaths), $"{drivePaths.Count} drive paths provided zero path roots.");
             }
 
             // add up capabilities of utilized drives
@@ -129,7 +129,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
 
                     if ((physicalHardDrivesInVirtualDisk > 0) && (virtualDiskTotalTransferRateFromFlash > 0))
                     {
-                        throw new NotSupportedException("Virtual disk contains " + physicalHardDrivesInVirtualDisk + " hard drives as well as flash drives capable of transferring " + virtualDiskTotalTransferRateFromFlash + " GB/s. Mixtures of drive media types are not currently supported.");
+                        throw new NotSupportedException($"Virtual disk contains {physicalHardDrivesInVirtualDisk} hard drives as well as flash drives capable of transferring {virtualDiskTotalTransferRateFromFlash} GB/s. Mixtures of drive media types are not currently supported.");
                     }
 
                     int virtualDiskMinimumHardDriveThreads = 1;
@@ -145,7 +145,7 @@ namespace Mars.Clouds.Cmdlets.Hardware
                 }
                 else
                 {
-                    throw new ArgumentOutOfRangeException(nameof(drivePaths), "Found no physical or virtual disk for path root '" + pathRoot + "'.");
+                    throw new ArgumentOutOfRangeException(nameof(drivePaths), $"Found no physical or virtual disk for path root '{pathRoot}'.");
                 }
             }
 

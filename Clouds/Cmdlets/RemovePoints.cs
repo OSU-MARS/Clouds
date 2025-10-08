@@ -27,13 +27,13 @@ namespace Mars.Clouds.Cmdlets
             List<string> sourceCloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             if (sourceCloudPaths.Count < 1)
             {
-                throw new ParameterOutOfRangeException(nameof(this.Las), "-" + nameof(this.Las) + " = '" + String.Join(", ", this.Las) + "' does not match any existing point clouds.");
+                throw new ParameterOutOfRangeException(nameof(this.Las), $"-{nameof(this.Las)} = '{String.Join(", ", this.Las)}' does not match any existing point clouds.");
             }
 
             bool outputPathIsDirectory = Directory.Exists(this.Filtered);
             if ((sourceCloudPaths.Count > 1) && (outputPathIsDirectory == false))
             {
-                throw new ParameterOutOfRangeException(nameof(this.Filtered), "-" + nameof(this.Filtered) + " must be an existing directory when -" + nameof(this.Filtered) + " indicates multiple files.");
+                throw new ParameterOutOfRangeException(nameof(this.Filtered), $"-{nameof(this.Filtered)} must be an existing directory when -{nameof(this.Filtered)} indicates multiple files.");
             }
 
             // remove points from clouds
@@ -52,7 +52,7 @@ namespace Mars.Clouds.Cmdlets
                     string? sourceCloudName = Path.GetFileName(sourceCloudPath);
                     if (String.IsNullOrWhiteSpace(sourceCloudName))
                     {
-                        throw new NotSupportedException("Could not find a point cloud file name in path '" + sourceCloudPath + "'.");
+                        throw new NotSupportedException($"Could not find a point cloud file name in path '{sourceCloudPath}'.");
                     }
                     string destinationCloudPath = outputPathIsDirectory ? Path.Combine(this.Filtered, sourceCloudName) : this.Filtered;
 
@@ -78,16 +78,16 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Remove-Points", "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...");
+            TimedProgressRecord progress = new("Remove-Points", $"Removed noise and withheld points from {cloudFiltrationsCompleted} of {sourceCloudPaths.Count} point {(sourceCloudPaths.Count == 1 ? "clouds" : "cloud")}...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Removed noise and withheld points from " + cloudFiltrationsCompleted + " of " + sourceCloudPaths.Count + " point clouds...";
+                progress.StatusDescription = $"Removed noise and withheld points from {cloudFiltrationsCompleted} of {sourceCloudPaths.Count} point {(sourceCloudPaths.Count == 1 ? "clouds" : "cloud")}...";
                 progress.Update(cloudFiltrationsCompleted, sourceCloudPaths.Count);
                 this.WriteProgress(progress);
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Removed " + pointsRemoved.ToString("n0") + " points from " + sourceCloudPaths.Count + (sourceCloudPaths.Count > 1 ? " clouds in " : " cloud in ") + progress.Stopwatch.ToElapsedString() + ".");
+            this.WriteVerbose($"Removed {pointsRemoved:n0} points from {sourceCloudPaths.Count} {(sourceCloudPaths.Count > 1 ? "clouds" : "cloud")} in {progress.Stopwatch.ToElapsedString()}.");
             base.ProcessRecord();
         }
     }

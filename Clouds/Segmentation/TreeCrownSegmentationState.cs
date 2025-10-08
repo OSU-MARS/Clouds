@@ -63,7 +63,7 @@ namespace Mars.Clouds.Segmentation
         {
             if (dsm.TileCellSizeX != Double.Abs(dsm.TileCellSizeY))
             {
-                throw new NotSupportedException("Rectangular DSM cells are not currently supported. DSM cell size is " + dsm.TileCellSizeX + " by " + dsm.TileCellSizeY + ".");
+                throw new NotSupportedException($"Rectangular DSM cells are not currently supported. DSM cell size is {dsm.TileCellSizeX} by {dsm.TileCellSizeY}.");
             }
 
             this.AspectNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.DsmAspectBandName);

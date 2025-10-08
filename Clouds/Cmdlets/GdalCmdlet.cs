@@ -101,7 +101,7 @@ namespace Mars.Clouds.Cmdlets
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = "Read metadata of " + tileRead.TilesRead + " of " + tilePaths.Count + " virtual raster " + (tilePaths.Count == 1 ? "tile (" : "tiles (") + tileReadTasks.Count + (tileReadTasks.Count == 1 ? " thread)..." : " threads)...");
+                    progress.StatusDescription = $"Read metadata of {tileRead.TilesRead} of {tilePaths.Count} virtual raster {(tilePaths.Count == 1 ? "tile (" : "tiles (")}{tileReadTasks.Count}{(tileReadTasks.Count == 1 ? " thread)..." : " threads)...")}";
                     progress.Update(tileRead.TilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }
@@ -118,7 +118,7 @@ namespace Mars.Clouds.Cmdlets
             {
                 if (File.Exists(outputPath))
                 {
-                    throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when -" + inputParameterName + " indicates multiple files.");
+                    throw new ParameterOutOfRangeException(outputParameterName, $"-{outputParameterName} must be an existing directory when -{inputParameterName} indicates multiple files.");
                 }
                 else
                 {

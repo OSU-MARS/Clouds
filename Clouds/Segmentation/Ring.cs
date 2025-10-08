@@ -43,7 +43,7 @@ namespace Mars.Clouds.Segmentation
         {
             if (xIndices.Length != yIndices.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(yIndices), "X index sets must match. X indices are of length " + xIndices.Length + " but y indices are of length " + yIndices.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(yIndices), $"X index sets must match. X indices are of length {xIndices.Length} but y indices are of length {yIndices.Length}.");
             }
 
             this.XIndices = xIndices;

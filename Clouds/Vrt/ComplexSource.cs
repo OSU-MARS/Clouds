@@ -39,7 +39,7 @@ namespace Mars.Clouds.Vrt
                         this.NoDataValue = reader.ReadElementContentAsDouble();
                         break;
                     default:
-                        throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                        throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
                 }
             }
             else
@@ -59,7 +59,7 @@ namespace Mars.Clouds.Vrt
                         this.DestinationRectangle.ReadXml(reader);
                         break;
                     default:
-                        throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                        throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
                 }
             }
         }

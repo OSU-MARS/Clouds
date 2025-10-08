@@ -15,11 +15,11 @@ namespace Mars.Clouds.GdalExtensions
             int yIndex1 = yIndex0 + 1;
             if ((xIndex0 < 0) || (xIndex1 >= band.SizeX))
             {
-                throw new ArgumentOutOfRangeException(nameof(x), "Bilinear interpolation cannot be performed as coordinate (" + x + ", " + y + ") does not lie within grid extents " + band.GetExtentString() + ".");
+                throw new ArgumentOutOfRangeException(nameof(x), $"Bilinear interpolation cannot be performed as coordinate ({x}, {y}) does not lie within grid extents {band.GetExtentString()}.");
             }
             if ((yIndex0 < 0) || (yIndex1 >= band.SizeY))
             {
-                throw new ArgumentOutOfRangeException(nameof(y), "Bilinear interpolation cannot be performed as coordinate (" + x + ", " + y + ") does not lie within grid extents " + band.GetExtentString() + ".");
+                throw new ArgumentOutOfRangeException(nameof(y), $"Bilinear interpolation cannot be performed as coordinate ({x}, {y}) does not lie within grid extents {band.GetExtentString()}.");
             }
 
             int cellIndexX0Y0 = band.ToCellIndex(xIndex0, yIndex0);

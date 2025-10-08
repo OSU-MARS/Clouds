@@ -20,7 +20,7 @@ namespace Mars.Clouds.Las
         /// <summary>
         /// Waveform data packets contained in this .las or .laz file. LAS 1.3+, Mutually exclusive with <see cref="WaveformDataPacketsExternal"/>.
         /// </summary>
-        [Obsolete("Use " + nameof(WaveformDataPacketsExternal) + ".")]
+        [Obsolete($"Use {nameof(WaveformDataPacketsExternal)}.")] // per LAS specification
         WaveformDataPacketsInternal = 0x0002,
 
         /// <summary>

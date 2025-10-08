@@ -75,14 +75,14 @@ namespace Mars.Clouds.Vrt
                 int vrtBandIndex = vrt.BandNames.IndexOf(vrtBandName);
                 if (vrtBandIndex < 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrtBandNames), "Band '" + vrtBandName + "' not found in virtual raster's list of bands.");
+                    throw new ArgumentOutOfRangeException(nameof(vrtBandNames), $"'{vrtBandName}' not found in virtual raster's list of bands.");
                 }
                 int tilesWithBand = vrt.TileCountByBand[vrtBandIndex];
                 int tilesWithNoDataValue = vrt.TilesWithNoDataValuesByBand[vrtBandIndex];
                 Debug.Assert((tilesWithBand <= vrt.NonNullTileCount) && (tilesWithNoDataValue <= tilesWithBand));
                 if ((tilesWithNoDataValue != 0) && (tilesWithNoDataValue != tilesWithBand))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrt), "No data values are inconsistently present in virtual raster band '" + vrtBandName + "'. " + tilesWithNoDataValue + " of the virtual raster's " + vrt.NonNullTileCount + " tiles have no data values ('" + vrtDatasetDirectory + "')");
+                    throw new ArgumentOutOfRangeException(nameof(vrt), $"No data values are inconsistently present in virtual raster band '{vrtBandName}'. {tilesWithNoDataValue} of the virtual raster's {vrt.NonNullTileCount} tiles have no data values ('{vrtDatasetDirectory}')");
                 }
 
                 // create band
@@ -125,7 +125,7 @@ namespace Mars.Clouds.Vrt
                         }
                         if (tile.TryGetBandLocation(vrtBandName, out string? sourceBandFilePath, out int sourceBandIndexOnDisk) == false)
                         {
-                            throw new ArgumentOutOfRangeException(nameof(vrtBandNames), "Band '" + vrtBandNames[vrtBandIndex] + "' is not present in virtual raster.");
+                            throw new ArgumentOutOfRangeException(nameof(vrtBandNames), $"Band '{vrtBandNames[vrtBandIndex]}' is not present in virtual raster.");
                         }
 
                         string relativePathToTile = Path.GetRelativePath(vrtDatasetDirectory, sourceBandFilePath);
@@ -186,7 +186,7 @@ namespace Mars.Clouds.Vrt
                 string? directoryPath = Path.GetDirectoryName(basePath);
                 if (directoryPath == null)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(basePath), ".vrt base path'" + basePath + "' does not contain a directory.");
+                    throw new ArgumentOutOfRangeException(nameof(basePath), $".vrt base path'{basePath}' does not contain a directory.");
                 }
 
                 vrtBaseDirectoryPath = directoryPath;
@@ -208,7 +208,7 @@ namespace Mars.Clouds.Vrt
                 case "VRTDataset":
                     if ((reader.AttributeCount < 2) || (reader.AttributeCount > 4))
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.RasterXSize = reader.ReadAttributeAsUInt32("rasterXSize");
                     this.RasterYSize = reader.ReadAttributeAsUInt32("rasterYSize");
@@ -227,21 +227,21 @@ namespace Mars.Clouds.Vrt
                 case "BlockXSize":
                     if (reader.AttributeCount != 0)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.BlockXSize = reader.ReadElementContentAsUInt32();
                     break;
                 case "BlockYSize":
                     if (reader.AttributeCount != 0)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.BlockXSize = reader.ReadElementContentAsUInt32();
                     break;
                 case "Metadata":
                     if (reader.AttributeCount != 0)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     this.Metadata.ReadXml(reader);
                     break;
@@ -257,7 +257,7 @@ namespace Mars.Clouds.Vrt
                 //case "ProcessingSteps":
                 //case "Group":
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 
@@ -283,8 +283,8 @@ namespace Mars.Clouds.Vrt
                 DataType.GDT_UInt32 => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, UInt32.MaxValue),
                 DataType.GDT_UInt64 => RasterBand.ResolveUnsignedIntegerNoDataValue(noDataValues, UInt64.MaxValue),
                 DataType.GDT_Float32 or
-                DataType.GDT_Float64 => throw new NotSupportedException("Multiple " + gdalDataType + " no data values found in virtual raster tiles for band '" + bandName + "'. Making a selection among these (or picking an alternate value) is not currently implemented."),
-                _ => throw new NotSupportedException("Unhandled GDAL data type " + gdalDataType + ".")
+                DataType.GDT_Float64 => throw new NotSupportedException($"Multiple {gdalDataType} no data values found in virtual raster tiles for band '{bandName}'. Making a selection among these (or picking an alternate value) is not currently implemented."),
+                _ => throw new NotSupportedException($"Unhandled GDAL data type {gdalDataType}.")
             };
         }
 

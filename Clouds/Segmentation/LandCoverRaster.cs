@@ -16,7 +16,7 @@ namespace Mars.Clouds.Segmentation
         {
             if (coverDataset.RasterCount != 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(coverDataset), "Raster '" + this.FilePath + "' has " + coverDataset.RasterCount + " bands. Currently only single band rasters are supported.");
+                throw new ArgumentOutOfRangeException(nameof(coverDataset), $"Raster '{this.FilePath}' has {coverDataset.RasterCount} bands. Currently only single band rasters are supported.");
             }
 
             this.Classification = new(coverDataset, coverDataset.GetRasterBand(1), readData);
@@ -47,7 +47,7 @@ namespace Mars.Clouds.Segmentation
             using Dataset coverDataset = Gdal.Open(this.FilePath, Access.GA_ReadOnly);
             if (coverDataset.RasterCount != 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(coverDataset), "Raster '" + this.FilePath + "' has " + coverDataset.RasterCount + " bands. Currently only single band rasters are supported.");
+                throw new ArgumentOutOfRangeException(nameof(coverDataset), $"Raster '{this.FilePath}' has {coverDataset.RasterCount} bands. Currently only single band rasters are supported.");
             }
 
             this.Classification.ReadDataAssumingSameCrsTransformSizeAndNoData(coverDataset.GetRasterBand(1));

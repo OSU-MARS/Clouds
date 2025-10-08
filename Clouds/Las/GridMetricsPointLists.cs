@@ -70,7 +70,7 @@ namespace Mars.Clouds.Las
         /// <param name="lasGrid">Grid of point cloud tiles. Not used unless a cell mask is specified.</param>
         public void Reset(LasTileGrid lasGrid, LasTile lasTile, RasterBand? metricsCellMask)
         {
-            Debug.Assert(this.Transform.CellHeight < 0.0, "Cell height is " + this.Transform.CellHeight + ". Non-negative heights are not currently supported.");
+            Debug.Assert(this.Transform.CellHeight < 0.0, $"Cell height is {this.Transform.CellHeight}. Non-negative heights are not currently supported.");
 
             // reset all metrics cells
             for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
@@ -113,7 +113,7 @@ namespace Mars.Clouds.Las
             // where intersection counts are determined by neighbors' presence. When cell mask boundaries align with point cloud tiles' 
             // boundaries a 3x2, 2x3, or 2x2 neighborhood can result. Locations at the edge of the point cloud tiles can also produce
             // neighborhoods smaller than 3x3, including also 3x1, 1x3, 2x1, 1x2, and, in the case of a single cloud, 1x1.
-            Debug.Assert(lasGrid.Transform.CellHeight < 0.0, "Point cloud tile height is " + lasGrid.Transform.CellHeight + ". Non-negative heights are not currently supported.");
+            Debug.Assert(lasGrid.Transform.CellHeight < 0.0, $"Point cloud tile height is {lasGrid.Transform.CellHeight}. Non-negative heights are not currently supported.");
 
             (double metricsCentroidX, double metricsCentroidY) = this.GetCentroid();
             (int lasGridCenterIndexX, int lasGridCenterIndexY) = lasGrid.ToGridIndices(metricsCentroidX, metricsCentroidY);

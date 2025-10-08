@@ -78,7 +78,7 @@ namespace Mars.Clouds.Vrt
                         this.Sources.Add(source);
                         break;
                     default:
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                 }
             }
             else if (reader.AttributeCount == 2)
@@ -91,12 +91,12 @@ namespace Mars.Clouds.Vrt
                         reader.Read();
                         break;
                     default:
-                        throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                        throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
                 }
             }
             else
             {
-                throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 

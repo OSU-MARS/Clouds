@@ -51,7 +51,7 @@ namespace Mars.Clouds.Vrt
         {
             if (reader.AttributeCount != 0)
             {
-                throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
             }
 
             switch (reader.Name)
@@ -78,7 +78,7 @@ namespace Mars.Clouds.Vrt
                     this.BucketCounts = reader.ReadElementContentAsPipeUIntArray();
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 
@@ -86,7 +86,7 @@ namespace Mars.Clouds.Vrt
         {
             if (this.BucketCount != this.BucketCounts.Length)
             {
-                throw new InvalidOperationException("Histogram is set for " + this.BucketCount + " buckets but counts are defined for " + this.BucketCounts.Length + " buckets.");
+                throw new InvalidOperationException($"Histogram is set for {this.BucketCount} buckets but counts are defined for {this.BucketCounts.Length} buckets.");
             }
 
             writer.WriteStartElement("HistItem");

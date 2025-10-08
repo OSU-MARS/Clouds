@@ -24,7 +24,7 @@ namespace Mars.Clouds.Cmdlets
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if ((lasGrid.NonNullCells > 1) && (outputPathIsDirectory == false))
             {
-                throw new ParameterOutOfRangeException(outputParameterName, "-" + outputParameterName + " must be an existing directory when " + nameof(this.Las) + " indicates multiple files.");
+                throw new ParameterOutOfRangeException(outputParameterName, $"-{outputParameterName} must be an existing directory when {nameof(this.Las)} indicates multiple files.");
             }
 
             return lasGrid;

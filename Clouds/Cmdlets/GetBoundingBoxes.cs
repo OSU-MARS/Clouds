@@ -75,7 +75,7 @@ namespace Mars.Clouds.Cmdlets
                         Debug.Assert(boundingBoxCrs != null);
                         if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, boundingBoxCrs) == false)
                         {
-                            throw new NotSupportedException("Point cloud '" + cloudPath + "'s coordinate system ('" + cloudCrs.GetName() + "') does not match the bounding box layer's coordinate system ('" + boundingBoxCrs.GetName() + "').");
+                            throw new NotSupportedException($"Point cloud '{cloudPath}'s coordinate system ('{cloudCrs.GetName()}') does not match the bounding box layer's coordinate system ('{boundingBoxCrs.GetName()}').");
                         }
                     }
 
@@ -96,17 +96,17 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Get-BoundingBoxes", "Read " + boundingBoxReadsCompleted + " of " + cloudPaths.Count + " bounding boxes...");
+            TimedProgressRecord progress = new("Get-BoundingBoxes", $"Read {boundingBoxReadsCompleted} of {cloudPaths.Count} bounding boxes...");
             while (boundsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = "Read " + boundingBoxReadsCompleted + " of " + cloudPaths.Count + " bounding boxes...";
+                progress.StatusDescription = $"Read {boundingBoxReadsCompleted} of {cloudPaths.Count} bounding boxes...";
                 progress.Update(boundingBoxReadsCompleted, cloudPaths.Count);
                 this.WriteProgress(progress);
             }
 
             if (boundingBoxLayer != null)
             {
-                progress.StatusDescription = "Waiting for GDAL to finish committing treetops to '" + Path.GetFileName(this.Bounds) + "'...";
+                progress.StatusDescription = $"Waiting for GDAL to finish committing treetops to '{Path.GetFileName(this.Bounds)}'...";
                 progress.PercentComplete = 0;
                 progress.SecondsRemaining = -1;
                 this.WriteProgress(progress);

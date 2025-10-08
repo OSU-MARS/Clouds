@@ -36,12 +36,12 @@ namespace Mars.Clouds.Cmdlets
         {
             if ((this.BitDepth != 16) && (this.BitDepth != 32) && (this.BitDepth != 64))
             {
-                throw new ParameterOutOfRangeException(nameof(this.BitDepth), this.BitDepth + " bit depth is not supported. Bit depth must be 16, 32, or 64 bits per cell for RGB, NIR, and intensity bands.");
+                throw new ParameterOutOfRangeException(nameof(this.BitDepth), $"{this.BitDepth} bit depth is not supported. Bit depth must be 16, 32, or 64 bits per cell for RGB, NIR, and intensity bands.");
             }
 
             if (this.DataThreads < 2)
             {
-                throw new ParameterOutOfRangeException(nameof(this.DataThreads), "-" + nameof(this.DataThreads) + " must be at least two.");
+                throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least two.");
             }
 
             const string cmdletName = "Get-Orthoimages";
@@ -134,7 +134,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Found brightnesses of " + cellsWritten.ToString("n0") + " pixels in " + imageReadWrite.TilesRead + (imageReadWrite.TilesRead == 1 ? " point cloud tile in " : " point cloud tiles in ") + progress.Stopwatch.ToElapsedString() + ": " + (imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds).ToString("0.0") + " tiles/s.");
+            this.WriteVerbose($"Found brightnesses of {cellsWritten:n0} pixels in {imageReadWrite.TilesRead} + point cloud {(imageReadWrite.TilesRead == 1 ? "tile" : "tiles")} in {progress.Stopwatch.ToElapsedString()}: {imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.0} tiles/s.");
             base.ProcessRecord();
         }
 
@@ -150,13 +150,13 @@ namespace Mars.Clouds.Cmdlets
             if (lasGrid.Transform.CellWidth - outputTileSizeX * this.CellSize != 0.0)
             {
                 string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), $"Point cloud tile grid pitch of {lasGrid.Transform.CellWidth} x {lasGrid.Transform.CellHeight} is not an integer multiple of the {this.CellSize} {units} output cell size.");
             }
             int outputTileSizeY = (int)(Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize);
             if (Double.Abs(lasGrid.Transform.CellHeight) - outputTileSizeY * this.CellSize != 0.0)
             {
                 string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), "Point cloud tile grid pitch of " + lasGrid.Transform.CellWidth + " x " + lasGrid.Transform.CellHeight + " is not an integer multiple of the " + this.CellSize + " " + units + " output cell size.");
+                throw new ParameterOutOfRangeException(nameof(this.CellSize), $"Point cloud tile grid pitch of {lasGrid.Transform.CellWidth} x {lasGrid.Transform.CellHeight} is not an integer multiple of the {this.CellSize} {units} output cell size.");
             }
 
             return (outputTileSizeX, outputTileSizeY);

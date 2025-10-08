@@ -17,7 +17,7 @@ namespace Mars.Clouds.Extensions
                 int value = spanToSortInPlace[index];
                 if (value < 0)
                 {
-                    throw new NotSupportedException("Currently only non-negative integers are supported. Span contains negative value " + value + ".");
+                    throw new NotSupportedException($"Currently only non-negative integers are supported. Span contains negative value {value}.");
                 }
                 ++count[value & 0x000000ff];
             }

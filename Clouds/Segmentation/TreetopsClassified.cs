@@ -31,7 +31,7 @@ namespace Mars.Clouds.Segmentation
                 (int treetopIndexX, int treetopIndexY) = classificationNeighborhood.Center.ToGridIndices(this.X[treetopIndex], this.Y[treetopIndex]);
                 if ((crownNeighborhood.TryGetValue(treetopIndexX, treetopIndexY, out int crownID) == false) || (crownID != treeID))
                 {
-                    throw new InvalidOperationException("Tree " + treetopIndex + " at indices (" + treetopIndexX + ", " + treetopIndexY + ") has ID " + treeID + " but crown raster has ID " + crownID + " at that cell.");
+                    throw new InvalidOperationException($"Tree {treetopIndex} at indices ({treetopIndexX}, {treetopIndexY}) has ID {treeID} but crown raster has ID {crownID} at that cell.");
                 }
 
                 // count classification of treetop cell

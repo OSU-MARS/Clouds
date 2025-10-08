@@ -68,7 +68,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 yMax += signedHeight;
             }
-            return this.Transform.OriginX + ", " + (this.Transform.OriginX + this.SizeX * this.Transform.CellWidth) + ", " + yMin + ", " + yMax;
+            return $"{this.Transform.OriginX}, {this.Transform.OriginX + this.SizeX * this.Transform.CellWidth}, {yMin}, {yMax}";
         }
 
         public (int xIndexMin, int xIndexMaxInclusive, int yIndexMin, int yIndexMaxInclusive) GetIntersectingCellIndices(Extent extent)
@@ -80,7 +80,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.Transform.ColumnRotation != 0.0)
             {
-                throw new NotSupportedException("Rotated grids are not currently handled by " + nameof(this.GetIntersectingCellIndices) + "().");
+                throw new NotSupportedException($"Rotated grids are not currently handled by {nameof(this.GetIntersectingCellIndices)}().");
             }
 
             (int xIndexMin, int yIndexMin) = this.ToGridIndices(xMin, yMax);
@@ -89,7 +89,7 @@ namespace Mars.Clouds.GdalExtensions
             if ((xIndexMin >= this.SizeX) || (xIndexMaxInclusive < 0) || (yIndexMin >= this.SizeY) || (yIndexMaxInclusive < 0))
             {
                 (double gridXmin, double gridXmax, double gridYmin, double gridYmax) = this.GetExtent();
-                throw new NotSupportedException("No intersection occurs between grid with extents (" + gridXmin + ", " + gridXmax + ", " + gridYmin + ", " + gridYmax + ") and area (" + xMin + ", " + xMax + ", " + yMin + ", " + yMax + ").");
+                throw new NotSupportedException($"No intersection occurs between grid with extents ({gridXmin}, {gridXmax}, {gridYmin}, {gridYmax}) and area ({xMin}, {xMax}, {yMin}, {yMax}).");
             }
             
             if (xIndexMin < 0)
@@ -123,12 +123,12 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (newCellWidth < 0.0)
             {
-                throw new ArgumentOutOfRangeException(nameof(newCellWidth), newCellWidth + " is not a valid cell width. Cell sizes must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(newCellWidth), $"{newCellWidth} is not a valid cell width. Cell sizes must be positive.");
             }
             if ((Math.Sign(newCellHeight) != Math.Sign(this.Transform.CellHeight)) || (newCellHeight == 0.0))
             {
                 // if needed, changes in cell height signs can be supported by recalculating the origin and ensuring spanningSizeY is positive
-                throw new ArgumentOutOfRangeException(nameof(newCellHeight), newCellHeight + " is not a supported cell height. Cell height must have the same sign as the current cell height (" + this.Transform.CellHeight + ") and be nonzero.");
+                throw new ArgumentOutOfRangeException(nameof(newCellHeight), $"{newCellHeight} is not a supported cell height. Cell height must have the same sign as the current cell height ({this.Transform.CellHeight}) and be nonzero.");
             }
 
             GridGeoTransform transform = new(this.Transform.OriginX, this.Transform.OriginY, newCellWidth, newCellHeight);
@@ -294,7 +294,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (xIndexFractional < -cellFractionTolerance)
                 {
-                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " has an x value less than the grid's minimum x extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                    throw new NotSupportedException($"Point at (x = {x}, y = {y} has an x value less than the grid's minimum x extent ({this.GetExtentString()} by a distance larger than can be attributed to numerical error.");
                 }
 
                 Debug.Assert(xIndex == 0); // cast to integer rounds toward zero
@@ -303,7 +303,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if ((xIndex > this.SizeX) || (x > this.Transform.OriginX + this.Transform.CellWidth * (this.SizeX + cellFractionTolerance)))
                 {
-                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " has an x value greater than the grid's maximum x extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                    throw new NotSupportedException($"Point at (x = {x}, y = {y} has an x value greater than the grid's maximum x extent ({this.GetExtentString()} by a distance larger than can be attributed to numerical error.");
                 }
 
                 xIndex -= 1; // if x lies exactly on or very close to grid edge, consider point part of the grid
@@ -314,7 +314,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (yIndexFractional < -cellFractionTolerance)
                 {
-                    throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                    throw new NotSupportedException($"Point at (x = {x}, y = {y} lies outside the grid's y extent ({this.GetExtentString()} by a distance larger than can be attributed to numerical error.");
                 }
 
                 Debug.Assert(yIndex == 0); // cast to integer rounds toward zero
@@ -327,7 +327,7 @@ namespace Mars.Clouds.GdalExtensions
                     // y origin is grid's max y value
                     if ((yIndex > this.SizeY) || (y < this.Transform.OriginY + this.Transform.CellHeight * (this.SizeY + cellFractionTolerance)))
                     {
-                        throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                        throw new NotSupportedException($"Point at (x = {x}, y = {y} lies outside the grid's y extent ({this.GetExtentString()} by a distance larger than can be attributed to numerical error.");
                     }
                 }
                 else
@@ -335,7 +335,7 @@ namespace Mars.Clouds.GdalExtensions
                     // y origin is grid's minimum y value
                     if ((yIndex > this.SizeY) || (y >= this.Transform.OriginY - cellFractionTolerance * this.Transform.CellHeight))
                     {
-                        throw new NotSupportedException("Point at (x = " + x + ", y = " + y + " lies outside the grid's y extent (" + this.GetExtentString() + " by a distance larger than can be attributed to numerical error.");
+                        throw new NotSupportedException($"Point at (x = {x}, y = {y} lies outside the grid's y extent ({this.GetExtentString()} by a distance larger than can be attributed to numerical error.");
                     }
                 }
 

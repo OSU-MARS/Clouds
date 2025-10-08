@@ -36,14 +36,14 @@ namespace Mars.Clouds.GdalExtensions
             RasterBand<TBand> center = this.Center;
             if ((sizeX < 1) || (sizeX > center.SizeX) || (sizeY < 1) || (sizeY > center.SizeY))
             {
-                throw new ArgumentException("An " + sizeX + " by " + sizeY + " slice is not supported. One or both dimensions is negative, zero, or exceeds the " + center.SizeX + " by " + center.SizeY + " size of the neighborhood's center tile.");
+                throw new ArgumentException($"An {sizeX} by {sizeY} slice is not supported. One or both dimensions is negative, zero, or exceeds the {center.SizeX} by {center.SizeY} size of the neighborhood's center tile.");
             }
 
             int xMax = xOrigin + sizeX; // exclusive
             int yMax = yOrigin + sizeY; // exclusive
             if ((xMax < 0) || (yMax < 0) || (xOrigin >= center.SizeX) || (yOrigin >= center.SizeY))
             {
-                throw new ArgumentException("Slice with origin (" + xOrigin + ", " + yOrigin + ") and size " + sizeX + " by " + sizeY + " does not overlap the neighborhood's " + center.SizeX + " by " + center.SizeY + " center tile.");
+                throw new ArgumentException($"Slice with origin ({xOrigin}, {yOrigin}) and size {sizeX} by {sizeY} does not overlap the neighborhood's {center.SizeX} by {center.SizeY} center tile.");
             }
 
             // slice is entirely within center tile

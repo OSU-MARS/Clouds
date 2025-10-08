@@ -35,13 +35,13 @@ namespace Mars.Clouds.Cmdlets
                     // presence of wildcards indicates a set of files in some directory
                     directoryPath = Path.GetDirectoryName(fileSearchPath);
                     fileSearchPattern = Path.GetFileName(fileSearchPath);
-                    fileSearchPattern ??= "*" + defaultExtension;
+                    fileSearchPattern ??= $"*{defaultExtension}";
                 }
                 else if (Directory.Exists(fileSearchPath))
                 {
                     // if path indicates an existing directory, search it with the default extension
                     directoryPath = fileSearchPath;
-                    fileSearchPattern = "*" + defaultExtension;
+                    fileSearchPattern = $"*{defaultExtension}";
                 }
                 else
                 {
@@ -52,13 +52,13 @@ namespace Mars.Clouds.Cmdlets
                             string rootedFileSearchPath = Path.Combine(this.SessionState.Path.CurrentLocation.Path, fileSearchPath);
                             if (File.Exists(rootedFileSearchPath) == false)
                             {
-                                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load files. Path '" + fileSearchPath + "' is not an existing file, existing directory, or wildcarded search path which could not be found at PowerShell's current location of '" + rootedFileSearchPath + "'.");
+                                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), $"Can't fully load files. Path '{fileSearchPath}' is not an existing file, existing directory, or wildcarded search path which could not be found at PowerShell's current location of '{rootedFileSearchPath}'.");
                             }
                             fileSearchPath = rootedFileSearchPath;
                         }
                         else
                         {
-                            throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't fully load files. Path '" + fileSearchPath + "' is not an existing file, existing directory, or wildcarded search path. If the file exists this is usually an indication of a mismatch between the file path and PowerShell's current location.");
+                            throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), $"Can't fully load files. Path '{fileSearchPath}' is not an existing file, existing directory, or wildcarded search path. If the file exists this is usually an indication of a mismatch between the file path and PowerShell's current location.");
                         }
                     }
 
@@ -76,7 +76,7 @@ namespace Mars.Clouds.Cmdlets
                     string[] filePathsInDirectory = Directory.GetFiles(directoryPath, fileSearchPattern, searchDepth);
                     if (filePathsInDirectory.Length == 0)
                     {
-                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "Can't load files. No files matched '" + Path.Combine(directoryPath, fileSearchPattern) + "'.");
+                        throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), $"Can't load files. No files matched '{Path.Combine(directoryPath, fileSearchPattern)}'.");
                     }
                     filePaths.AddRange(filePathsInDirectory);
                 }
@@ -84,7 +84,7 @@ namespace Mars.Clouds.Cmdlets
 
             if (filePaths.Count == 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), "No files found as no files matched search paths '" + String.Join("', '", fileSearchPaths) + "'.");
+                throw new ArgumentOutOfRangeException(nameof(fileSearchPaths), $"No files found as no files matched search paths '{String.Join("', '", fileSearchPaths)}'.");
             }
             return filePaths;
         }

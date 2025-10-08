@@ -211,18 +211,18 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord sortProgress = new(cmdletName, sortsCompleted + " of " + totalSorts + " sort sizes on " + lasGrid.NonNullCells + (lasGrid.NonNullCells > 1 ? " point clouds..." : " point cloud..."));
+            TimedProgressRecord sortProgress = new(cmdletName, $"{sortsCompleted} of {totalSorts} sort sizes on {lasGrid.NonNullCells} point {(lasGrid.NonNullCells > 1 ? "clouds" : "cloud")}...");
             while (sortTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                sortProgress.StatusDescription = sortsCompleted + " of " + totalSorts + " sort sizes on " + lasGrid.NonNullCells + (lasGrid.NonNullCells > 1 ? " point clouds..." : " point cloud...");
+                sortProgress.StatusDescription = $"{sortsCompleted} of {totalSorts} sort sizes on {lasGrid.NonNullCells} point {(lasGrid.NonNullCells > 1 ? "clouds" : "cloud")}...";
                 sortProgress.Update(sortsCompleted, totalSorts);
                 this.WriteProgress(sortProgress);
             }
 
             this.WriteObject(totalSortTimings);
             sortProgress.Stopwatch.Stop();
-            this.WriteVerbose("Timed " + sortsCompleted + " sort sizes over " + lasGrid.NonNullCells + (lasGrid.NonNullCells > 1 ? " point clouds in " : " point cloud in ") + sortProgress.Stopwatch.ToElapsedString() + ": " + totalSortTimings.AcceptedPoints.ToString("n0") + " points in " + totalSortTimings.GridMetricsCells.ToString("n0") + " cells (" + ((float)totalSortTimings.AcceptedPoints / (float)totalSortTimings.GridMetricsCells).ToString("0") + " points/cell).");
+            this.WriteVerbose($"Timed {sortsCompleted} sort sizes over {lasGrid.NonNullCells} point {(lasGrid.NonNullCells > 1 ? "clouds" : "cloud")} in {sortProgress.Stopwatch.ToElapsedString()}: {totalSortTimings.AcceptedPoints:n0} points in {totalSortTimings.GridMetricsCells:n0} cells ({(float)totalSortTimings.AcceptedPoints / (float)totalSortTimings.GridMetricsCells:0} points/cell).");
             base.ProcessRecord();
         }
 

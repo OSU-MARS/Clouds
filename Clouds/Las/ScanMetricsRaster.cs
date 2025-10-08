@@ -166,7 +166,7 @@ namespace Mars.Clouds.Las
                         this.Overlap.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled band '" + bandName + "' in local maxima raster '" + this.FilePath + "'.");
+                        throw new NotSupportedException($"Unhandled band '{bandName}' in local maxima raster '{this.FilePath}'.");
                 }
             }
 

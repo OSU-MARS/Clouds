@@ -23,7 +23,7 @@ namespace Mars.Clouds.Vrt
                 VrtDatasetSubclass.VrtPansharpenedDataset => "VRTPansharpenedDataset",
                 VrtDatasetSubclass.VrtProcessedDataset => "VRTProcessedDataset",
                 VrtDatasetSubclass.VrtWarpedDataset => "VRTWarpedDataset",
-                _ => throw new NotSupportedException("Unhandled VRT dataset subclass " + subclass + ".")
+                _ => throw new NotSupportedException($"Unhandled VRT dataset subclass {subclass}.")
             };
             writer.WriteAttributeString(localName, subclassAsString);
         }

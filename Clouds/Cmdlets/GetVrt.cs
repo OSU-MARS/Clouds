@@ -85,23 +85,23 @@ namespace Mars.Clouds.Cmdlets
                 string? vrtDirectoryPath = vrtPathIsDirectory ? vrtPath : Path.GetDirectoryName(vrtPath);
                 if (vrtDirectoryPath == null)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrtPath), "Virtual raster path '" + vrtPath + "' does not contain a directory.");
+                    throw new ArgumentOutOfRangeException(nameof(vrtPath), $"Virtual raster path '{vrtPath}' does not contain a directory.");
                 }
                 if (Directory.Exists(vrtDirectoryPath) == false)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(vrtPath), "Directory indicated by virtual raster path '" + vrtPath + "' does not exist.");
+                    throw new ArgumentOutOfRangeException(nameof(vrtPath), $"Directory indicated by virtual raster path '{vrtPath}' does not exist.");
                 }
 
-                string? vrtSearchPattern = vrtPathIsDirectory ? "*" + Constant.File.GeoTiffExtension : Path.GetFileName(vrtPath);
+                string? vrtSearchPattern = vrtPathIsDirectory ? $"*{Constant.File.GeoTiffExtension}" : Path.GetFileName(vrtPath);
                 if (vrtSearchPattern == null)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), "Tile path '" + vrtPath + "' is not a directory but also does not appear to contain a search pattern (or specify an individual file).");
+                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), $"Tile path '{vrtPath}' is not a directory but also does not appear to contain a search pattern (or specify an individual file).");
                 }
 
                 List<string> tilePaths = [..Directory.EnumerateFiles(vrtDirectoryPath, vrtSearchPattern, this.EnumerationOptions)];
                 if (tilePaths.Count < 1)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), "-" + nameof(this.TilePaths) + " does not specify any virtual raster tiles.");
+                    throw new ParameterOutOfRangeException(nameof(this.TilePaths), $"-{nameof(this.TilePaths)} does not specify any virtual raster tiles.");
                 }
 
                 tileCountAcrossAllVrts += tilePaths.Count;
@@ -190,11 +190,11 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
-            TimedProgressRecord progress = new("Get-Vrt", "0 tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)..."));
+            TimedProgressRecord progress = new("Get-Vrt", $"0 tiles read from {vrtsRead} of {vrts.Length} virtual {(vrts.Length == 1 ? "raster" : "rasters")} ({readVrts.Count} + {(readVrts.Count == 1 ? " thread" : " threads")}, {readVrts.Count} reading)...");
             this.WriteProgress(progress);
             while (readVrts.WaitAll(this.ProgressInterval) == false)
             {
-                progress.StatusDescription = tileMetadataReadsCompleted + " tiles read from " + (vrts.Length == 1 ? "virtual raster..." : vrtsRead + " of " + vrts.Length + " virtual rasters (" + readVrts.Count + (readVrts.Count == 1 ? " thread, " : " threads, ") + readVrts.Count + " reading)...");
+                progress.StatusDescription = $"{tileMetadataReadsCompleted} tiles read from {vrtsRead} of {vrts.Length} virtual {(vrts.Length == 1 ? "raster" : "rasters")} ({readVrts.Count} {(readVrts.Count == 1 ? " thread" : " threads")}, {readVrts.Count} reading)...";
                 progress.Update(tileMetadataReadsCompleted, tileCountAcrossAllVrts); // likely optimistic by band sampling time
                 this.WriteProgress(progress);
             }
@@ -215,11 +215,11 @@ namespace Mars.Clouds.Cmdlets
                     // for now, require that tile sets be exactly matched
                     if (SpatialReferenceExtensions.IsSameCrs(vrt.Crs, previousVrt.Crs) == false)
                     {
-                        throw new NotSupportedException("Virtual raster '" + this.TilePaths[vrtIndex - 1] + "' is in '" + previousVrt.Crs.GetName() + "' while '" + this.TilePaths[vrtIndex] + "' is in '" + vrt.Crs.GetName() + "'.");
+                        throw new NotSupportedException($"Virtual raster '{this.TilePaths[vrtIndex - 1]}' is in '{previousVrt.Crs.GetName()}' while '{this.TilePaths[vrtIndex]}' is in '{vrt.Crs.GetName()}'.");
                     }
                     if (vrt.IsSameExtentAndSpatialResolution(previousVrt) == false)
                     {
-                        throw new NotSupportedException("Virtual raster '" + this.TilePaths[vrtIndex - 1] + "' and '" + this.TilePaths[vrtIndex] + "' differ in spatial extent or resolution. Sizes are " + previousVrt.SizeInTilesX + " by " + previousVrt.SizeInTilesY + " and " + vrt.SizeInTilesX + " by " + vrt.SizeInTilesY + " tiles with tiles being " + previousVrt.TileCellSizeX + " by " + previousVrt.TileSizeInCellsY + " and " + vrt.TileSizeInCellsX + " by " + vrt.TileSizeInCellsY + " cells, respectively.");
+                        throw new NotSupportedException($"Virtual raster '{this.TilePaths[vrtIndex - 1]}' and '{this.TilePaths[vrtIndex]}' differ in spatial extent or resolution. Sizes are {previousVrt.SizeInTilesX} by {previousVrt.SizeInTilesY} and {vrt.SizeInTilesX} by {vrt.SizeInTilesY} tiles with tiles being {previousVrt.TileCellSizeX} by {previousVrt.TileSizeInCellsY} and {vrt.TileSizeInCellsX} by {vrt.TileSizeInCellsY} cells, respectively.");
                     }
                 }
 
@@ -273,7 +273,7 @@ namespace Mars.Clouds.Cmdlets
                         Raster? tile = vrt[tileIndexX, tileIndexY];
                         if (tile == null)
                         {
-                            throw new InvalidOperationException("Statistics are present for virtual raster '" + this.TilePaths[vrtIndex] + "' tile at (" + tileIndexX + ", " + tileIndexY + ") but no tile is present at the same location in the virtual raster.");
+                            throw new InvalidOperationException($"Statistics are present for virtual raster '{this.TilePaths[vrtIndex]}' tile at ({tileIndexX}, {tileIndexY}) but no tile is present at the same location in the virtual raster.");
                         }
 
                         IEnumerator<RasterBand> tileBands = tile.GetBands().GetEnumerator();
@@ -282,7 +282,7 @@ namespace Mars.Clouds.Cmdlets
                         {
                             if (tileBands.MoveNext() == false)
                             {
-                                throw new InvalidOperationException("Could not move to band number " + (bandIndex + 1) + " in tile '" + tile.FilePath + "'."); // report GDAL band number
+                                throw new InvalidOperationException($"Could not move to band number {(bandIndex + 1)} in tile '{tile.FilePath}'."); // report GDAL band number
                             }
 
                             string bandName = tileBands.Current.Name;
@@ -301,11 +301,11 @@ namespace Mars.Clouds.Cmdlets
             string? vrtDatasetDirectory = Path.GetDirectoryName(this.Vrt);
             if (vrtDatasetDirectory == null)
             {
-                throw new ParameterOutOfRangeException(nameof(this.Vrt), "-" + nameof(this.Vrt) + " does not contain a directory path.");
+                throw new ParameterOutOfRangeException(nameof(this.Vrt), $"-{nameof(this.Vrt)} does not contain a directory path.");
             }
             if ((this.MinSamplingFraction > 0.0F) && (Fma.IsSupported == false))
             {
-                throw new ParameterOutOfRangeException(nameof(this.MinSamplingFraction), "Estimation of band statistics requires at least AVX2 and, potentially, FMA instructions. -" + nameof(this.MinSamplingFraction) + " = 0.0F can be used to disable statistics and circumvent this restriction on older processors.");
+                throw new ParameterOutOfRangeException(nameof(this.MinSamplingFraction), $"Estimation of band statistics requires at least AVX2 and, potentially, FMA instructions. -{nameof(this.MinSamplingFraction)} = 0.0F can be used to disable statistics and circumvent this restriction on older processors.");
             }
 
             // read tile metadata, checking inputs for spatial and band data type consistency
@@ -374,10 +374,10 @@ namespace Mars.Clouds.Cmdlets
             }
             else
             {
-                this.WriteWarning("No virtual raster was created. If -" + nameof(this.Bands) + " was specified does it include at least one band that's present in an input tile?");
+                this.WriteWarning($"No virtual raster was created. If -{nameof(this.Bands)} was specified does it include at least one band that's present in an input tile?");
             }
 
-            this.WriteVerbose("Assembled " + vrtBandsAndStats.GetTileCount() + " tiles into " + vrtBandsAndStats.Vrts.Length + " virtual rasters in " + vrtBandsAndStats.VrtAssemblyTime.ToElapsedString() + ".");
+            this.WriteVerbose($"Assembled {vrtBandsAndStats.GetTileCount()} tiles into {vrtBandsAndStats.Vrts.Length} virtual rasters in {vrtBandsAndStats.VrtAssemblyTime.ToElapsedString()}.");
             base.ProcessRecord();
         }
 

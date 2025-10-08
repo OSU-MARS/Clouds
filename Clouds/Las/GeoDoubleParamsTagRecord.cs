@@ -16,7 +16,7 @@ namespace Mars.Clouds.Las
         {
             if (doubleBytes.Length % sizeof(double) != 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(doubleBytes), doubleBytes.Length + " bytes of VLR data is not an integer number of " + sizeof(double) + " byte double precision values.");
+                throw new ArgumentOutOfRangeException(nameof(doubleBytes), $"{doubleBytes.Length} bytes of VLR data is not an integer number of {sizeof(double)} byte double precision values.");
             }
 
             int doubles = doubleBytes.Length / sizeof(double);

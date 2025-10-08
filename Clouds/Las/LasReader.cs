@@ -247,7 +247,7 @@ namespace Mars.Clouds.Las
                 Span<byte> signatureBytes = stackalloc byte[4];
                 BinaryPrimitives.TryWriteUInt32LittleEndian(signatureBytes, signatureAsUInt32);
                 string signature = Encoding.UTF8.GetString(signatureBytes);
-                throw new IOException("File begins with '" + signature + "'. .las files are expected to begin with \"LASF\".");;
+                throw new IOException($"File begins with '{signature}'. .las files are expected to begin with \"LASF\".");;
             }
 
             UInt16 fileSourceID = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[4..]);
@@ -259,7 +259,7 @@ namespace Mars.Clouds.Las
             byte versionMinor = headerBytes[25];
             if ((versionMajor != 1) || (versionMinor > 4))
             {
-                throw new NotSupportedException("Unknown .las file version " + versionMajor + "." + versionMinor + ".");
+                throw new NotSupportedException($"Unknown .las file version {versionMajor}.{versionMinor}.");
             }
 
             LasHeader10 lasHeader = versionMinor switch
@@ -291,12 +291,12 @@ namespace Mars.Clouds.Las
                         GlobalEncoding = globalEncoding,
                         ProjectID = projectID
                     },
-                _ => throw new NotSupportedException("Unhandled .las file version " + versionMajor + "." + versionMinor + " in header creation.")
+                _ => throw new NotSupportedException($"Unhandled .las file version {versionMajor}.{versionMinor} in header creation.")
             };
 
             if (this.BaseStream.Length < lasHeader.HeaderSize)
             {
-                throw new IOException("File size of " + this.BaseStream.Length + " bytes is less than the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
+                throw new IOException($"File size of {this.BaseStream.Length} bytes is less than the LAS {versionMajor}.{versionMinor} header size of {lasHeader.HeaderSize} bytes.");
             }
 
             lasHeader.SystemIdentifier = Encoding.UTF8.GetString(headerBytes.Slice(26, 32)).Trim('\0');
@@ -308,7 +308,7 @@ namespace Mars.Clouds.Las
             UInt16 headerSizeInBytes = BinaryPrimitives.ReadUInt16LittleEndian(headerBytes[94..]);
             if (headerSizeInBytes != lasHeader.HeaderSize)
             {
-                throw new IOException("Header of " + this.BaseStream.Length + " bytes differs from the LAS " + versionMajor + "." + versionMinor + " header size of " + lasHeader.HeaderSize + " bytes.");
+                throw new IOException($"Header of {this.BaseStream.Length} bytes differs from the LAS {versionMajor}.{versionMinor} header size of {lasHeader.HeaderSize} bytes.");
             }
 
             lasHeader.OffsetToPointData = BinaryPrimitives.ReadUInt32LittleEndian(headerBytes[96..]);
@@ -353,7 +353,7 @@ namespace Mars.Clouds.Las
 
             if (this.BaseStream.Position != lasHeader.HeaderSize)
             {
-                throw new InvalidDataException(".las file header read failed. Ending position of read is " + this.BaseStream.Position + " which is inconsistent with the indicated header size of " + lasHeader.HeaderSize + " bytes.");
+                throw new InvalidDataException($".las file header read failed. Ending position of read is {this.BaseStream.Position} which is inconsistent with the indicated header size of {lasHeader.HeaderSize} bytes.");
             }
             return lasHeader;
         }
@@ -400,7 +400,7 @@ namespace Mars.Clouds.Las
                     double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
                     if (lasToDtmTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 dtmIndexX, out Int64 dtmIndexY) == false)
                     {
-                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DTM extents (" + dtmBand.GetExtentString() + ") and thus has off DTM indices " + dtmIndexX + ", " + dtmIndexY + ".");
+                        throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DTM extents ({dtmBand.GetExtentString()}) and thus has off DTM indices {dtmIndexX}, {dtmIndexY}.");
                     }
 
                     float z = zOffset + zScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
@@ -416,7 +416,7 @@ namespace Mars.Clouds.Las
                         // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
                         if (trim <= 0.0)
                         {
-                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside intensity slice extents (" + intensitySlice.GetExtentString() + ") and thus has off slice indices " + sliceIndexX + ", " + sliceIndexY + ".");
+                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside intensity slice extents ({intensitySlice.GetExtentString()}) and thus has off slice indices {sliceIndexX}, {sliceIndexY}.");
                         }
                         else
                         {
@@ -508,7 +508,7 @@ namespace Mars.Clouds.Las
                         // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
                         double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                         double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                        throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                     }
 
                     Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
@@ -624,7 +624,7 @@ namespace Mars.Clouds.Las
                         //if (bytesRead != alignedReadBuffer.Length)
                         //{
                         //    // TODO: handle reads past the end of the last point
-                        //    throw new NotSupportedException("Expected read at position " + readPosition + " to return " + alignedReadBuffer.Length + " bytes but " + bytesRead + " bytes were read.");
+                        //    throw new NotSupportedException($"Expected read at position {readPosition} to return {alignedReadBuffer.Length} bytes but {bytesRead} bytes were read.");
                         //}
                     }
                     else
@@ -680,7 +680,7 @@ namespace Mars.Clouds.Las
                             // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
                             double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                             double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside DSM tile extents (" + dsmTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                         }
 
                         Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
@@ -755,7 +755,7 @@ namespace Mars.Clouds.Las
         {
             if (this.BaseStream.IsAsync)
             {
-                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToGrid) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
+                throw new InvalidOperationException($"This implementation of {nameof(this.ReadPointsToGrid)} uses synchronous IO but this {nameof(LasReader)} was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
             }
 
             LasHeader10 lasHeader = openedFile.Header;
@@ -878,7 +878,7 @@ namespace Mars.Clouds.Las
         {
             if (this.BaseStream.IsAsync)
             {
-                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToGrid) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
+                throw new InvalidOperationException($"This implementation of {nameof(this.ReadPointsToGrid)} uses synchronous IO but this {nameof(LasReader)} was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
             }
 
             LasHeader10 lasHeader = openedFile.Header;
@@ -993,7 +993,7 @@ namespace Mars.Clouds.Las
         //{
         //    if (this.BaseStream.IsAsync == false)
         //    {
-        //        throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToImage) + " uses asynchronous IO but this " + nameof(LasReader) + " was created with a stream enabled only for synchronous IO. Specify asynchronous rather than synchronous when creating the reader.");
+        //        throw new InvalidOperationException($"This implementation of {nameof(this.ReadPointsToImage)} uses asynchronous IO but this {nameof(LasReader)} was created with a stream enabled only for synchronous IO. Specify asynchronous rather than synchronous when creating the reader.");
         //    }
 
         //    LasHeader10 lasHeader = lasTile.Header;
@@ -1007,7 +1007,7 @@ namespace Mars.Clouds.Las
         //        {
         //            // for now, fail if points have NIR data but image won't capture it
         //            // This can be relaxed if needed.
-        //            throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' contains near infrared data but image lacks a near infrared band to transfer the data to.");
+        //            throw new ArgumentOutOfRangeException(nameof(imageTile), $"Point cloud tile '{lasTile.FilePath}' contains near infrared data but image lacks a near infrared band to transfer the data to.");
         //        }
         //    }
         //    else
@@ -1016,7 +1016,7 @@ namespace Mars.Clouds.Las
         //        {
         //            // for now, fail if image has an NIR band but points lack data to populate it
         //            // This can be relaxed if needed.
-        //            throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + lasTile.FilePath + "' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
+        //            throw new ArgumentOutOfRangeException(nameof(imageTile), $"Point cloud tile '{lasTile.FilePath}' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
         //        }
         //    }
 
@@ -1100,7 +1100,7 @@ namespace Mars.Clouds.Las
         //                // point lies outside of the DSM tile and is therefore not of interest
         //                // If the DSM tile's extents are equal to or larger than the point cloud tile in all directions reaching this case is an error.
         //                // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
-        //                throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image extents (" + imageTile.GetExtentString() + ") and thus has off image indices " + xIndex + ", " + yIndex + ".");
+        //                throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside image extents ({imageTile.GetExtentString()}) and thus has off image indices {xIndex}, {yIndex}.");
         //            }
 
         //            int cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
@@ -1190,7 +1190,7 @@ namespace Mars.Clouds.Las
         {
             if (this.BaseStream.IsAsync)
             {
-                throw new InvalidOperationException("This implementation of " + nameof(this.ReadPointsToImage) + " uses synchronous IO but this " + nameof(LasReader) + " was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
+                throw new InvalidOperationException($"This implementation of {nameof(this.ReadPointsToImage)} uses synchronous IO but this {nameof(LasReader)} was created with a stream enabled for asynchronous IO. Specify synchronous rather than asynchronous when creating the reader.");
             }
 
             LasHeader10 lasHeader = openedTile.Header;
@@ -1202,7 +1202,7 @@ namespace Mars.Clouds.Las
                 {
                     // for now, fail if points have NIR data but image won't capture it
                     // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + openedTile.FilePath + "' contains near infrared data but image lacks a near infrared band to transfer the data to.");
+                    throw new ArgumentOutOfRangeException(nameof(imageTile), $"Point cloud tile '{openedTile.FilePath}' contains near infrared data but image lacks a near infrared band to transfer the data to.");
                 }
             }
             else
@@ -1211,7 +1211,7 @@ namespace Mars.Clouds.Las
                 {
                     // for now, fail if image has an NIR band but points lack data to populate it
                     // This can be relaxed if needed.
-                    throw new ArgumentOutOfRangeException(nameof(imageTile), "Point cloud tile '" + openedTile.FilePath + "' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
+                    throw new ArgumentOutOfRangeException(nameof(imageTile), $"Point cloud tile '{openedTile.FilePath}' lacks near infrared data but image lacks a near infrared band to transfer the data to.");
                 }
             }
 
@@ -1273,7 +1273,7 @@ namespace Mars.Clouds.Las
                     {
                         double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                         double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                        throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                        throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside image tile extents ({imageTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                     }
 
                     Int64 cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
@@ -1382,7 +1382,7 @@ namespace Mars.Clouds.Las
                         //if (bytesRead != alignedReadBuffer.Length)
                         //{
                         //    // TODO: handle reads past the end of the last point
-                        //    throw new NotSupportedException("Expected read at position " + readPosition + " to return " + alignedReadBuffer.Length + " bytes but " + bytesRead + " bytes were read.");
+                        //    throw new NotSupportedException($"Expected read at position {readPosition} to return {alignedReadBuffer.Length} bytes but {bytesRead} bytes were read.");
                         //}
                     }
                     else
@@ -1443,7 +1443,7 @@ namespace Mars.Clouds.Las
                         {
                             double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                             double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                            throw new NotSupportedException("Point at x = " + x + ", y = " + y + " lies outside image tile extents (" + imageTile.GetExtentString() + ") and thus has off tile indices " + xIndex + ", " + yIndex + ".");
+                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside image tile extents ({imageTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                         }
 
                         Int64 cellIndex = imageTile.ToCellIndex(xIndex, yIndex);
@@ -1578,7 +1578,7 @@ namespace Mars.Clouds.Las
             bool vlrCountMismatch = this.DiscardOverrunningVlrs ? openedFile.VariableLengthRecords.Count > openedFile.Header.NumberOfVariableLengthRecords : openedFile.VariableLengthRecords.Count != openedFile.Header.NumberOfVariableLengthRecords;
             if (vlrCountMismatch)
             {
-                throw new InvalidDataException(".las file header indicates " + openedFile.Header.NumberOfVariableLengthRecords + " variable length records should be present but " + openedFile.VariableLengthRecords.Count + " records were read.");
+                throw new InvalidDataException($".las file header indicates {openedFile.Header.NumberOfVariableLengthRecords} variable length records should be present but {openedFile.VariableLengthRecords.Count} records were read.");
             }
 
             UInt32 numberOfExtendedVariableLengthRecords = 0;
@@ -1588,7 +1588,7 @@ namespace Mars.Clouds.Las
             }
             if (numberOfExtendedVariableLengthRecords != openedFile.ExtendedVariableLengthRecords.Count)
             {
-                throw new InvalidDataException(".las file header indicates " + numberOfExtendedVariableLengthRecords + " extended variable length records should be present but " + openedFile.ExtendedVariableLengthRecords.Count + " extended records were read.");
+                throw new InvalidDataException($".las file header indicates {numberOfExtendedVariableLengthRecords} extended variable length records should be present but {openedFile.ExtendedVariableLengthRecords.Count} extended records were read.");
             }
         }
 
@@ -1596,7 +1596,7 @@ namespace Mars.Clouds.Las
         {
             if (this.BaseStream.Position != openedFile.Header.HeaderSize)
             {
-                throw new InvalidOperationException("Stream is positioned at " + this.BaseStream.Position + " rather than at the end of the .las file's header (" + openedFile.Header.HeaderSize + " bytes).");
+                throw new InvalidOperationException($"Stream is positioned at {this.BaseStream.Position} rather than at the end of the .las file's header ({openedFile.Header.HeaderSize} bytes).");
             }
 
             Span<byte> vlrBytes = stackalloc byte[VariableLengthRecord.HeaderSizeInBytes];
@@ -1612,7 +1612,7 @@ namespace Mars.Clouds.Las
                     }
                     else
                     {
-                        throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + openedFile.Header.OffsetToPointData + " bytes but variable length record " + recordIndex + "'s header extends to " + (this.BaseStream.Position + VariableLengthRecord.HeaderSizeInBytes) + " bytes.");
+                        throw new InvalidDataException($".las file's variable length records extend into the point data segment. Expected variable length records to end at {openedFile.Header.OffsetToPointData} bytes but variable length record {recordIndex}'s header extends to {(this.BaseStream.Position + VariableLengthRecord.HeaderSizeInBytes)} bytes.");
                     }
                 }
 
@@ -1635,7 +1635,7 @@ namespace Mars.Clouds.Las
                     }
                     else
                     {
-                        throw new InvalidDataException(".las file's variable length records extend into the point data segment. Expected variable length records to end at " + openedFile.Header.OffsetToPointData + " bytes but variable length record " + recordIndex + " extends to " + endOfRecordPositionExclusive + " bytes.");
+                        throw new InvalidDataException($".las file's variable length records extend into the point data segment. Expected variable length records to end at {openedFile.Header.OffsetToPointData} bytes but variable length record {recordIndex} extends to {endOfRecordPositionExclusive} bytes.");
                     }
                 }
 
@@ -1761,7 +1761,7 @@ namespace Mars.Clouds.Las
             byte pointFormat = lasHeader.PointDataRecordFormat;
             if (pointFormat > 10)
             {
-                throw new NotSupportedException("Unhandled point data record format " + pointFormat + ".");
+                throw new NotSupportedException($"Unhandled point data record format {pointFormat}.");
             }
         }
     }

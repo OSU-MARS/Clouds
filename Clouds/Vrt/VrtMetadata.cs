@@ -61,7 +61,7 @@ namespace Mars.Clouds.Vrt
                 VrtMetadata.StatisticsMinimum => Double.Parse(value),
                 VrtMetadata.StatisticsStdDev => Double.Parse(value),
                 VrtMetadata.StatisticsValidPercent => Double.Parse(value),
-                _ => throw new NotSupportedException("Unhandled .vrt raster band metadata key '" + key + "'.")
+                _ => throw new NotSupportedException($"Unhandled .vrt raster band metadata key '{key}'.")
             };
         }
 
@@ -81,7 +81,7 @@ namespace Mars.Clouds.Vrt
                 {
                     return false;
                 }
-                throw new NotSupportedException("'" + valueAsString + "' is not a well known boolean value.");
+                throw new NotSupportedException($"'{valueAsString}' is not a well known boolean value.");
             }
 
             return value;
@@ -94,21 +94,21 @@ namespace Mars.Clouds.Vrt
                 case "Metadata":
                     if (reader.AttributeCount != 0)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     reader.Read();
                     break;
                 case "MDI":
                     if (reader.AttributeCount != 1)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     string key = reader.ReadAttributeAsString("key");
                     string value = reader.ReadElementContentAsString();
                     this.metadataItems.Add(key, VrtMetadata.ParseMetadataValue(key, value));
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
 

@@ -101,7 +101,7 @@ namespace Mars.Clouds.GdalExtensions
             T? center = grid[indexX, indexY];
             if (center == null)
             {
-                throw new NotSupportedException("Cell at (" + indexX + ", " + indexY + ") does not contain an object. Neighborhood would lack a center.");
+                throw new NotSupportedException($"Cell at ({indexX}, {indexY}) does not contain an object. Neighborhood would lack a center.");
             }
 
             this.center = center;
@@ -162,7 +162,7 @@ namespace Mars.Clouds.GdalExtensions
             T? center = grid[indexX, indexY];
             if (center == null)
             {
-                throw new NotSupportedException("Cell at (" + indexX + ", " + indexY + ") does not contain an object. Neighborhood would lack a center.");
+                throw new NotSupportedException($"Cell at ({indexX}, {indexY}) does not contain an object. Neighborhood would lack a center.");
             }
 
             this.center = center;

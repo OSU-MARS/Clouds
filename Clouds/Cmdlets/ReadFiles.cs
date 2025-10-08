@@ -99,7 +99,7 @@ namespace Mars.Clouds.Cmdlets
                     gibibytesRead = totalBytesRead / (1024.0F * 1024.0F * 1024.0F);
                     progress.PercentComplete = Int32.Min((int)(100.0 * (1.0 - secondsRemaining / totalSeconds)), 100);
                     progress.SecondsRemaining = secondsRemaining > 0.0 ? (int)secondsRemaining : 0;
-                    progress.StatusDescription = gibibytesRead.ToString("0.0") + " GiB read from " + filePathsToRead.Count + " files (" + readFiles.Count + " threads)...";
+                    progress.StatusDescription = $"{gibibytesRead:0.0} GiB read from {filePathsToRead.Count} files ({readFiles.Count} threads)...";
                     this.WriteProgress(progress);
                 }
             }
@@ -114,7 +114,7 @@ namespace Mars.Clouds.Cmdlets
             float gibibytesPerSecond = gibibytesRead / (float)progress.Stopwatch.Elapsed.TotalSeconds;
             float gigabytesRead = 1E-9F * totalBytesRead;
             float gigabytesPerSecond = gigabytesRead / (float)progress.Stopwatch.Elapsed.TotalSeconds;
-            this.WriteVerbose(gibibytesRead.ToString("0.0") + " GiB read in " + progress.Stopwatch.ToElapsedString() + " by " + readFiles.Count + " threads (" + gibibytesPerSecond.ToString("0.00") + " GiB/s, " + gigabytesPerSecond.ToString("0.00") + " GB/s).");
+            this.WriteVerbose($"{gibibytesRead:0.0} GiB read in {progress.Stopwatch.ToElapsedString()} by {readFiles.Count} threads ({gibibytesPerSecond:0.00} GiB/s, {gigabytesPerSecond:0.00} GB/s).");
             base.ProcessRecord();
         }
     }

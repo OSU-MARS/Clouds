@@ -24,7 +24,7 @@ namespace Mars.Clouds.Las
             SpatialReference lasTileCrs = lasTile.GetSpatialReference();
             if (SpatialReferenceExtensions.IsSameCrs(lasTileCrs, dtmTile.Crs) == false)
             {
-                throw new NotSupportedException("The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '" + lasTileCrs.GetName() + "' while the DTM CRS is " + dtmTile.Crs.GetName() + ".");
+                throw new NotSupportedException($"The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '{lasTileCrs.GetName()}' while the DTM CRS is {dtmTile.Crs.GetName()}.");
             }
 
             LasHeader10 lasHeader = lasTile.Header;

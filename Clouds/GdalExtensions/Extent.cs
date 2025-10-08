@@ -49,7 +49,7 @@
 
         public string GetExtentString()
         {
-            return this.XMin + ", " + this.XMax + ", " + this.YMin + ", " + this.YMax;
+            return $"{this.XMin}, {this.XMax}, {this.YMin}, {this.YMax}";
         }
 
         public bool Intersects(Extent other)

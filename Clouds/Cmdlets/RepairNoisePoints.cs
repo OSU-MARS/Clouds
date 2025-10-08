@@ -99,17 +99,17 @@ namespace Mars.Clouds.Cmdlets
                 this.CheckLasTiles(lasGrid, this.MaybeReclassifyPoints, this.tileChecks);
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new(cmdletName, this.tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + this.tileChecks.PointsReclassified + (this.tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...");
+            TimedProgressRecord progress = new(cmdletName, $"{this.tileChecks.TilesRead} of {lasGrid.NonNullCells} tiles checked, {this.tileChecks.PointsReclassified + (this.tileChecks.PointsReclassified == 1 ? " point" : " points")} reclassified...");
             this.WriteProgress(progress);
             while (checkTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = this.tileChecks.TilesRead + " of " + lasGrid.NonNullCells + " tiles checked, " + this.tileChecks.PointsReclassified + (this.tileChecks.PointsReclassified == 1 ? " point" : " points") + " reclassified...";
+                progress.StatusDescription = $"{this.tileChecks.TilesRead} of {lasGrid.NonNullCells} tiles checked, {this.tileChecks.PointsReclassified + (this.tileChecks.PointsReclassified == 1 ? " point" : " points")} reclassified...";
                 progress.Update(this.tileChecks.TilesRead, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Checked " + lasGrid.NonNullCells + " tiles in " + progress.Stopwatch.ToElapsedString() + ".");
+            this.WriteVerbose($"Checked {lasGrid.NonNullCells} tiles in {progress.Stopwatch.ToElapsedString()}.");
             base.ProcessRecord();
         }
 

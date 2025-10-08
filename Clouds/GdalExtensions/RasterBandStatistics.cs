@@ -145,17 +145,17 @@ namespace Mars.Clouds.GdalExtensions
             {
                 if (histogramBinWidth <= 0.0F)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(histogramBinWidth), "Histogram bin width " + histogramBinWidth + " is zero or negative.");
+                    throw new ArgumentOutOfRangeException(nameof(histogramBinWidth), $"Histogram bin width {histogramBinWidth} is zero or negative.");
                 }
                 if (histogramMinimumBinEdge >= histogramMaximumBinEdge)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(histogramMaximumBinEdge), "Minimum histogram bin edge " + histogramMinimumBinEdge + " is less than or equal to the maximum " + histogramMaximumBinEdge + ".");
+                    throw new ArgumentOutOfRangeException(nameof(histogramMaximumBinEdge), $"Minimum histogram bin edge {histogramMinimumBinEdge} is less than or equal to the maximum {histogramMaximumBinEdge}.");
                 }
 
                 int histogramBins = (int)((histogramMaximumBinEdge - histogramMinimumBinEdge) / histogramBinWidth + 0.5F);
                 if (histogramBins > 1000 * 1000) // sanity upper bound, QGIS readily uses 250k buckets
                 {
-                    throw new NotSupportedException(histogramBins + " bins is an unexpectedly large histogram.");
+                    throw new NotSupportedException($"{histogramBins} bins is an unexpectedly large histogram.");
                 }
                 this.Histogram = new int[histogramBins]; // leave at default of zero
             }
@@ -1222,7 +1222,7 @@ namespace Mars.Clouds.GdalExtensions
                 // This can easily be relaxed to support merging of aligned histograms. Resampling of unalinged histograms is more difficult.
                 if ((this.HistogramBinWidth != other.HistogramBinWidth) || (this.HistogramMinimum != other.HistogramMinimum) || (this.HistogramMaximum != other.HistogramMaximum) || (this.Histogram.Length != other.Histogram.Length))
                 {
-                    throw new NotSupportedException("Histograms are mismatched. Bin width of " + this.HistogramBinWidth + " versus " + other.HistogramBinWidth + ", minumum " + this.HistogramMinimum + " versus " + other.HistogramMinimum + ", maximum " + this.HistogramMaximum + " versus " + other.HistogramMaximum + ", and " + this.Histogram.Length + " versus " + other.Histogram.Length + " bins.");
+                    throw new NotSupportedException($"Histograms are mismatched. Bin width of {this.HistogramBinWidth} versus {other.HistogramBinWidth}, minumum {this.HistogramMinimum} versus {other.HistogramMinimum}, maximum {this.HistogramMaximum} versus {other.HistogramMaximum}, and {this.Histogram.Length} versus {other.Histogram.Length} bins.");
                 }
 
                 AvxExtensions.Accumulate(other.Histogram, this.Histogram);

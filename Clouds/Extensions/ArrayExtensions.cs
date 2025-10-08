@@ -20,7 +20,7 @@ namespace Mars.Clouds.Extensions
         {
             if (newCapacity <= array.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(newCapacity), "Requested length of " + newCapacity + " is the same or less than the array's current length of " + array.Length + ".");
+                throw new ArgumentOutOfRangeException(nameof(newCapacity), $"Requested length of {newCapacity} is the same or less than the array's current length of {array.Length}.");
             }
 
             T[] extendedArray = new T[newCapacity];
@@ -33,7 +33,7 @@ namespace Mars.Clouds.Extensions
             int currentRows = array.GetLength(0);
             if (newRowCount <= currentRows)
             {
-                throw new ArgumentOutOfRangeException(nameof(newRowCount), "Requested length of " + newRowCount + " rows is the same or less than the array's current length of " + currentRows + " rows.");
+                throw new ArgumentOutOfRangeException(nameof(newRowCount), $"Requested length of {newRowCount} rows is the same or less than the array's current length of {currentRows} rows.");
             }
 
             T[,] extendedArray = new T[newRowCount, array.GetLength(1)];

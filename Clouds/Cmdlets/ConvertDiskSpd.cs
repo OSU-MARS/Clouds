@@ -13,7 +13,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrEmpty]
         public List<string> Result { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Path to output .xlsx containing one row from each thread of the .xml results files indicated by -" + nameof(this.Result) + ".")]
+        [Parameter(Mandatory = true, HelpMessage = $"Path to output .xlsx containing one row from each thread of the .xml results files indicated by -{nameof(this.Result)}.")]
         [ValidateNotNullOrEmpty]
         public string Longform { get; set; }
 

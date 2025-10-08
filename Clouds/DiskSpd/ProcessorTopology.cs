@@ -25,7 +25,7 @@ namespace Mars.Clouds.DiskSpd
                 case "ProcessorTopology":
                     if (reader.AttributeCount != 0)
                     {
-                        throw new XmlException("Encountered unexpected attributes on element " + reader.Name + ".");
+                        throw new XmlException($"Encountered unexpected attributes on element '{reader.Name}'.");
                     }
                     reader.Read();
                     break;
@@ -44,7 +44,7 @@ namespace Mars.Clouds.DiskSpd
                     this.HyperThreads.Add(thread);
                     break;
                 default:
-                    throw new XmlException("Element '" + reader.Name + "' is unknown, has unexpected attributes, or is missing expected attributes.");
+                    throw new XmlException($"Element '{reader.Name}' is unknown, has unexpected attributes, or is missing expected attributes.");
             }
         }
     }

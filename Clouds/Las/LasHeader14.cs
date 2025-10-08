@@ -44,7 +44,7 @@ namespace Mars.Clouds.Las
                 return this.NumberOfPointRecords;
             }
 
-            throw new InvalidDataException("Number of point records (" + this.NumberOfPointRecords.ToString(",") + ") is inconsistent with legacy number of point records (" + this.LegacyNumberOfPointRecords.ToString(",") + ").");
+            throw new InvalidDataException($"Number of point records ({this.NumberOfPointRecords:,}) is inconsistent with legacy number of point records ({this.LegacyNumberOfPointRecords:,}).");
         }
 
         public override UInt64[] GetNumberOfPointsByReturn()
@@ -62,7 +62,7 @@ namespace Mars.Clouds.Las
         {
             if (numberOfPointsByReturn.Length > this.NumberOfPointsByReturn.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), "A maximum of " + this.NumberOfPointsByReturn.Length + " returns is supported but " + numberOfPointsByReturn.Length + " returns were passed.");
+                throw new ArgumentOutOfRangeException(nameof(numberOfPointsByReturn), $"A maximum of {this.NumberOfPointsByReturn.Length} returns is supported but {numberOfPointsByReturn.Length} returns were passed.");
             }
 
             UInt64 numberOfPointRecords = 0;
@@ -110,7 +110,7 @@ namespace Mars.Clouds.Las
                 if (this.StartOfFirstExtendedVariableLengthRecord != expectedEndOfPointData)
                 {
                     // should 
-                    throw new InvalidDataException("Extended variable length records begin at an offset of " + this.StartOfFirstExtendedVariableLengthRecord.ToString("n0") + " bytes but point data ends at " + expectedEndOfPointData.ToString("n0") + " bytes.");
+                    throw new InvalidDataException($"Extended variable length records begin at an offset of {this.StartOfFirstExtendedVariableLengthRecord:n0} bytes but point data ends at {expectedEndOfPointData:n0} bytes.");
                 }
             }
 

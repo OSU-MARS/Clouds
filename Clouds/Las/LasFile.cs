@@ -87,7 +87,7 @@ namespace Mars.Clouds.Las
         {
             if (cellSizeInCrsUnits <= 0.0F)
             {
-                throw new ArgumentOutOfRangeException("Cell size of " + cellSizeInCrsUnits + " " + this.GetSpatialReference().GetLinearUnitsName() + " is not a positive number.");
+                throw new ArgumentOutOfRangeException($"Cell size of {cellSizeInCrsUnits} {this.GetSpatialReference().GetLinearUnitsName()} is not a positive number.");
             }
 
             double alignmentScale = 1.0;
@@ -121,7 +121,7 @@ namespace Mars.Clouds.Las
 
         //public virtual string GetExtentString()
         //{
-        //    return this.Header.MinX + ", " + this.Header.MaxX + ", " + this.Header.MinY + ", " + this.Header.MaxY;
+        //    return $"{this.Header.MinX}, {this.Header.MaxX}, {this.Header.MinY}, {this.Header.MaxY;
         //}
 
         public int GetProjectedCoordinateSystemEpsg()

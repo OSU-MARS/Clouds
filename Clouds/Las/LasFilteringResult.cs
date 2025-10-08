@@ -13,7 +13,7 @@ namespace Mars.Clouds.Las
         {
             if (initialNumberOfPointsByReturn.Length != numberOfPointsRemovedByReturn.Length)
             {
-                throw new ArgumentOutOfRangeException(nameof(numberOfPointsRemovedByReturn), "Initial point counts have " + initialNumberOfPointsByReturn.Length + " returns but removal counts have " + numberOfPointsRemovedByReturn.Length + " returns.");
+                throw new ArgumentOutOfRangeException(nameof(numberOfPointsRemovedByReturn), $"Initial point counts have {initialNumberOfPointsByReturn.Length} returns but removal counts have {numberOfPointsRemovedByReturn.Length} returns.");
             }
 
             this.NumberOfPointsByReturn = new UInt64[initialNumberOfPointsByReturn.Length];

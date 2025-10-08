@@ -64,7 +64,7 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_UInt32 => RasterBand.NoDataDefaultUInt32,
                 DataType.GDT_UInt64 => RasterBand.NoDataDefaultUInt64,
                 // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently reachable
-                _ => throw new NotSupportedException("Unhandled data type " + gdalType + ".")
+                _ => throw new NotSupportedException($"Unhandled data type {gdalType}.")
             };
         }
 
@@ -86,7 +86,7 @@ namespace Mars.Clouds.GdalExtensions
                 TypeCode.UInt32 => DataType.GDT_UInt32,
                 TypeCode.UInt64 => DataType.GDT_UInt64,
                 // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently supported
-                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
+                _ => throw new NotSupportedException($"Unhandled data type {Type.GetTypeCode(typeof(TBand))}.")
             };
         }
 
@@ -178,7 +178,7 @@ namespace Mars.Clouds.GdalExtensions
                 double noDataValue = candidateNoDataValues[valueIndex];
                 if ((noDataValue < minValue) || (noDataValue > maxValue))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), "Candidate no data value " + noDataValue + " is not in the interval [ " + minValue + ", " + maxValue + "].");
+                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), $"Candidate no data value {noDataValue} is not in the interval [ {minValue}, {maxValue}].");
                 }
 
                 if (noDataValue < minCandidateValue)
@@ -202,7 +202,7 @@ namespace Mars.Clouds.GdalExtensions
                 return maxCandidateValue;
             }
 
-            throw new NotSupportedException("Unable to determine signed integer no data value assignment convention. Candidate signed integer no data values range from " + minCandidateValue + " to " + maxCandidateValue + " within limits [" + minValue + ", " + maxValue + "].");
+            throw new NotSupportedException($"Unable to determine signed integer no data value assignment convention. Candidate signed integer no data values range from {minCandidateValue} to {maxCandidateValue} within limits [{minValue}, {maxValue}].");
         }
 
         public static double ResolveUnsignedIntegerNoDataValue(List<double> candidateNoDataValues, double maxValue)
@@ -216,7 +216,7 @@ namespace Mars.Clouds.GdalExtensions
                 double noDataValue = candidateNoDataValues[valueIndex];
                 if ((noDataValue < 0.0) || (noDataValue > maxValue))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), "Candidate no data value " + noDataValue + " is not in the interval [ 0.0, " + maxValue + "].");
+                    throw new ArgumentOutOfRangeException(nameof(candidateNoDataValues), $"Candidate no data value {noDataValue} is not in the interval [ 0.0, {maxValue}].");
                 }
 
                 if (noDataValue > maxCandidateValue)
@@ -249,7 +249,7 @@ namespace Mars.Clouds.GdalExtensions
             long totalCells = (long)rasterDataset.RasterXSize * (long)rasterDataset.RasterYSize;
             if (totalCells > Array.MaxLength)
             {
-                throw new NotSupportedException("Raster '" + rasterDataset.GetFirstFile() + "' has " + totalCells.ToString("n0") + " cells, which exceeds the maximum supported size of " + Array.MaxLength.ToString("n0") + " cells.");
+                throw new NotSupportedException($"Raster '{rasterDataset.GetFirstFile()}' has {totalCells:n0} cells, which exceeds the maximum supported size of {Array.MaxLength:n0} cells.");
             }
 
             DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
@@ -257,7 +257,7 @@ namespace Mars.Clouds.GdalExtensions
             {
                 // debatable if this error should be thrown when loadData is false
                 // For now, assume it's preferable not to defer detection.
-                string message = "A RasterBand<" + typeof(TBand).Name + "> cannot be loaded from '" + rasterDataset.GetFirstFile() + "' because band '" + gdalBand.GetDescription() + "' is of type " + gdalBand.DataType + ".";
+                string message = $"A RasterBand<{typeof(TBand).Name}> cannot be loaded from '{rasterDataset.GetFirstFile()}' because band '{gdalBand.GetDescription()}' is of type {gdalBand.DataType}.";
                 throw new NotSupportedException(message);
             }
 
@@ -311,7 +311,7 @@ namespace Mars.Clouds.GdalExtensions
                         // nothing to do
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+                        throw new NotSupportedException($"Unhandled initial band data option {initialValue}.");
                 }
 
             }
@@ -330,7 +330,7 @@ namespace Mars.Clouds.GdalExtensions
                         this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled initial band data option " + initialValue + ".");
+                        throw new NotSupportedException($"Unhandled initial band data option {initialValue}.");
                 }
             }
 
@@ -411,7 +411,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.HasNoDataValue == false)
             {
-                throw new InvalidOperationException("Raster band lacks a no data value. Call " + nameof(this.SetNoDataValue) + "() to enable no data filling.");
+                throw new InvalidOperationException($"Raster band lacks a no data value. Call {nameof(this.SetNoDataValue)}() to enable no data filling.");
             }
 
             this.Fill(this.NoDataValue);
@@ -432,7 +432,7 @@ namespace Mars.Clouds.GdalExtensions
                 TypeCode.UInt32 => TBand.CreateChecked(RasterBand.NoDataDefaultUInt32),
                 TypeCode.UInt64 => TBand.CreateChecked(RasterBand.NoDataDefaultUInt64),
                 // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently reachable
-                _ => throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".")
+                _ => throw new NotSupportedException($"Unhandled data type {Type.GetTypeCode(typeof(TBand))}.")
             };
         }
 
@@ -497,7 +497,7 @@ namespace Mars.Clouds.GdalExtensions
                     return new(uint64data, this.HasNoDataValue, UInt64.CreateChecked(this.NoDataValue));
                 // complex numbers (GDT_CInt16, 32, CFloat32, 64) and GDT_TypeCount not currently supported
                 default:
-                    throw new NotSupportedException("Unhandled data type " + Type.GetTypeCode(typeof(TBand)) + ".");
+                    throw new NotSupportedException($"Unhandled data type {Type.GetTypeCode(typeof(TBand))}.");
             }
         }
 
@@ -565,7 +565,7 @@ namespace Mars.Clouds.GdalExtensions
             using Dataset rasterDataset = Gdal.Open(rasterPath, Access.GA_ReadOnly); // see cache management remarks in RasterBand.Read()
             if (rasterDataset.RasterCount < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(rasterPath), "Raster '" + rasterPath + "' contains no bands.");
+                throw new ArgumentOutOfRangeException(nameof(rasterPath), $"Raster '{rasterPath}' contains no bands.");
             }
 
             if (bandName == null)
@@ -584,14 +584,14 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            throw new ArgumentOutOfRangeException(nameof(bandName), "Raster '" + rasterPath + "' does not contain a band named '" + bandName + "'.");
+            throw new ArgumentOutOfRangeException(nameof(bandName), $"Raster '{rasterPath}' does not contain a band named '{bandName}'.");
         }
 
         public override void ReadDataInSameCrsAndTransform(Dataset rasterDataset)
         {
             if ((this.SizeX != rasterDataset.RasterXSize) || (this.SizeY != rasterDataset.RasterYSize))
             {
-                throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Raster is " + rasterDataset.RasterXSize + " by " + rasterDataset.RasterYSize + " cells but band is " + this.SizeX + " by " + this.SizeY + " cells.");
+                throw new ArgumentOutOfRangeException(nameof(rasterDataset), $"Raster is {rasterDataset.RasterXSize} by {rasterDataset.RasterYSize} cells but band is {this.SizeX} by {this.SizeY} cells.");
             }
 
             for (int bandIndex = 0; bandIndex < rasterDataset.RasterCount; ++bandIndex)
@@ -608,7 +608,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
             }
 
-            throw new ArgumentOutOfRangeException(nameof(rasterDataset), "Raster does not contain a band named '" + this.Name + "'.");
+            throw new ArgumentOutOfRangeException(nameof(rasterDataset), $"Raster does not contain a band named '{this.Name}'.");
         }
 
         public void ReadDataAssumingSameCrsTransformSizeAndNoData(Band gdalBand)
@@ -667,7 +667,7 @@ namespace Mars.Clouds.GdalExtensions
                         DataTypeExtensions.ConvertFromKnownType(bufferUInt32, this.Data);
                         break;
                     default:
-                        throw new NotSupportedException("Cannot expand band source data type " + gdalBand.DataType + " to " + thisDataType + ".");
+                        throw new NotSupportedException($"Cannot expand band source data type {gdalBand.DataType} to {thisDataType}.");
                 }
             }
         }
@@ -725,7 +725,7 @@ namespace Mars.Clouds.GdalExtensions
             int yMax = yOrigin + sizeY; // exclusive
             if ((xOrigin < 0) || (xMax > this.SizeX) || (yOrigin < 0) || (yMax > this.SizeY))
             {
-                throw new ArgumentException("Slice origin (" + xOrigin + ", " + yOrigin + ") and dimensions (" + sizeX + " by " + sizeY + ") do not fit within raster band dimensions (" + this.SizeX + ", " + this.SizeY + ".");
+                throw new ArgumentException($"Slice origin ({xOrigin}, {yOrigin}) and dimensions ({sizeX} by {sizeY}) do not fit within raster band dimensions ({this.SizeX}, {this.SizeY}.");
             }
 
             int sliceDestinationIndex = 0;
@@ -872,7 +872,7 @@ namespace Mars.Clouds.GdalExtensions
                     }
                     break;
                 default:
-                    throw new NotSupportedException("Unhandled data type " + gdalType + ".");
+                    throw new NotSupportedException($"Unhandled data type {gdalType}.");
             }
 
             return false;
@@ -1016,7 +1016,7 @@ namespace Mars.Clouds.GdalExtensions
                         dataPin = GCHandle.Alloc(bufferUInt64, GCHandleType.Pinned);
                         break;
                     default:
-                        throw new NotSupportedException("Unhandled conversion of " + thisGdalDataType + " raster band to " + gdalBand.DataType + ".");
+                        throw new NotSupportedException($"Unhandled conversion of {thisGdalDataType} raster band to {gdalBand.DataType}.");
                 }
             }
 

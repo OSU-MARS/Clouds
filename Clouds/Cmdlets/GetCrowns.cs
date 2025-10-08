@@ -92,11 +92,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 if (treetopsPathIsDirectory == false)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.Treetops), "-" + this.Treetops + " must be a directory when -" + nameof(this.Dsm) + " indicates multiple tiles to process.");
+                    throw new ParameterOutOfRangeException(nameof(this.Treetops), $"-{this.Treetops} must be a directory when -{nameof(this.Dsm)} indicates multiple tiles to process.");
                 }
                 if (crownsPathIsDirectory == false)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.Crowns), "-" + this.Crowns + " must be a directory when -" + nameof(this.Dsm) + " indicates multiple tiles to process.");
+                    throw new ParameterOutOfRangeException(nameof(this.Crowns), $"-{this.Crowns} must be a directory when -{nameof(this.Dsm)} indicates multiple tiles to process.");
                 }
             }
 
@@ -199,7 +199,7 @@ namespace Mars.Clouds.Cmdlets
 
             long meanCrownsPerTile = crownCount / dsm.NonNullTileCount;
             progress.Stopwatch.Stop();
-            this.WriteVerbose("Delineated " + crownCount.ToString("n0") + " crowns within " + (dsm.NonNullTileCount > 1 ? dsm.NonNullTileCount + " tiles" : "one tile") + (this.Vrt ? " and generated .vrt" : null) + " in " + progress.Stopwatch.ToElapsedString() + " (" + meanCrownsPerTile.ToString("n0") + " crowns/tile).");
+            this.WriteVerbose($"Delineated {crownCount:n0} crowns within {(dsm.NonNullTileCount > 1 ? dsm.NonNullTileCount + " tiles" : "one tile")}{(this.Vrt ? " and generated .vrt" : null)} in {progress.Stopwatch.ToElapsedString()} ({meanCrownsPerTile:n0} crowns/tile).");
             base.ProcessRecord();
         }
 
@@ -269,7 +269,7 @@ namespace Mars.Clouds.Cmdlets
                 SpatialReference treetopCrs = treetopLayer.GetSpatialReference();
                 if (SpatialReferenceExtensions.IsSameCrs(treetopCrs, dsmTile.Crs) == false)
                 {
-                    throw new NotSupportedException("Tile '" + treetopTilePath + "' does not have the same coordinate system ('" + treetopCrs.GetName() + "') as the digital surface model ('" + dsmTile.Crs.GetName() + "').");
+                    throw new NotSupportedException($"Tile '{treetopTilePath}' does not have the same coordinate system ('{treetopCrs.GetName()}') as the digital surface model ('{dsmTile.Crs.GetName()}').");
                 }
 
                 if (this.TreetopPool.TryGet(out TreetopsGrid? treetopTile))

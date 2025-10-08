@@ -61,12 +61,12 @@ namespace Mars.Clouds.GdalExtensions
                 DataType.GDT_UInt16 => new Raster<UInt16>(rasterDataset, readData),
                 DataType.GDT_UInt32 => new Raster<UInt32>(rasterDataset, readData),
                 DataType.GDT_UInt64 => new Raster<UInt64>(rasterDataset, readData),
-                DataType.GDT_Unknown => throw new NotSupportedException("Raster data type is unknown (" + gdalBand1.DataType + ")."),
+                DataType.GDT_Unknown => throw new NotSupportedException($"Raster data type is unknown ({gdalBand1.DataType})."),
                 //DataType.GDT_CFloat32 or
                 //DataType.GDT_CFloat64 or
                 //DataType.GDT_CInt16 or
                 //DataType.GDT_CInt32 or
-                _ => throw new NotSupportedException("Unhandled raster data type " + gdalBand1.DataType + ".")
+                _ => throw new NotSupportedException($"Unhandled raster data type {gdalBand1.DataType}.")
             };
 
             raster.FilePath = filePath;
@@ -110,7 +110,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.TryGetBand(name, out RasterBand? band) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+                throw new ArgumentOutOfRangeException(nameof(name), $"No band named '{name}' found in raster.");
             }
 
             return band;
@@ -126,12 +126,12 @@ namespace Mars.Clouds.GdalExtensions
             string? directoryPath = Path.GetDirectoryName(primaryFilePath);
             if (directoryPath == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), "Primary raster file path'" + primaryFilePath + "' does not contain a directory.");
+                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), $"Primary raster file path'{primaryFilePath}' does not contain a directory.");
             }
             string? fileName = Path.GetFileName(primaryFilePath);
             if (fileName == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), "Primary raster file path '" + primaryFilePath + "' does not contain a file name.");
+                throw new ArgumentOutOfRangeException(nameof(primaryFilePath), $"Primary raster file path '{primaryFilePath}' does not contain a file name.");
             }
 
             string componentDirectoryPath = Path.Combine(directoryPath, componentDirectoryName);
@@ -143,7 +143,7 @@ namespace Mars.Clouds.GdalExtensions
                 }
                 else
                 {
-                    throw new ArgumentOutOfRangeException(nameof(componentDirectoryName), "Directory '" + directoryPath + "' does not have a '" + componentDirectoryName + "' subdirectory for component tiles.");
+                    throw new ArgumentOutOfRangeException(nameof(componentDirectoryName), $"Directory '{directoryPath}' does not have a '{componentDirectoryName}' subdirectory for component tiles.");
                 }
             }
 
@@ -242,11 +242,11 @@ namespace Mars.Clouds.GdalExtensions
                 using Band gdalBand = rasterDataset.GetRasterBand(gdalBandIndex);
                 if (this.SizeX != gdalBand.XSize)
                 {
-                    throw new NotSupportedException("Previous bands are " + this.SizeX + " by " + this.SizeY + " cells but band " + gdalBandIndex + " is " + gdalBand.XSize + " by " + gdalBand.YSize + " cells.");
+                    throw new NotSupportedException($"Previous bands are {this.SizeX} by {this.SizeY} cells but band {gdalBandIndex} is {gdalBand.XSize} by {gdalBand.YSize} cells.");
                 }
                 if (this.SizeY != gdalBand.YSize)
                 {
-                    throw new NotSupportedException("Previous bands are " + this.SizeX + " by " + this.SizeY + " cells but band " + gdalBandIndex + " is " + gdalBand.XSize + " by " + gdalBand.YSize + " cells.");
+                    throw new NotSupportedException($"Previous bands are {this.SizeX} by {this.SizeY} cells but band {gdalBandIndex} is {gdalBand.XSize} by {gdalBand.YSize} cells.");
                 }
                 this.Bands[bandIndex] = new(rasterDataset, gdalBand, readData);
             }
@@ -257,7 +257,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (bandNames.Length < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(bandNames), "Rasters must have at least one band but " + bandNames.Length + " band names were specified.");
+                throw new ArgumentOutOfRangeException(nameof(bandNames), $"Rasters must have at least one band but {bandNames.Length} band names were specified.");
             }
 
             this.Bands = new RasterBand<TBand>[bandNames.Length];
@@ -306,7 +306,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (this.TryGetBand(name, out RasterBand<TBand>? band) == false)
             {
-                throw new ArgumentOutOfRangeException(nameof(name), "No band named '" + name + "' found in raster.");
+                throw new ArgumentOutOfRangeException(nameof(name), $"No band named '{name}' found in raster.");
             }
 
             return band;
@@ -466,7 +466,7 @@ namespace Mars.Clouds.GdalExtensions
         //            }
         //            else if (band.IsNoData(noDataValue) == false)
         //            {
-        //                throw new NotSupportedException("Raster bands have different no data values. At least " + band.NoDataValue + " on band " + band.Name + "(band " + (bandIndex + 1) + ") and " + noDataValue + " on a lower numbered band.");
+        //                throw new NotSupportedException($"Raster bands have different no data values. At least {band.NoDataValue} on band {band.Name}(band {(bandIndex + 1)}) and {noDataValue} on a lower numbered band.");
         //            }
 
         //            ++bandsWithNoData;
@@ -475,7 +475,7 @@ namespace Mars.Clouds.GdalExtensions
 
         //    if ((bandsWithNoData != 0) && (bandsWithNoData != this.BandCount))
         //    {
-        //        throw new NotSupportedException("Raster has " + bandsWithNoData + " bands with no data values and " + (this.BandCount - bandsWithNoData) + " bands without no data values. Whether or not there is a raster level no data value is therefore not well defined.");
+        //        throw new NotSupportedException($"Raster has {bandsWithNoData} bands with no data values and {(this.BandCount - bandsWithNoData)} bands without no data values. Whether or not there is a raster level no data value is therefore not well defined.");
         //    }
         //    return bandsWithNoData > 0;
         //}

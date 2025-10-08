@@ -9,7 +9,7 @@ namespace Mars.Clouds.GdalExtensions
         {
             if (gdalErrorCode != CPLErr.CE_None)
             {
-                throw new GdalException(functionName + " returned " + gdalErrorCode + ".");
+                throw new GdalException($"{functionName} returned {gdalErrorCode}.");
             }
         }
     }

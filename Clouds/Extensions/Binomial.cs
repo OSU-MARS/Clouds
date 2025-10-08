@@ -158,11 +158,11 @@ namespace Mars.Clouds.Extensions
             RasterBand<float> band = neighborhood.Center;
             if ((band.SizeX != smoothed.SizeX) || (band.SizeY != smoothed.SizeY))
             {
-                throw new ArgumentOutOfRangeException(nameof(smoothed), "Input and output bands are different sizes. Input band is " + band.SizeX + " x " + band.SizeY + " cells. Output band is " + smoothed.SizeX + " x " + smoothed.SizeY + " cells.");
+                throw new ArgumentOutOfRangeException(nameof(smoothed), $"Input and output bands are different sizes. Input band is {band.SizeX} x {band.SizeY} cells. Output band is {smoothed.SizeX} x {smoothed.SizeY} cells.");
             }
             if ((band.SizeX < 3) || (band.SizeY < 2))
             {
-                throw new NotImplementedException("Special casing for small rasters is not currently implemented. Input raster is " + band.SizeX + " by " + band.SizeY + " cells.");
+                throw new NotImplementedException($"Special casing for small rasters is not currently implemented. Input raster is {band.SizeX} by {band.SizeY} cells.");
             }
 
             // main possibilities for no data handling: omit, interpolate neighbors, fill with lowest neighbor, fill from ground, fill from DTM 

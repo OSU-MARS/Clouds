@@ -10,7 +10,7 @@ namespace Mars.Clouds.GdalExtensions
             int fieldCreationResult = layer.CreateField(fieldDefinition, approx_ok: 0);
             if (fieldCreationResult != OgrError.NONE)
             {
-                throw new InvalidOperationException("Failed to create field '" + fieldDefinition.GetName() + "' (OGR error code " + fieldCreationResult + ").");
+                throw new InvalidOperationException($"Failed to create field '{fieldDefinition.GetName()}' (OGR error code {fieldCreationResult}).");
             }
         }
 

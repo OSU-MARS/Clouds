@@ -41,7 +41,7 @@ namespace Mars.Clouds.Las
             byte[] wktBytes = Encoding.UTF8.GetBytes(wkt);
             if (this.RecordLengthAfterHeader <= wktBytes.Length)
             {
-                throw new InvalidOperationException("Serialized wkt (well known text) for coordinate system is of length " + wktBytes.Length + " which exceeds the " + this.RecordLengthAfterHeader + " byte record length after header after a trailing null is appended as required by the LAS 1.4 R15 specification.");
+                throw new InvalidOperationException($"Serialized wkt (well known text) for coordinate system is of length {wktBytes.Length} which exceeds the {this.RecordLengthAfterHeader} byte record length after header after a trailing null is appended as required by the LAS 1.4 R15 specification.");
             }
 
             this.WriteHeader(stream);

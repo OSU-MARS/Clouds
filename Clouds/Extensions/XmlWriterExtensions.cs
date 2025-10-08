@@ -71,7 +71,7 @@ namespace Mars.Clouds.Extensions
             }
             else
             {
-                throw new NotSupportedException("Unhandled value '" + value + "' of type " + value.GetType().FullName + ".");
+                throw new NotSupportedException($"Unhandled value '{value}' of type {value.GetType().FullName}.");
             }
         }
     }

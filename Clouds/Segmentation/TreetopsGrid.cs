@@ -38,17 +38,17 @@ namespace Mars.Clouds.Segmentation
             double treetopGridCellSizeY = TreeCrownCostField.CapacityXY * dsmTile.Transform.CellHeight;
             if (treetopGridCellSizeX != this.Transform.CellWidth)
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing cell width from " + this.Transform.CellWidth + " to " + treetopGridCellSizeX + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing cell width from {this.Transform.CellWidth} to {treetopGridCellSizeX}.");
             }
             if (treetopGridCellSizeY != this.Transform.CellHeight)
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing cell height from " + this.Transform.CellHeight + " to " + treetopGridCellSizeY + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing cell height from {this.Transform.CellHeight} to {treetopGridCellSizeY}.");
             }
 
             (GridGeoTransform transform, int spanningSizeX, int spanningSizeY) = dsmTile.GetSpanningEquivalent(treetopGridCellSizeX, treetopGridCellSizeY);
             if ((this.SizeX != spanningSizeX) || (this.SizeY != spanningSizeY))
             {
-                throw new NotSupportedException(nameof(this.Reset) + "() does not currently support changing the grid size from " + this.SizeX + " x " + this.SizeY + " cells to " + dsmTile.SizeX + " x " + dsmTile.SizeY + ".");
+                throw new NotSupportedException($"{nameof(this.Reset)}() does not currently support changing the grid size from {this.SizeX} x {this.SizeY} cells to {dsmTile.SizeX} x {dsmTile.SizeY}.");
             }
 
             this.Transform.CopyOriginAndRotation(dsmTile.Transform);

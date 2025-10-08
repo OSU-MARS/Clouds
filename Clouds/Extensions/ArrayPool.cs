@@ -25,7 +25,7 @@ namespace Mars.Clouds.Extensions
         {
             if (array.Length != this.ArrayLength)
             {
-                throw new ArgumentOutOfRangeException(nameof(array), "Array's length of " + array.Length + " elements does not match pool's length of " + this.ArrayLength + " elements.");
+                throw new ArgumentOutOfRangeException(nameof(array), $"Array's length of {array.Length} elements does not match pool's length of {this.ArrayLength} elements.");
             }
 
             this.objects.Enqueue(array);

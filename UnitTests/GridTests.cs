@@ -214,10 +214,10 @@ namespace Mars.Clouds.UnitTests
                     for (int returnedXindex = 0; returnedXindex < vrtSizeX; ++returnedXindex)
                     {
                         Raster<byte>? tile = vrt[returnedXindex, returnedYindex];
-                        Assert.IsTrue(tile != null, "Tile at " + returnedXindex + ", " + returnedYindex + " is null at index " + index + " of tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+                        Assert.IsTrue(tile != null, $"Tile at {returnedXindex}, {returnedYindex} is null at index {index} of tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
                         for (int bandIndex = 0; bandIndex < tile.Bands.Length; ++bandIndex)
                         {
-                            Assert.IsTrue(tile.Bands[bandIndex].Data.Length == 0, "Band " + bandIndex + " of tile at " + returnedXindex + ", " + returnedYindex + " is not returned to data buffer pool at index " + index + " of tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster with tileReturnDoesNotRequirePreviousRow: " + vrtPosition.TileReturnDoesNotRequirePreviousRow + ".");
+                            Assert.IsTrue(tile.Bands[bandIndex].Data.Length == 0, $"Band {bandIndex} of tile at {returnedXindex}, {returnedYindex} is not returned to data buffer pool at index {index} of tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster with tileReturnDoesNotRequirePreviousRow: {vrtPosition.TileReturnDoesNotRequirePreviousRow}.");
                         }
                     }
                 }
@@ -226,10 +226,10 @@ namespace Mars.Clouds.UnitTests
                     for (int completedXindex = 0; completedXindex < vrtSizeX; ++completedXindex)
                     {
                         Raster<byte>? tile = vrt[completedXindex, firstRetainedRowIndex];
-                        Assert.IsTrue(tile != null, "Tile at " + completedXindex + ", " + firstRetainedRowIndex + " is null at index " + index + " of tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+                        Assert.IsTrue(tile != null, $"Tile at {completedXindex}, {firstRetainedRowIndex} is null at index {index} of tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
                         for (int bandIndex = 0; bandIndex < tile.Bands.Length; ++bandIndex)
                         {
-                            Assert.IsTrue(tile.Bands[bandIndex].Data.Length > 0, "Band " + bandIndex + " of tile at " + completedXindex + ", " + firstRetainedRowIndex + " is returned to data buffer pool at index " + index + " of tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster with tileReturnDoesNotRequirePreviousRow: " + vrtPosition.TileReturnDoesNotRequirePreviousRow + ".");
+                            Assert.IsTrue(tile.Bands[bandIndex].Data.Length > 0, $"Band {bandIndex} of tile at {completedXindex}, {firstRetainedRowIndex} is returned to data buffer pool at index {index} of tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster with tileReturnDoesNotRequirePreviousRow: {vrtPosition.TileReturnDoesNotRequirePreviousRow}.");
                         }
                     }
                 }
@@ -244,24 +244,24 @@ namespace Mars.Clouds.UnitTests
                     }
                     expectedTilesInPool = vrtSizeX * returnedRows;
                 }
-                Assert.IsTrue(dataBufferPool.BytePool.Count == expectedTilesInPool, "Expected " + expectedTilesInPool + " tiles to be returned to tile pool rather than " + dataBufferPool.BytePool.Count + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster completed to row " + vrtPosition.CompletedRowIndex + " (tile completion order " + String.Join(',', tileCompletionOrder) + ").");
+                Assert.IsTrue(dataBufferPool.BytePool.Count == expectedTilesInPool, $"Expected {expectedTilesInPool} tiles to be returned to tile pool rather than {dataBufferPool.BytePool.Count} for {vrtSizeX} by {vrtSizeY} virtual raster completed to row {vrtPosition.CompletedRowIndex} (tile completion order {String.Join(',', tileCompletionOrder)}).");
 
-                Assert.IsTrue(vrtPosition.CompletedRowIndex >= previousCompletedRowIndex, "Expected completed row index to be at least " + (previousCompletedRowIndex + 1) + " at index " + index + " of tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster with tileReturnDoesNotRequirePreviousRow: " + vrtPosition.TileReturnDoesNotRequirePreviousRow + "because one or more rows were completed but it is " + vrtPosition.CompletedRowIndex + ".");
+                Assert.IsTrue(vrtPosition.CompletedRowIndex >= previousCompletedRowIndex, $"Expected completed row index to be at least {(previousCompletedRowIndex + 1)} at index {index} of tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster with tileReturnDoesNotRequirePreviousRow: {vrtPosition.TileReturnDoesNotRequirePreviousRow}because one or more rows were completed but it is {vrtPosition.CompletedRowIndex}.");
                 previousCompletedRowIndex = vrtPosition.CompletedRowIndex;
             }
 
-            Assert.IsTrue(dataBufferPool.BytePool.Count == tileCount, "Tile pool contains " + dataBufferPool.BytePool.Count + " tiles after tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+            Assert.IsTrue(dataBufferPool.BytePool.Count == tileCount, $"Tile pool contains {dataBufferPool.BytePool.Count} tiles after tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
             for (int yIndex = 0; yIndex < vrtSizeY; ++yIndex)
             {
                 for (int xIndex = 0; xIndex < vrtSizeX; ++xIndex)
                 {
-                    Assert.IsTrue(vrtPosition.IsCompleteTo(xIndex, yIndex), "Tile at " + xIndex + ", " + yIndex + " is not seen as complete after tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+                    Assert.IsTrue(vrtPosition.IsCompleteTo(xIndex, yIndex), $"Tile at {xIndex}, {yIndex} is not seen as complete after tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
 
                     Raster<byte>? tile = vrt[xIndex, yIndex];
-                    Assert.IsTrue(tile != null, "Tile at " + xIndex + ", " + yIndex + " is null after tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+                    Assert.IsTrue(tile != null, $"Tile at {xIndex}, {yIndex} is null after tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
                     for (int bandIndex = 0; bandIndex < tile.Bands.Length; ++bandIndex)
                     {
-                        Assert.IsTrue(tile.Bands[bandIndex].Data.Length == 0, "Band " + bandIndex + " of tile at " + xIndex + ", " + yIndex + " is not returned to tile pool after tile completion order " + String.Join(',', tileCompletionOrder) + " for " + vrtSizeX + " by " + vrtSizeY + " virtual raster.");
+                        Assert.IsTrue(tile.Bands[bandIndex].Data.Length == 0, $"Band {bandIndex} of tile at {xIndex}, {yIndex} is not returned to tile pool after tile completion order {String.Join(',', tileCompletionOrder)} for {vrtSizeX} by {vrtSizeY} virtual raster.");
                     }
                 }
             }

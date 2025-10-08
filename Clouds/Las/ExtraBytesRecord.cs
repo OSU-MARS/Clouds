@@ -32,7 +32,7 @@ namespace Mars.Clouds.Las
         {
             if (vlrBytes.Length != ExtraBytesRecord.SizeInBytes)
             {
-                throw new InvalidDataException("Extra bytes record was " + vlrBytes.Length + " bytes long instead of " + ExtraBytesRecord.SizeInBytes + ".");
+                throw new InvalidDataException($"Extra bytes record was {vlrBytes.Length} bytes long instead of {ExtraBytesRecord.SizeInBytes}.");
             }
 
             this.ReservedExtra = [ vlrBytes[0], vlrBytes[1] ];
