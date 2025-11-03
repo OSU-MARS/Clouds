@@ -5,20 +5,19 @@ using System.Management.Automation;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "LasInfo")]
-    public class GetLasInfo : LasTilesCmdlet
+    public class GetLasInfo : LasCmdlet
     {
         protected override void ProcessRecord()
         {
-            // TODO: drop tile requirement
-            LasTileGrid lasTileGrid = this.ReadLasHeadersAndFormGrid("Get-LasInfo");
-            List<LasTile> tiles = new(lasTileGrid.NonNullCells);
-            for (int tileIndex = 0; tileIndex < lasTileGrid.Cells; ++tileIndex)
+            List<string> lasFilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            List<LasTile> lasFileMetadata = new(lasFilePaths.Count); // use LasTile to flow file paths
+            for (int fileIndex = 0; fileIndex < lasFilePaths.Count; ++fileIndex)
             {
-                LasTile? tile = lasTileGrid[tileIndex];
-                if (tile != null)
-                {
-                    tiles.Add(tile);
-                }
+                // can multithread if needed but doesn't seem worth the overhead up to a few hundred .las files
+                string lasFilePath = lasFilePaths[fileIndex];
+                LasReader lasReader = LasReader.CreateForHeaderAndVlrRead(lasFilePath, this.DiscardOverrunningVlrs);
+                LasTile lasFile = new(lasFilePath, lasReader, fallbackCreationDate: null);
+                lasFileMetadata.Add(lasFile);
 
                 if (this.Stopping)
                 {
@@ -26,7 +25,15 @@ namespace Mars.Clouds.Cmdlets
                 }
             }
 
-            this.WriteObject(tiles);
+            if (lasFileMetadata.Count == 1)
+            {
+                this.WriteObject(lasFileMetadata[0]);
+            }
+            else
+            {
+                this.WriteObject(lasFileMetadata);
+            }
+            base.ProcessRecord();
         }
     }
 }

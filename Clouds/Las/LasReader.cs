@@ -31,6 +31,15 @@ namespace Mars.Clouds.Las
             this.Unbuffered = false;
         }
 
+        public LasWriter AsWriter()
+        {
+            if (this.BaseStream.CanWrite == false)
+            {
+                throw new InvalidOperationException($"A {nameof(LasReader)}'s stream on a file opened for read cannot be repurposed for {nameof(LasWriter)}. Use {nameof(LasReader)}.{nameof(CreateForPointReadAndWrite)}() when both read and write access are needed.");
+            }
+            return new LasWriter(this.BaseStream);
+        }
+
         /// <summary>
         /// Create <see cref="LasReader"/> with small IO buffer size for efficient header and variable length record reads.
         /// </summary>
@@ -46,28 +55,45 @@ namespace Mars.Clouds.Las
             return reader;
         }
 
+        public static LasReader CreateForHeaderAndVlrReadAndWrite(string lasPath, bool discardOverrunningVlrs, bool enableAsync = false)
+        {
+            FileOptions fileOptions = enableAsync ? FileOptions.Asynchronous : FileOptions.None;
+            FileStream stream = new(lasPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read, LasReader.HeaderAndVlrReadBufferSizeInBytes, fileOptions);
+            LasReader reader = new(stream)
+            {
+                DiscardOverrunningVlrs = discardOverrunningVlrs
+            };
+
+            return reader;
+        }
+
         public static LasReader CreateForPointRead(string lasPath)
         {
-            FileInfo cloudFileInfo = new(lasPath);
-            return LasReader.CreateForPointRead(lasPath, cloudFileInfo.Length);
+            return LasReader.CreateForPointRead(lasPath, discardOverrunningVlrs: false);
         }
 
         public static LasReader CreateForPointRead(string lasPath, bool discardOverrunningVlrs)
         {
-            LasReader reader = LasReader.CreateForPointRead(lasPath);
-            reader.DiscardOverrunningVlrs = discardOverrunningVlrs;
+            FileInfo cloudFileInfo = new(lasPath);
+            LasReader reader = LasReader.CreateForPointRead(lasPath, cloudFileInfo.Length, discardOverrunningVlrs, unbuffered: false, enableAsync: false);
             return reader;
         }
 
-        public static LasReader CreateForPointRead(string lasPath, long fileSizeInBytes, bool unbuffered = false, bool enableAsync = false)
+        public static LasReader CreateForPointRead(string lasPath, long fileSizeInBytes, bool discardOverrunningVlrs, bool unbuffered, bool enableAsync)
         {
             return new LasReader(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.Read, unbuffered, enableAsync))
             {
+                DiscardOverrunningVlrs = discardOverrunningVlrs,
                 Unbuffered = unbuffered
             };
         }
 
-        protected static FileStream CreatePointStream(string lasPath, long fileSizeInBytes, FileAccess fileAccess, bool unbuffered, bool enableAsync)
+        public static LasReader CreateForPointReadAndWrite(string lasPath, long fileSizeInBytes)
+        {
+            return new LasReader(LasReader.CreatePointStream(lasPath, fileSizeInBytes, FileAccess.ReadWrite, unbuffered: false, enableAsync: false));
+        }
+
+        private static FileStream CreatePointStream(string lasPath, long fileSizeInBytes, FileAccess fileAccess, bool unbuffered, bool enableAsync)
         {
             if (enableAsync && unbuffered)
             {
@@ -398,6 +424,20 @@ namespace Mars.Clouds.Las
                     int pointY = BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
                     double x = lasHeader.XOffset + lasHeader.XScaleFactor * pointX;
                     double y = lasHeader.YOffset + lasHeader.YScaleFactor * pointY;
+                    if (lasToSliceTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 sliceIndexX, out Int64 sliceIndexY) == false)
+                    {
+                        // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
+                        // Check for trimming is done before check for DTM indices since 1) there's no point doing a DSM lookup on a point which won't be used
+                        // and 2) scans near the edge of a drone or closely clipped fixed-wing DTM may contain points past the DTM's edge.
+                        if (trim <= 0.0)
+                        {
+                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside intensity slice extents ({intensitySlice.GetExtentString()}) and thus has off slice indices {sliceIndexX}, {sliceIndexY}.");
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
                     if (lasToDtmTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 dtmIndexX, out Int64 dtmIndexY) == false)
                     {
                         throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DTM extents ({dtmBand.GetExtentString()}) and thus has off DTM indices {dtmIndexX}, {dtmIndexY}.");
@@ -411,18 +451,6 @@ namespace Mars.Clouds.Las
                         continue;
                     }
 
-                    if (lasToSliceTransformXY.TryToOnGridIndices(pointX, pointY, out Int64 sliceIndexX, out Int64 sliceIndexY) == false)
-                    {
-                        // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
-                        if (trim <= 0.0)
-                        {
-                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside intensity slice extents ({intensitySlice.GetExtentString()}) and thus has off slice indices {sliceIndexX}, {sliceIndexY}.");
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
                     Int64 sliceCellIndex = intensitySlice.ToCellIndex(sliceIndexX, sliceIndexY);
 
                     intensitySlice.Intensity[sliceCellIndex] += BinaryPrimitives.ReadUInt16LittleEndian(pointBytes[12..14]);

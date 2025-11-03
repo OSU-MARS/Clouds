@@ -43,7 +43,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int HorizontalEpsg { get; set; }
 
-        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters), NAVD88 feet is 8228.")]
+        [Parameter(HelpMessage = "EPSG of vertical coordinate system to assign to point cloud. Default is 5703 (NAVD88 meters), NAVD88 feet is 6360.")]
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int VerticalEpsg { get; set; }
 

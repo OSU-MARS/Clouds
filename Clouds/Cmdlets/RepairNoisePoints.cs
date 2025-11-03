@@ -69,7 +69,7 @@ namespace Mars.Clouds.Cmdlets
             // marks points as noise but (currently) does not offer the option of removing them from the file
             // Since no points are removed the header's bounding box does not need to be updated. If needed, an integrated repair and
             // remove flow can be created.
-            using LasReaderWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
+            using LasWriter pointReaderWriter = lasTile.CreatePointReaderWriter();
             int pointsReclassified = pointReaderWriter.TryFindUnclassifiedNoise(lasTile, dtmTile, this.HighNoise, this.LowNoise);
             return pointsReclassified;
         }
@@ -89,7 +89,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // spin up point cloud read and tile worker threads
-            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReaderWriter.GetFindNoisePointsBandwidth();
+            (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasWriter.GetFindUnclassifiedNoiseBandwidth();
             int availableReadThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
             int checkThreads = Int32.Min(availableReadThreads, lasGrid.NonNullCells);
 

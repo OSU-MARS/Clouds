@@ -30,7 +30,7 @@ namespace Mars.Clouds.Cmdlets
         protected GdalCmdlet()
         {
             this.DataThreads = HardwareCapabilities.Current.PhysicalCores;
-            this.MetadataThreads = Environment.ProcessorCount; // actually thread count
+            this.MetadataThreads = Environment.ProcessorCount; // actual supported thread count
         }
 
         protected static int EstimateGeopackageSqlBackgroundThreads()

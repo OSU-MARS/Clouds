@@ -23,16 +23,17 @@ namespace Mars.Clouds.Las
 
         public LasReader CreatePointReader(bool unbuffered = false, bool enableAsync = false)
         {
-            LasReader reader = LasReader.CreateForPointRead(this.FilePath, this.FileSizeInBytes, unbuffered, enableAsync);
+            LasReader reader = LasReader.CreateForPointRead(this.FilePath, this.FileSizeInBytes, discardOverrunningVlrs: false, unbuffered, enableAsync);
             reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
             return reader;
         }
 
-        public LasReaderWriter CreatePointReaderWriter()
+        public LasWriter CreatePointReaderWriter()
         {
-            LasReaderWriter readerWriter = LasReaderWriter.CreateForPointRead(this.FilePath, this.FileSizeInBytes);
-            readerWriter.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
-            return readerWriter;
+            LasReader readerWriter = LasReader.CreateForPointReadAndWrite(this.FilePath, this.FileSizeInBytes);
+            LasWriter writer = readerWriter.AsWriter();
+            writer.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return writer;
         }
     }
 }
