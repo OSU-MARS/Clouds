@@ -50,6 +50,11 @@ namespace Mars.Clouds
             public const UInt16 VlrReservedHeaderValue = 0;
         }
 
+        public static class OpenXml
+        {
+            public const UInt32 FirstCustomNumberFormatId = 164;
+        }
+
         public static class Simd128
         {
             //public const byte BlendA0B1 = 0b000000010; // blendpd
