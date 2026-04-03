@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 
 [assembly: SuppressMessage("Maintainability", "CA1507:Use nameof to express symbol names", Justification = "CA1507 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.Hardware.PhysicalDisk.#ctor(System.Management.ManagementBaseObject)")]
 [assembly: SuppressMessage("Maintainability", "CA1507:Use nameof to express symbol names", Justification = "CA1507 bug", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.Hardware.VirtualDisk.#ctor(System.Management.ManagementBaseObject)")]
+[assembly: SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "rule for preview features runs when features aren't enabled", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.ConvertDiskSpd.ProcessRecord")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.AssembleVrts~Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.CreateTileStatisticsTable(Mars.Clouds.Cmdlets.GetVrt.VirtualRasterBandsAndStatistics)~Mars.Clouds.GdalExtensions.TileStatisticsTable")]
 [assembly: SuppressMessage("Style", "IDE0270:Use coalesce expression", Justification = "readability", Scope = "member", Target = "~M:Mars.Clouds.Cmdlets.GetVrt.ProcessRecord")]

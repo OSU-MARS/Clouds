@@ -1,6 +1,6 @@
 ﻿# This script illustrates cmdlets for diskspd.exe log translation and drive thermal stress. Paths need to be changed to files available for the area of interest.
-$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net9.0"))
-$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net9.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Debug\net10.0"))
+$buildDirectory = ([System.IO.Path]::Combine((Get-Location), "bin\Release\net10.0"))
 
 Import-Module -Name ([System.IO.Path]::Combine($buildDirectory, "Clouds.dll"))
 
