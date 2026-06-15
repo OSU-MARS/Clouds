@@ -20,7 +20,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateNotNullOrWhiteSpace]
         public string Dsm { get; set; }
 
-        [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles. The read capability of the DTMs' storage is assumed to be the same as or greater than the DSM's storage.")]
+        [Parameter(Mandatory = true, HelpMessage = "Path to a directory containing DTM tiles whose file names match the point cloud tiles. Each DTM must be a single precision floating point raster with ground surface heights in the same CRS as the point cloud tiles. The read capability of the drive the DTMs are stored on is assumed to be the same as or greater than the DSM destination drive.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dtm { get; set; }
 
@@ -138,7 +138,12 @@ namespace Mars.Clouds.Cmdlets
                             }
 
                             // if there's only one point cloud and the DTM extends beyond the cloud expand DTM virtual raster to match the DTM tile extent
-                            // This lets a handheld scans be placed within a larger DTM with the DSM expanding beyond the scan to match the DTM.
+                            // This enables support for scan areas of limited extent (usually handheld/backpack or drone) without having to crop a larger DTM to
+                            // exactly match. The DSM produced in these cases matches the DTM extent and thus extends beyond the scan.
+                            // TODO: generalize this to
+                            //   1) multiple point clouds on a single DTM producing a single DSM
+                            //   2) drop off DTM portions of point clouds so that a project area DTM can be used to crop the DSM to the area of interest
+                            // Design issue here is switching between using point clouds or DTMs for framing DSM output structure.
                             if ((dsmReadCreateWrite.Las.NonNullCells == 1) && (dsmReadCreateWrite.Dsm.NonNullTileCount == 0))
                             {
                                 dsmReadCreateWrite.Dsm.TileTransform.Copy(dtmTile.Transform);

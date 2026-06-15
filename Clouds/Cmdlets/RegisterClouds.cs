@@ -15,7 +15,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsLifecycle.Register, "Clouds")]
     public class RegisterClouds : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Point clouds to set origin and coordinate system of.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds to set origin and coordinate system of.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
 
@@ -51,7 +51,11 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(0, UInt16.MaxValue)]
         public int SourceID { get; set; }
 
-        [Parameter(HelpMessage = "Rotation, in degrees, to apply in the xy plane. Rotation is in the cartesian coordinate sense of from +x to +y and is therefore in the opposite direction from compass azimuth (use a negative -RotationXY to rotate clockwise).")]
+        [Parameter(HelpMessage = "Clockwise rotation, in degrees, to apply in the xy plane. Declination rotates in the same direction as compass azimuth, with positive declinations turning the point cloud east of north (use a negative -Declination or -RotationXY to rotate counterclockwise).")]
+        [ValidateRange(-360.0F, 360.0F)]
+        public double[] Declination { get; set; }
+
+        [Parameter(HelpMessage = "Counterlockwise rotation, in degrees, to apply in the xy plane. Rotation is in the cartesian coordinate sense of from +x to +y and is therefore in the opposite direction from compass azimuth (use -Declination or a negative -RotationXY to rotate clockwise).")]
         [ValidateRange(-360.0F, 360.0F)]
         public double[] RotationXY { get; set; }
 
@@ -83,6 +87,7 @@ namespace Mars.Clouds.Cmdlets
 
         public RegisterClouds()
         {
+            this.Declination = []; // empty so RotationXY is used as by default
             this.Las = [];
             this.Lat = Double.NaN;
             this.Long = Double.NaN;
@@ -94,7 +99,7 @@ namespace Mars.Clouds.Cmdlets
             this.SourceID = 1;
             this.RotationXY = [ 0.0 ];
             this.NudgeX = [ 0.0 ];
-            this.NudgeY = [0.0];
+            this.NudgeY = [ 0.0 ];
             this.FallbackDate = null;
             this.RepairClassification = false;
             this.RepairReturn = false;
@@ -116,9 +121,17 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.Las), $"-{nameof(this.Las)} = '{String.Join(", ", this.Las)}' does not match any existing point clouds.");
             }
+            if ((this.Declination.Length != 1) && (this.Declination.Length != cloudPaths.Count))
+            {
+                throw new ParameterOutOfRangeException(nameof(this.Declination), $"-{nameof(this.Declination)} must have either single value or as many values as there are clouds to register. There are {this.Declination.Length} values in -{nameof(this.Declination)} and {cloudPaths.Count} clouds.");
+            }
             if ((this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
             {
                 throw new ParameterOutOfRangeException(nameof(this.RotationXY), $"-{nameof(this.RotationXY)} must have either single value or as many values as there are clouds to register. There are {this.RotationXY.Length} values in -{nameof(this.RotationXY)} and {cloudPaths.Count} clouds.");
+            }
+            if ((this.Declination.Length != 0) && (this.RotationXY.Length != 0))
+            {
+                throw new ParameterOutOfRangeException($"{nameof(this.Declination)} and {nameof(this.RotationXY)}", $"Specify one or the other of -{nameof(this.Declination)} and -{nameof(this.RotationXY)}, not both.");
             }
             if ((this.NudgeX.Length != 1) && (this.NudgeX.Length != cloudPaths.Count))
             {
@@ -183,7 +196,15 @@ namespace Mars.Clouds.Cmdlets
                     LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
 
                     // update cloud extents
-                    double rotationXYinDegrees = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
+                    double rotationXYinDegrees;
+                    if (this.Declination.Length >= 1)
+                    {
+                        rotationXYinDegrees = -(this.Declination.Length == 1 ? this.Declination[0] : this.Declination[cloudIndex]);
+                    }
+                    else
+                    {
+                        rotationXYinDegrees = this.RotationXY.Length == 1 ? this.RotationXY[0] : this.RotationXY[cloudIndex];
+                    }
                     double rotationXYinRadians = Double.Pi / 180.0 * rotationXYinDegrees;
                     if (rotationXYinRadians != 0.0)
                     {

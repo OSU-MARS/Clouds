@@ -13,7 +13,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether or not to ignore cases where a .las file's header indicates more variable length records (VLRs) than fit between the header and point data. Default is false but this is a common issue with .las files, particularly a two byte fragment between the last VLR and the start of the points.")]
         public SwitchParameter DiscardOverrunningVlrs { get; set; }
 
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = ".las files to load points from. Can be a single file or a set of files if wildcards are used.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = ".las files to load points from. Can be a single file or a list of files and wildcards (*, ?) can be used.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Las { get; set; }
 

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -33,17 +32,28 @@ namespace Mars.Clouds.Las
         {
             this.WriteHeader(stream);
 
+            // write all but the last value
+            // The LAS specification states values are separated by null characters but not that the last value is null terminated.
+            byte[] valueBytes;
             int valueBytesWritten = 0;
-            for (int valueIndex = 0; valueIndex < this.Values.Length; ++valueIndex)
+            for (int valueIndex = 0; valueIndex < this.Values.Length - 1; ++valueIndex)
             {
-                byte[] valueBytes = Encoding.UTF8.GetBytes(this.Values[valueIndex]);
+                valueBytes = Encoding.UTF8.GetBytes(this.Values[valueIndex]);
                 stream.Write(valueBytes);
 
                 stream.WriteByte(0);
                 valueBytesWritten += valueBytes.Length + 1;
             }
 
-            Debug.Assert(valueBytesWritten == this.RecordLengthAfterHeader);
+            // write the last value
+            valueBytes = Encoding.UTF8.GetBytes(this.Values[^1]);
+            stream.Write(valueBytes);
+            valueBytesWritten += valueBytes.Length;
+
+            if (valueBytesWritten != this.RecordLengthAfterHeader)
+            {
+                throw new InvalidOperationException($"GeoAsciiParamsTag record values totalled {valueBytesWritten} bytes (including null separators between values) which does not match the record length after header of {this.RecordLengthAfterHeader} bytes.");
+            }
         }
     }
 }

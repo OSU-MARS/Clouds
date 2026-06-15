@@ -15,7 +15,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "BoundingBoxes")]
     public class GetBoundingBoxes : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Point clouds whose bounding boxes will be placed in the output bounding box layer.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds whose bounding boxes will be placed in the output bounding box layer.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
 

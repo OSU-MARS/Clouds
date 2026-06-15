@@ -14,7 +14,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsData.Convert, "CloudCrs")]
     public class ConvertCloudCrs : GdalCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
+        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
         [ValidateNotNullOrEmpty]
         public List<string> Las { get; set; }
 
@@ -46,8 +46,12 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "By default, each point cloud's origin is rebased to be at its center and then projected into the new coordinate system. This approach maximizes reprojection accuracy by minimizing coordinate system error across the distance between the point cloud's origin and the points' location. Setting this switch disables rebasing, which likely has negligible effects if the origin lies within the point cloud but may introduce several meters of error on fixed-wing point clouds whose origin is tens of kilometers away from a tile.")]
         public SwitchParameter MaintainOrigin { get; set; }
 
+        [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
+        public DateOnly? FallbackDate { get; set; }
+
         public ConvertCloudCrs() 
         {
+            this.FallbackDate = null;
             this.Las = [];
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
             this.InputScale = 1.0;
@@ -89,7 +93,7 @@ namespace Mars.Clouds.Cmdlets
                     // load cloud and get its current coordinate system
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(reader, this.FallbackDate);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     int cloudHasVerticalCrs = cloudCrs.IsVertical();
                     if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs) && (cloudHasVerticalCrs == 1)) // IsSameCrs() allows missing vertical CRSes

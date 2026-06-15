@@ -16,7 +16,7 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(16, 64)] // could also use [ValidateSet] but string conversion is required
         public int BitDepth { get; set; }
 
-        [Parameter(HelpMessage = "Size of an orthoimage pixel in the point clouds' CRS units. Must be an integer multiple of the tile size. Default is 0.5 m for metric point clouds and 1.5 feet for point clouds with English units.")]
+        [Parameter(HelpMessage = "Size of an orthoimage pixel in the point clouds' CRS units. Must be an integer multiple of the point cloud tile size. Default is 0.5 m for metric point clouds and 1.5 feet for point clouds with English units.")]
         public double CellSize { get; set; }
 
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "1) path to write image to as a GeoTIFF or 2,3) path to a directory to write image tiles to.")]

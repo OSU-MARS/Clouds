@@ -100,6 +100,17 @@ namespace Mars.Clouds.Cmdlets
                     slicePath = Path.Combine(this.SessionState.Path.CurrentLocation.Path, slicePath);
                 }
                 slicePathIsExistingDirectory = Directory.Exists(slicePath);
+                if (slicePathIsExistingDirectory == false)
+                {
+                    // check that -Slice is either an existing directory or indicates a writeable file path
+                    string? sliceExtension = Path.GetExtension(slicePath);
+                    if (String.IsNullOrWhiteSpace(sliceExtension) || 
+                        ((String.Equals(sliceExtension, Constant.File.GeoTiffExtension, StringComparison.OrdinalIgnoreCase) == false) &&
+                         (String.Equals(sliceExtension, ".tiff", StringComparison.OrdinalIgnoreCase) == false)))
+                    {
+                        throw new ParameterOutOfRangeException(nameof(this.Slice), $"-{nameof(this.Slice)} \"{slicePath}\" does not indicate an existing directory or a file with a well known raster extension ({Constant.File.GeoTiffExtension} or similar). Ensure the destination directory for slices exists and, if indicated, filenames contain an extension indicating which format they should be written in.");
+                    }
+                }
                 slicePathSet = true;
             }
 
