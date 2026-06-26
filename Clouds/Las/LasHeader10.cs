@@ -266,14 +266,14 @@ namespace Mars.Clouds.Las
             bool creationDateChanged = false;
 
             UInt16 fallbackYear = (UInt16)fallbackFileCreationDate.Year;
-            if ((this.FileCreationYear < 2003) || (this.FileCreationYear > 3000))
+            if ((this.FileCreationYear < 2003) || (this.FileCreationYear > DateTime.MaxValue.Year))
             {
                 this.FileCreationYear = fallbackYear;
                 creationDateChanged = true;
             }
             else if (this.FileCreationYear != fallbackYear)
             {
-                // for now, assume scan sets don't cross over December 31-January 1
+                // for now, assume scan sets don't cross over midnight between December 31 and January 1
                 throw new ArgumentOutOfRangeException(nameof(fallbackFileCreationDate), $"Fallback file creation date has year {fallbackYear} but .las has year {this.FileCreationYear}");
             }
 

@@ -11,9 +11,9 @@ using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class GdalCmdlet : FileCmdlet
+    public abstract class GdalCmdlet : FileCmdlet
     {
-        [Parameter(HelpMessage = "Maximum number of threads to use when processing tiles or other data in parallel. Default is cmdlet specific but is most commonly the number of physical cores.")]
+        [Parameter(HelpMessage = "Maximum number of threads to use when processing files or other data in parallel. Default is cmdlet specific but is most commonly the number of physical cores.")]
         [ValidateRange(1, Constant.DefaultMaximumThreads)] // arbitrary upper bound
         public int DataThreads { get; set; }
 
@@ -24,7 +24,7 @@ namespace Mars.Clouds.Cmdlets
         static GdalCmdlet()
         {
             // Gdal.SetConfigOption("GTIFF_DIRECT_IO", "YES"); // bypass GDAL tile cache: slower than using the cache
-            GdalBase.ConfigureAll();
+            GdalBase.ConfigureAll(); // GdalBase.ConfigureAll() is thread safe and idempotent, https://github.com/MaxRev-Dev/gdal.netcore/blob/main/compile/GdalConfigureAll.cs
         }
 
         protected GdalCmdlet()
@@ -60,7 +60,7 @@ namespace Mars.Clouds.Cmdlets
             return (directoryPath, searchPattern);
         }
 
-        protected static string GetRasterTilePath(string directoryPath, string tileName)
+        public static string GetRasterTilePath(string directoryPath, string tileName)
         {
             return Path.Combine(directoryPath, tileName + Constant.File.GeoTiffExtension);
         }
@@ -83,17 +83,17 @@ namespace Mars.Clouds.Cmdlets
                 // multithreaded read for multiple tiles
                 // Assume read is from flash (NVMe, SSD) and there's no particular constraint on the number of read threads or a data
                 // locality advantage.
-                TileRead tileRead = new();
+                FileRead tileRead = new();
                 ParallelTasks tileReadTasks = new(Int32.Min(this.MetadataThreads, tilePaths.Count), () =>
                 {
-                    for (int tileIndex = tileRead.GetNextTileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextTileReadIndexThreadSafe())
+                    for (int tileIndex = tileRead.GetNextFileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextFileReadIndexThreadSafe())
                     {
                         string tilePath = tilePaths[tileIndex];
                         TTile tile = createTileFromMetadata(tilePath);
                         lock (vrt)
                         {
                             vrt.Add(tile);
-                            ++tileRead.TilesRead;
+                            ++tileRead.FilesRead;
                         }
                     }
                 }, cancellationTokenSource);
@@ -101,8 +101,8 @@ namespace Mars.Clouds.Cmdlets
                 TimedProgressRecord progress = new(cmdletName, "placeholder"); // can't pass null or empty statusDescription
                 while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
                 {
-                    progress.StatusDescription = $"Read metadata of {tileRead.TilesRead} of {tilePaths.Count} virtual raster {(tilePaths.Count == 1 ? "tile (" : "tiles (")}{tileReadTasks.Count}{(tileReadTasks.Count == 1 ? " thread)..." : " threads)...")}";
-                    progress.Update(tileRead.TilesRead, tilePaths.Count);
+                    progress.StatusDescription = $"Read metadata of {tileRead.FilesRead} of {tilePaths.Count} virtual raster {(tilePaths.Count == 1 ? "tile (" : "tiles (")}{tileReadTasks.Count}{(tileReadTasks.Count == 1 ? " thread)..." : " threads)...")}";
+                    progress.Update(tileRead.FilesRead, tilePaths.Count);
                     this.WriteProgress(progress);
                 }
             }

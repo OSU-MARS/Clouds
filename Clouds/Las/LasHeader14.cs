@@ -11,24 +11,23 @@ namespace Mars.Clouds.Las
         public new const int HeaderSizeInBytes = 375;
         public const int SupportedNumberOfReturns = 15;
 
-        /// <summary>
-        /// 
-        /// </summary>
+        public UInt32 NumberOfExtendedVariableLengthRecords { get; set; }
+        public UInt64 NumberOfPointRecords { get; set; }
+        public UInt64[] NumberOfPointsByReturn { get; set; }
+
         /// <remarks>
         /// Of type <see cref="UInt64"/> as required by the LAS 1.4 R15 specification but functionally restricted to <see cref="Int64"/> in 
         /// this implementation as C# streams do not support seeking to <see cref="UInt64"/> positions. This is only an issue for .las or 
         /// .laz files larger than 9.2 EB (exabytes), which are unlikely to occur.
         /// </remarks>
         public UInt64 StartOfFirstExtendedVariableLengthRecord { get; set; }
-        public UInt32 NumberOfExtendedVariableLengthRecords { get; set; }
-        public UInt64 NumberOfPointRecords { get; set; }
-        public UInt64[] NumberOfPointsByReturn { get; set; }
 
         public LasHeader14()
         {
             this.VersionMinor = 4;
             this.HeaderSize = LasHeader14.HeaderSizeInBytes;
             this.NumberOfPointsByReturn = new UInt64[LasHeader14.SupportedNumberOfReturns];
+            this.StartOfFirstExtendedVariableLengthRecord = 0;
         }
 
         public override UInt64 GetNumberOfPoints()
@@ -109,7 +108,6 @@ namespace Mars.Clouds.Las
                 UInt64 expectedEndOfPointData = this.OffsetToPointData + this.PointDataRecordLength * this.GetNumberOfPoints();
                 if (this.StartOfFirstExtendedVariableLengthRecord != expectedEndOfPointData)
                 {
-                    // should 
                     throw new InvalidDataException($"Extended variable length records begin at an offset of {this.StartOfFirstExtendedVariableLengthRecord:n0} bytes but point data ends at {expectedEndOfPointData:n0} bytes.");
                 }
             }

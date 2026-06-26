@@ -57,7 +57,7 @@ namespace Mars.Clouds.Cmdlets
                 --maxReadReturnRowIndex;
             }
             this.TileReadPosition.OnTileCompleted(tileReadIndexX, tileReadIndexY, maxReadReturnRowIndex, this.OnSourceTileUnreferenced);
-            ++this.TilesRead;
+            ++this.FilesRead;
         }
 
         public void OnTileCreated(int tileCreateIndexX, int tileCreateIndexY)
@@ -75,7 +75,7 @@ namespace Mars.Clouds.Cmdlets
         {
             this.TileWritePosition.OnTileCompleted(tileWriteIndexX, tileWriteIndexY, this.OnCreatedTileUnreferenced);
             this.CellsWritten += tileWritten.Cells;
-            ++this.TilesWritten;
+            ++this.FilesWritten;
         }
 
         public bool TryGetNextTileToWrite(out int tileWriteIndexX, out int tileWriteIndexY, [NotNullWhen(true)] out TCreatedTile? tileToWrite)

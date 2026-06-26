@@ -11,7 +11,7 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "SortPerformance")]
-    public class GetSortPerformance : LasTilesCmdlet
+    public class GetSortPerformance : LasTilesCmdlet // can be changed to LasFilesCmdlet if needed
     {
         [Parameter(HelpMessage = "List of sort sizes to benchmark. Each tiles' points' z and intensity values are concatenated in grid metrics cell order and the combined list is then sequentially chunked by each sort size. Chunks are sorted until no full size chunk remains and the time to sort all of the chunks is added to total time reported for the sort size.")]
         [ValidateNotNullOrEmpty]
@@ -38,9 +38,14 @@ namespace Mars.Clouds.Cmdlets
             this.WarmupIterations = 20;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-SortPerformance";
+        }
+
         protected override void ProcessRecord()
         {
-            const string cmdletName = "Get-SortPerformance";
+            string cmdletName = this.GetName();
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if (Double.IsNaN(this.CellSize))
             {
@@ -53,7 +58,7 @@ namespace Mars.Clouds.Cmdlets
 
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToGridMetricsBandwidth();
             HardwareCapabilities hardwareCapabilities = HardwareCapabilities.Current;
-            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
+            int readThreads = this.GetPointCloudReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
             int maxUsefulThreads = Int32.Min(lasGrid.NonNullCells, 6 * readThreads);
 
             int gridReadIndex = -1;

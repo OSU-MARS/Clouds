@@ -21,7 +21,7 @@ namespace Mars.Clouds.Cmdlets
     /// <summary>
     /// Stream input raster tiles through memory when the output tiles require neighborhoods of input tiles.
     /// </summary>
-    public class TileReadWriteStreaming<TSourceTile, TWritePosition> : TileReadWrite 
+    public class TileReadWriteStreaming<TSourceTile, TWritePosition> : FileReadWrite 
         where TSourceTile : class
         where TWritePosition : TileStreamPosition
     {
@@ -89,13 +89,13 @@ namespace Mars.Clouds.Cmdlets
                 --maxReleasableRowIndex;
             }
             this.TileReadPosition.OnTileCompleted(tileReadIndexX, tileReadIndexY, maxReleasableRowIndex, this.OnSourceTileUnreferenced);
-            ++this.TilesRead;
+            ++this.FilesRead;
         }
 
         public void OnTileWritten(int tileWriteIndexX, int tileWriteIndexY)
         {
             this.TileWritePosition.OnTileCompleted(tileWriteIndexX, tileWriteIndexY);
-            ++this.TilesWritten;
+            ++this.FilesWritten;
         }
 
         public bool TryEnsureNeighborhoodRead<TRasterSourceTile>(int tileIndex, VirtualRaster<TRasterSourceTile> vrtMatchingReadPosition, CancellationTokenSource cancellationTokenSource) where TRasterSourceTile : Raster
@@ -107,7 +107,7 @@ namespace Mars.Clouds.Cmdlets
                 return true; // nothing to do
             }
 
-            for (int tileReadIndex = this.GetNextTileReadIndexThreadSafe(); tileReadIndex < this.MaxTileIndex; tileReadIndex = this.GetNextTileReadIndexThreadSafe())
+            for (int tileReadIndex = this.GetNextFileReadIndexThreadSafe(); tileReadIndex < this.MaxTileIndex; tileReadIndex = this.GetNextFileReadIndexThreadSafe())
             {
                 TRasterSourceTile? tileToRead = vrtMatchingReadPosition[tileReadIndex];
                 if (tileToRead == null)

@@ -22,6 +22,11 @@ namespace Mars.Clouds.Extensions
         // pascal7 = c(1, 6, 15, 20, 15, 6, 1) / sum(c(1, 6, 15, 20, 15, 6, 1))
         // pascal7 * matrix(pascal7, nrow = length(pascal7), ncol = length(pascal7), byrow = TRUE)
         //
+        // 3x3 smoothing kernel
+        // 1/16 * [ 1, 2, 1,  = [ 0.0625F, 0.125F, 0.0625F
+        //          2, 4, 2,      0.1250F, 0.250F, 0.1250F
+        //          1, 2, 1 ]     0.0625F, 0.125F, 0.0625F ];
+        //
         // 5x5 smoothing kernel
         // 1/64 * [ 1,  4,  6,  4, 1, = [ 0.00390625F, 0.015625F, 0.0234375F, 0.015625F, 0.00390625F,
         //          4, 16, 24, 16, 4      0.01562500F, 0.062500F, 0.0937500F, 0.062500F, 0.01562500F,
@@ -36,7 +41,6 @@ namespace Mars.Clouds.Extensions
         //           15,  90, 225, 300, 225,  90, 15      0.0036621094F, 0.021972656F, 0.054931641F, 0.073242188F, 0.054931641F, 0.021972656F, 0.0036621094F,
         //            6,  36,  90, 120,  90,  36,  6      0.0014648438F, 0.008789062F, 0.021972656F, 0.029296875F, 0.021972656F, 0.008789062F, 0.0014648438F,
         //            1,   6,  15,  20,  15,   6,  1      0.0002441406F, 0.001464844F, 0.003662109F, 0.004882812F, 0.003662109F, 0.001464844F, 0.0002441406F ];
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static (Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowCurrentMask) AdvanceToLastCellInRow(RasterNeighborhood8<float> neighborhood, int yIndex, Vector128<float> previousRowValues, Vector128<float> currentRowValues, Vector128<float> nextRowValues, Vector128<byte> maskVector, byte currentRowNextMask)
         {
@@ -97,7 +101,7 @@ namespace Mars.Clouds.Extensions
 
         //    byte nextRowCenterMask;
         //    byte nextRowNextMask;
-        //    if (yIndexNext < band.YSize)
+        //    if (yIndexNext < band.SizeY)
         //    {
         //        (float nextRowCenterValue, nextRowCenterMask) = band.GetValueMaskZero(xIndex, yIndexNext);
         //        (float nextRowNextValue, nextRowNextMask) = band.GetValueMaskZero(xIndexNext, yIndexNext);
@@ -169,96 +173,112 @@ namespace Mars.Clouds.Extensions
             // If filling is guaranteed then all cells have data and calculations for kernels lying entirely within a raster can be
             // simplified. However, kernels which extend past a raster's edge are unavoidably subject to no data.
             Binomial.SmoothWithNoDataOmitted3x3(neighborhood, smoothed);
-            // Gaussian.SmoothWithNoDataFilling3x3(band, smoothed); // currently excluded from build due to minimal testing
         }
 
+        /// <summary>
+        /// Smooths a raster with a 3x3 binomial kernel using 1 cell of nearest neighbor padding.
+        /// </summary>
         /// <remarks>
-        /// Since Gaussian kernels top and bottom rows are the same, other rows are integer multiples of the top and bottom rows, and kernel 
+        /// Since a Gaussian kernel's top and bottom rows are the same, other rows are integer multiples of the top and bottom rows, and kernel
         /// weights are constant when all cells have data, 2D convolution can be implemented in a single pass using 1D convolution and caching
-        /// of calculations on previous.
+        /// of previous calculations.
         /// 
         /// Due to a 3x3 kernel's small size it is unclear if SIMD would be helpful in this case. While the multiply-add portion of 
-        /// convolution benefits, data shuffling and two horizontal adds for SIMD calculation of each output value require more instructions 
+        /// convolution benefits, data shuffling and two horizontal adds for SIMD calculation of each output value requires more instructions 
         /// than a scalar 3x3 implementation. This does not appear to hold for 4x4 and larger kernel sizes.
         /// </remarks>
-        //private static void SmoothWithNoDataFilling3x3(RasterBand<float> band, RasterBand<float> smoothed)
+        //public static void SmoothWithNoDataFilling3x3(RasterBand<float> unsmoothed, RasterBand<float> smoothed, ref RowBuffers? rowBuffers)
         //{
-        //    if (band.HasNoDataValue)
+        //    if ((unsmoothed.SizeX < 3) || (unsmoothed.SizeY < 2))
         //    {
-        //        throw new NotImplementedException("No data filling is not implemented");
+        //        throw new NotImplementedException($"Special casing for small rasters is not currently implemented. Input raster is {unsmoothed.SizeX} by {unsmoothed.SizeY} cells.");
+        //    }
+        //    if ((rowBuffers == null) || (rowBuffers.RowBuffer3.Length < unsmoothed.SizeX) || (rowBuffers.RowBuffer1.Length < unsmoothed.SizeX) || (rowBuffers.RowBuffer2.Length < unsmoothed.SizeX))
+        //    {
+        //        rowBuffers = new RowBuffers(unsmoothed.SizeX);
         //    }
 
-        //    // first input row
-        //    float[] nextRow = new float[smoothed.XSize];
-        //    float centerCellValue = band[0, 0];
-        //    float previousCellValue = 0.0F;
-        //    for (int xIndex = 0, xIndexNext = 1; xIndexNext < smoothed.XSize; ++xIndexNext, ++xIndex)
+        //    // smooth first input row
+        //    float[] nextRow = rowBuffers.RowBuffer1;
+        //    float nextRowValue;
+        //    float centerCellValue = 0.0625F * unsmoothed[0, 0];
+        //    float previousCellValue = centerCellValue; // value of unsmoothed[-1] is unknown, so default to nearest neighbor interpolation
+        //    for (int xIndex = 0, xIndexNext = 1; xIndexNext < unsmoothed.SizeX; ++xIndexNext, ++xIndex)
         //    {
-        //        float nextCellValue = 0.0625F * band[xIndexNext, 0];
-        //        float nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue; // recalculate to avoid numerical error accumulation
+        //        float nextCellValue = 0.0625F * unsmoothed[xIndexNext]; // yIndex is 0
+        //        nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue; // recalculate to avoid numerical error accumulation
         //        nextRow[xIndex] = nextRowValue;
-
-        //        previousCellValue = centerCellValue;
-        //        centerCellValue = nextRowValue;
-        //    }
-        //    nextRow[^1] = previousCellValue + 2.0F * centerCellValue;
-
-        //    // first output row: only center and next rows
-        //    float[] centerRow = nextRow;
-        //    nextRow = new float[smoothed.XSize];
-        //    centerCellValue = band[0, 1];
-        //    previousCellValue = 0.0F;
-        //    for (int xIndex = 0, xIndexNext = 1; xIndexNext < smoothed.XSize; ++xIndexNext, ++xIndex)
-        //    {
-        //        float nextCellValue = 0.0625F * band[xIndexNext, 0];
-        //        float nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue;
-        //        nextRow[xIndex] = nextRowValue;
-
-        //        float centerRowValue = centerRow[xIndex];
-        //        smoothed[xIndex] = 2.0F * centerRowValue + nextRowValue;
 
         //        previousCellValue = centerCellValue;
         //        centerCellValue = nextCellValue;
         //    }
-        //    nextRow[^1] = previousCellValue + 2.0F * centerCellValue;
+        //    nextRow[unsmoothed.SizeX - 1] = previousCellValue + 2.0F * centerCellValue + centerCellValue; // nextRow[^1] will be incorrect if longer buffers have been allocated, nearest neighbor interpolation of unknown value of unsmoothed[xIndexNext, 0]
 
-        //    // all middle output rows: previous, center, and next
-        //    float[] previousRow;
-        //    float[] tempRow = new float[smoothed.XSize];
-        //    int yIndex;
-        //    for (int yIndexNext = 1; yIndexNext < band.YSize - 1; ++yIndexNext)
+        //    // first output row: only center and next rows
+        //    float[] centerRow = nextRow;
+        //    float centerRowValue;
+        //    nextRow = rowBuffers.RowBuffer2;
+        //    centerCellValue = 0.0625F * unsmoothed[0, 1];
+        //    previousCellValue = centerCellValue;
+        //    for (int xIndex = 0, xIndexNext = 1; xIndexNext < unsmoothed.SizeX; ++xIndexNext, ++xIndex)
         //    {
-        //        previousRow = centerRow;
-        //        centerRow = nextRow;
-        //        nextRow = tempRow;
+        //        float nextCellValue = 0.0625F * unsmoothed[xIndexNext, 1];
+        //        nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue;
+        //        nextRow[xIndex] = nextRowValue;
 
+        //        centerRowValue = centerRow[xIndex];
+        //        smoothed[xIndex, 0] = centerRowValue + 2.0F * centerRowValue + nextRowValue; // nearest neighbor interpolation of previous row
+
+        //        previousCellValue = centerCellValue;
+        //        centerCellValue = nextCellValue;
+        //    }
+        //    nextRowValue = previousCellValue + 2.0F * centerCellValue + centerCellValue;
+        //    nextRow[unsmoothed.SizeX - 1] = nextRowValue;
+        //    centerRowValue = centerRow[unsmoothed.SizeX - 1];
+        //    smoothed[unsmoothed.SizeX - 1] = centerRowValue + 2.0F * centerRowValue + nextRowValue;
+
+        //    // all middle output rows: previous, center, and next input rows
+        //    float[] previousRow = centerRow;
+        //    float previousRowValue;
+        //    centerRow = nextRow;
+        //    nextRow = rowBuffers.RowBuffer3;
+        //    int yIndex;
+        //    for (int yIndexNext = 2; yIndexNext < unsmoothed.SizeY; ++yIndexNext)
+        //    {
         //        yIndex = yIndexNext - 1;
-        //        for (int xIndex = 0, xIndexNext = 1; xIndexNext < smoothed.XSize; ++xIndexNext, ++xIndex)
+        //        centerCellValue = 0.0625F * unsmoothed[0, yIndexNext];
+        //        previousCellValue = centerCellValue;
+        //        for (int xIndex = 0, xIndexNext = 1; xIndexNext < smoothed.SizeX; ++xIndexNext, ++xIndex)
         //        {
-        //            float nextCellValue = 0.0625F * band[xIndexNext, 0];
-        //            float nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue;
+        //            float nextCellValue = 0.0625F * unsmoothed[xIndexNext, yIndexNext];
+        //            nextRowValue = previousCellValue + 2.0F * centerCellValue + nextCellValue;
         //            nextRow[xIndex] = nextRowValue;
 
-        //            float previousRowValue = previousRow[xIndex];
-        //            float centerRowValue = centerRow[xIndex];
+        //            previousRowValue = previousRow[xIndex];
+        //            centerRowValue = centerRow[xIndex];
         //            smoothed[xIndex, yIndex] = previousRowValue + 2.0F * centerRowValue + nextRowValue;
 
         //            previousCellValue = centerCellValue;
         //            centerCellValue = nextCellValue;
         //        }
+        //        nextRowValue = previousCellValue + 2.0F * centerCellValue + centerCellValue;
+        //        nextRow[unsmoothed.SizeX - 1] = nextRowValue;
+        //        centerRowValue = centerRow[unsmoothed.SizeX - 1];
+        //        previousRowValue = previousRow[unsmoothed.SizeX - 1];
+        //        smoothed[unsmoothed.SizeX - 1, yIndex] = previousRowValue + 2.0F * centerRowValue + nextRowValue;
 
-        //        tempRow = nextRow;
+        //        (previousRow, centerRow, nextRow) = (centerRow, nextRow, previousRow); // advance buffers for next iteration
         //    }
 
-        //    // last row: only previous and center rows
+        //    // last output row: only previous and center rows
         //    previousRow = centerRow;
         //    centerRow = nextRow;
-        //    yIndex = smoothed.YSize - 1;
-        //    for (int xIndex = 0, xIndexNext = 1; xIndexNext < smoothed.XSize; ++xIndexNext, ++xIndex)
+        //    yIndex = smoothed.SizeY - 1;
+        //    for (int xIndex = 0; xIndex < smoothed.SizeX; ++xIndex)
         //    {
-        //        float previousRowValue = previousRow[xIndex];
-        //        float centerRowValue = centerRow[xIndex];
-        //        smoothed[xIndex, yIndex] = previousRowValue + 2.0F * centerRowValue;
+        //        previousRowValue = previousRow[xIndex];
+        //        centerRowValue = centerRow[xIndex];
+        //        smoothed[xIndex, yIndex] = previousRowValue + 2.0F * centerRowValue + centerRowValue; // nearest neighbor interpolation of next row
         //    }
         //}
 

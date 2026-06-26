@@ -36,6 +36,11 @@ namespace Mars.Clouds.Cmdlets
             this.LocalMaxima = String.Empty;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-LocalMaxima";
+        }
+
         private int FindLocalMaxima(LocalMaximaState tileState)
         {
             RasterNeighborhood8<float> currentNeighborhood = tileState.CurrentNeighborhood;
@@ -118,7 +123,7 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least {geopackageSqlBackgroundThreads + 1} to allow for local maxima to be identified concurrent with  SQL {geopackageSqlBackgroundThreads}{(geopackageSqlBackgroundThreads == 1 ? "thread" : "threads")}.");
             }
 
-            const string cmdletName = "Get-LocalMaxima";
+            string cmdletName = this.GetName();
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
                 return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary | DigitalSurfaceModelBands.SourceIDSurface);
@@ -142,7 +147,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks findLocalMaximaTasks = new(Int32.Min(maxDataThreads, dsm.NonNullTileCount), () =>
             {
                 LocalMaximaRaster? localMaximaRaster = null; // cache for reuse to offload GC
-                for (int tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < maximaReadWrite.MaxTileIndex; tileWriteIndex = maximaReadWrite.GetNextTileWriteIndexThreadSafe())
+                for (int tileWriteIndex = maximaReadWrite.GetNextFileWriteIndexThreadSafe(); tileWriteIndex < maximaReadWrite.MaxTileIndex; tileWriteIndex = maximaReadWrite.GetNextFileWriteIndexThreadSafe())
                 {
                     DigitalSurfaceModel? dsmTile = dsm[tileWriteIndex];
                     if (dsmTile == null) 
@@ -226,12 +231,12 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new(cmdletName, $"Found local maxima in {maximaReadWrite.TilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+ {geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...");
+            TimedProgressRecord progress = new(cmdletName, $"Found local maxima in {maximaReadWrite.FilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+ {geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...");
             this.WriteProgress(progress);
             while (findLocalMaximaTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = $"Found local maxima in {maximaReadWrite.TilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+{geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...";
-                progress.Update(maximaReadWrite.TilesWritten, dsm.NonNullTileCount);
+                progress.StatusDescription = $"Found local maxima in {maximaReadWrite.FilesWritten} of {dsm.NonNullTileCount} tiles ({findLocalMaximaTasks.Count}[+{geopackageSqlBackgroundThreads} {(findLocalMaximaTasks.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread" : "] threads")})...";
+                progress.Update(maximaReadWrite.FilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
 

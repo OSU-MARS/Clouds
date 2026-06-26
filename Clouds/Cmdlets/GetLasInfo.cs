@@ -1,32 +1,28 @@
 ﻿using Mars.Clouds.Las;
-using System;
 using System.Collections.Generic;
 using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "LasInfo")]
-    public class GetLasInfo : LasCmdlet
+    public class GetLasInfo : LasFilesCmdlet
     {
-        [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
-        public DateOnly? FallbackDate { get; set; }
-
-        public GetLasInfo()
+        public override string GetName()
         {
-            this.FallbackDate = null;
+            return $"{VerbsCommon.Get}-LasInfo";
         }
 
         protected override void ProcessRecord()
         {
-            List<string> lasFilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
-            List<LasTile> lasFileMetadata = new(lasFilePaths.Count); // use LasTile to flow file paths
-            for (int fileIndex = 0; fileIndex < lasFilePaths.Count; ++fileIndex)
+            List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            List<LasFile> cloudMetadata = new(cloudPaths.Count);
+            for (int fileIndex = 0; fileIndex < cloudPaths.Count; ++fileIndex)
             {
                 // can multithread if needed but doesn't seem worth the overhead up to a few hundred .las files
-                string lasFilePath = lasFilePaths[fileIndex];
+                string lasFilePath = cloudPaths[fileIndex];
                 using LasReader lasReader = LasReader.CreateForHeaderAndVlrRead(lasFilePath, this.DiscardOverrunningVlrs);
-                LasTile lasFile = new(lasFilePath, lasReader, this.FallbackDate);
-                lasFileMetadata.Add(lasFile);
+                LasFile lasFile = new(lasFilePath, lasReader, this.FallbackDate);
+                cloudMetadata.Add(lasFile);
 
                 if (this.Stopping)
                 {
@@ -34,13 +30,13 @@ namespace Mars.Clouds.Cmdlets
                 }
             }
 
-            if (lasFileMetadata.Count == 1)
+            if (cloudMetadata.Count == 1)
             {
-                this.WriteObject(lasFileMetadata[0]);
+                this.WriteObject(cloudMetadata[0]);
             }
             else
             {
-                this.WriteObject(lasFileMetadata);
+                this.WriteObject(cloudMetadata);
             }
             base.ProcessRecord();
         }

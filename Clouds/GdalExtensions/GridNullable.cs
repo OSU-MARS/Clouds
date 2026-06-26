@@ -1,8 +1,6 @@
 ﻿using OSGeo.OSR;
 using System;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 
 namespace Mars.Clouds.GdalExtensions
 {

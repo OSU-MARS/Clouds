@@ -1,5 +1,4 @@
 ﻿using Mars.Clouds.GdalExtensions;
-using Mars.Clouds.Segmentation;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;

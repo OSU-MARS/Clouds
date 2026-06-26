@@ -1082,24 +1082,24 @@ namespace Mars.Clouds.Las
             // Fills are no ops if the band's data hasn't been loaded or if the data buffers have been returned to pool.
             Debug.Assert(this.Surface.HasNoDataValue && this.CanopyMaxima3.HasNoDataValue && this.CanopyHeight.HasNoDataValue);
 
-            this.Surface.FillNoData();
-            this.CanopyMaxima3.FillNoData();
-            this.CanopyHeight.FillNoData();
+            this.Surface.FillWithNoData();
+            this.CanopyMaxima3.FillWithNoData();
+            this.CanopyHeight.FillWithNoData();
 
-            this.DsmSlope?.FillNoData();
-            this.DsmAspect?.FillNoData();
-            this.CmmSlope3?.FillNoData();
-            this.CmmAspect3?.FillNoData();
+            this.DsmSlope?.FillWithNoData();
+            this.DsmAspect?.FillWithNoData();
+            this.CmmSlope3?.FillWithNoData();
+            this.CmmAspect3?.FillWithNoData();
 
-            this.Subsurface?.FillNoData();
-            this.AerialMean?.FillNoData();
-            this.GroundMean?.FillNoData();
+            this.Subsurface?.FillWithNoData();
+            this.AerialMean?.FillWithNoData();
+            this.GroundMean?.FillWithNoData();
 
             this.AerialPoints?.Fill(0U);
             this.GroundPoints?.Fill(0U);
 
-            this.ReturnNumberSurface?.FillNoData();
-            this.SourceIDSurface?.FillNoData();
+            this.ReturnNumberSurface?.FillWithNoData();
+            this.SourceIDSurface?.FillWithNoData();
         }
 
         public override void Reset(string filePath, Dataset rasterDataset, bool readData)
@@ -1186,53 +1186,20 @@ namespace Mars.Clouds.Las
 
             // update secondary bands' CRS regardless of whether the band is flagged in this.Band
             // Bands should default to a consistent CRS if later flagged.
-            if (this.DsmSlope != null)
-            {
-                this.DsmSlope.Crs = crs;
-            }
-            if (this.DsmAspect != null)
-            {
-                this.DsmAspect.Crs = crs;
-            }
-            if (this.CmmSlope3 != null)
-            {
-                this.CmmSlope3.Crs = crs;
-            }
-            if (this.CmmAspect3 != null)
-            {
-                this.CmmAspect3.Crs = crs;
-            }
+            this.DsmSlope?.Crs = crs;
+            this.DsmAspect?.Crs = crs;
+            this.CmmSlope3?.Crs = crs;
+            this.CmmAspect3?.Crs = crs;
 
-            if (this.Subsurface != null)
-            {
-                this.Subsurface.Crs = crs;
-            }
-            if (this.AerialMean != null)
-            {
-                this.AerialMean.Crs = crs;
-            }
-            if (this.GroundMean != null)
-            {
-                this.GroundMean.Crs = crs;
-            }
+            this.Subsurface?.Crs = crs;
+            this.AerialMean?.Crs = crs;
+            this.GroundMean?.Crs = crs;
 
-            if (this.AerialPoints != null)
-            {
-                this.AerialPoints.Crs = crs;
-            }
-            if (this.GroundPoints != null)
-            {
-                this.GroundPoints.Crs = crs;
-            }
+            this.AerialPoints?.Crs = crs;
+            this.GroundPoints?.Crs = crs;
 
-            if (this.ReturnNumberSurface != null)
-            {
-                this.ReturnNumberSurface.Crs = crs;
-            }
-            if (this.SourceIDSurface != null)
-            {
-                this.SourceIDSurface.Crs = crs;
-            }
+            this.ReturnNumberSurface?.Crs = crs;
+            this.SourceIDSurface?.Crs = crs;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

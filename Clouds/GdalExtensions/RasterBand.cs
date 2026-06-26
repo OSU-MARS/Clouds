@@ -1,5 +1,4 @@
-﻿using Mars.Clouds.Extensions;
-using OSGeo.GDAL;
+﻿using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -400,6 +399,19 @@ namespace Mars.Clouds.GdalExtensions
             return band;
         }
 
+        /// <summary>
+        /// Copies all values from another raster band with the same number of cells, including no data values. The x and y sizes, CRS, and transform need not match.
+        /// </summary>
+        public void CopyAllValuesFrom(RasterBand<TBand> other)
+        {
+            if (this.Cells != other.Cells)
+            {
+                throw new ArgumentOutOfRangeException(nameof(other), $"Raster band '{other.Name}' has {other.Cells:n0} cells but band '{this.Name}' has {this.Cells:n0} cells. Since the number of cells differs, it is unclear how data should be copied.");
+            }
+
+            other.Data.CopyTo(this.Data, 0);
+        }
+
         // syntactic sugar convenient to Raster implementations with optional bands
         public void Fill(TBand value)
         {
@@ -407,7 +419,7 @@ namespace Mars.Clouds.GdalExtensions
             Array.Fill(this.Data, value);
         }
 
-        public void FillNoData()
+        public void FillWithNoData()
         {
             if (this.HasNoDataValue == false)
             {
@@ -415,6 +427,26 @@ namespace Mars.Clouds.GdalExtensions
             }
 
             this.Fill(this.NoDataValue);
+        }
+
+        public void FillNoDataFrom(RasterBand<TBand> other)
+        {
+            if (this.HasNoDataValue == false)
+            {
+                throw new InvalidOperationException($"Raster band lacks a no data value and thus there is nothing for this function to do. To avoid unnecessary overhead, callers should check {nameof(this.HasNoDataValue)}.");
+            }
+            if (this.Cells != other.Cells)
+            {
+                throw new ArgumentOutOfRangeException(nameof(other), $"Raster band '{other.Name}' has {other.Cells:n0} cells but band '{this.Name}' has {this.Cells:n0} cells. Since the number of cells differs, it is unclear how data should be copied.");
+            }
+
+            for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
+            {
+                if (this.IsNoData(this[cellIndex]))
+                {
+                    this[cellIndex] = other[cellIndex];
+                }
+            }
         }
 
         public static TBand GetDefaultNoDataValue()
@@ -695,7 +727,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
+        [MemberNotNull(nameof(RasterBand<>.NoDataValue))]
         private void SetNoDataValue(Band gdalBand)
         {
             gdalBand.GetNoDataValue(out double gdalNoDataValue, out int hasNoDataValue);
@@ -738,6 +770,30 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
+        public void StencilValuesTo(RasterBand<TBand> other)
+        {
+            if (this.Cells != other.Cells)
+            {
+                throw new ArgumentOutOfRangeException(nameof(other), $"Raster band '{other.Name}' has {other.Cells:n0} cells but band '{this.Name}' has {this.Cells:n0} cells. Since the number of cells differs, it is unclear how data should be copied.");
+            }
+
+            if (this.HasNoDataValue)
+            {
+                for (int cellIndex = 0; cellIndex < this.Cells; ++cellIndex)
+                {
+                    TBand cellValue = this[cellIndex];
+                    if (this.IsNoData(cellValue) == false)
+                    {
+                        other[cellIndex] = cellValue;
+                    }
+                }
+            }
+            else
+            {
+                other.CopyAllValuesFrom(this);
+            }
+        }
+
         public bool TryGetMaximumValue(out TBand maximumValue)
         {
             maximumValue = TBand.MinValue;
@@ -770,7 +826,7 @@ namespace Mars.Clouds.GdalExtensions
             return this.IsNoData(value) == false;
         }
 
-        [MemberNotNullWhen(true, nameof(RasterBand<TBand>.Data))] 
+        [MemberNotNullWhen(true, nameof(RasterBand<>.Data))] 
         public override bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool)
         {
             if ((this.Data != null) && (this.Data.Length > 0)) // called from constructor so this.Data may be null

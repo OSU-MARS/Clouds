@@ -1,5 +1,4 @@
 ﻿using Mars.Clouds.GdalExtensions;
-using OSGeo.OSR;
 using System;
 using System.Buffers.Binary;
 using System.Diagnostics;
@@ -152,17 +151,13 @@ namespace Mars.Clouds.Las
             return (2.0F, 4.5F * 2.0F);
         }
 
-        public int TryFindUnclassifiedNoise(LasTile lasTile, RasterBand<float> dtmTile, float highNoiseThreshold, float lowNoiseThreshold)
+        public int TryFindUnclassifiedNoise(LasFile lasFile, RasterBand<float> dtmTile, float highNoiseThreshold, float lowNoiseThreshold)
         {
-            SpatialReference lasTileCrs = lasTile.GetSpatialReference();
-            if (SpatialReferenceExtensions.IsSameCrs(lasTileCrs, dtmTile.Crs) == false)
-            {
-                throw new NotSupportedException($"The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '{lasTileCrs.GetName()}' while the DTM CRS is {dtmTile.Crs.GetName()}.");
-            }
+            Debug.Assert(SpatialReferenceExtensions.IsSameCrs(lasFile.GetSpatialReference(), dtmTile.Crs), $"The point clouds and DTM are currently required to be in the same CRS. The point cloud CRS is '{lasFile.GetSpatialReference().GetName()}' while the DTM CRS is {dtmTile.Crs.GetName()}.");
 
-            LasHeader10 lasHeader = lasTile.Header;
+            LasHeader10 lasHeader = lasFile.Header;
             LasReader.ThrowOnUnsupportedPointFormat(lasHeader);
-            this.MoveToPoints(lasTile);
+            this.MoveToPoints(lasFile);
 
             // read points
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();

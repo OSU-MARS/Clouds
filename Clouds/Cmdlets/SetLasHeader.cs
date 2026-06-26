@@ -6,8 +6,16 @@ using System.Management.Automation;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Set, "LasHeader")]
-    public class SetLasHeader : LasCmdlet
+    public class SetLasHeader : LasFilesCmdlet
     {
+        [Parameter(HelpMessage = $"Value to set creation year in point clouds' header to. If -{nameof(LasFilesCmdlet.FallbackDate)} is specified but -{nameof(SetLasHeader.FileCreationYear)} is not, the fallback date will be used to set the year.")]
+        [ValidateRange(2003, 9999)] // DateTime.MaxValue.Year isn't const
+        public int FileCreationYear { get; set; }
+
+        [Parameter(HelpMessage = $"Value to set creation day of year in point clouds' header to. If -{nameof(LasFilesCmdlet.FallbackDate)} is specified but -{nameof(SetLasHeader.FileCreationDayOfYear)} is not, the fallback date will be used to set the day of the year.")]
+        [ValidateRange(1, 366)]
+        public int FileCreationDayOfYear { get; set; }
+
         [Parameter(HelpMessage = "Value to set x offset in point clouds' header to.")]
         public double XOffset { get; set; }
 
@@ -19,28 +27,60 @@ namespace Mars.Clouds.Cmdlets
 
         public SetLasHeader()
         {
+            this.FileCreationDayOfYear = -1;
+            this.FileCreationYear = -1;
             this.XOffset = Double.NaN;
             this.YOffset = Double.NaN;
             this.ZOffset = Double.NaN;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Set}-LasHeader";
+        }
+
         protected override void ProcessRecord()
         {
-            bool hasChange = (Double.IsNaN(this.XOffset) == false) || (Double.IsNaN(this.YOffset) == false) || (Double.IsNaN(this.ZOffset) == false);
-            if (hasChange == false)
+            // if a fallback date was specified, propagate it to the .las file's header if values for the header weren't specified directly
+            if (this.FallbackDate.HasValue)
             {
-                throw new ParameterBindingException($"At least one of -{nameof(this.XOffset)}, -{nameof(this.YOffset)}, or -{nameof(this.ZOffset)} must be specified to modify the point cloud(s) specified by -{nameof(this.Las)}.");
+                if (this.FileCreationYear == -1)
+                {
+                    this.FileCreationYear = this.FallbackDate.Value.Year;
+                }
+                if (this.FileCreationDayOfYear == -1)
+                {
+                    this.FileCreationDayOfYear = this.FallbackDate.Value.DayOfYear;
+                }
             }
 
-            List<string> lasFilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
-            for (int fileIndex = 0; fileIndex < lasFilePaths.Count; ++fileIndex)
+            bool hasChange = this.FallbackDate.HasValue || (this.FileCreationYear != -1) || (this.FileCreationDayOfYear != -1) || 
+                             (Double.IsNaN(this.XOffset) == false) || (Double.IsNaN(this.YOffset) == false) || (Double.IsNaN(this.ZOffset) == false);
+            if (hasChange == false)
+            {
+                throw new ParameterBindingException($"At least one of -{nameof(this.FallbackDate)}, -{nameof(this.FileCreationYear)}, -{nameof(this.FileCreationDayOfYear)}, -{nameof(this.XOffset)}, -{nameof(this.YOffset)}, or -{nameof(this.ZOffset)} must be specified to modify the point cloud(s) specified by -{nameof(this.Las)}.");
+            }
+
+            List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            for (int pointCloudIndex = 0; pointCloudIndex < cloudPaths.Count; ++pointCloudIndex)
             {
                 // can multithread if needed but doesn't seem worth the overhead up to a few hundred .las files
-                string lasFilePath = lasFilePaths[fileIndex];
-                using LasReader lasReader = LasReader.CreateForHeaderAndVlrReadAndWrite(lasFilePath, this.DiscardOverrunningVlrs);
-                LasTile lasFile = new(lasFilePath, lasReader, fallbackCreationDate: null);
+                string cloudFilePath = cloudPaths[pointCloudIndex];
+                using LasReader lasReader = LasReader.CreateForHeaderAndVlrReadAndWrite(cloudFilePath, this.DiscardOverrunningVlrs);
+                LasFile lasFile = new(cloudFilePath, lasReader, this.FallbackDate);
 
                 bool lasModified = false;
+                if (this.FileCreationYear >= 0)
+                {
+                    lasFile.Header.FileCreationYear = (ushort)this.FileCreationYear;
+                    lasModified = true; 
+                }
+                if (this.FileCreationDayOfYear >= 0)
+                {
+                    lasFile.Header.FileCreationDayOfYear = (ushort)this.FileCreationDayOfYear;
+                    lasModified = true;
+                }
+
                 if ((Double.IsNaN(this.XOffset) == false) && (lasFile.Header.XOffset != this.XOffset))
                 {
                     double xTranslation = this.XOffset - lasFile.Header.XOffset;

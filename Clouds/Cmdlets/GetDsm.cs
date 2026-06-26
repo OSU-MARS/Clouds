@@ -46,6 +46,11 @@ namespace Mars.Clouds.Cmdlets
             this.SubsurfaceGap = Single.NaN;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-Dsm";
+        }
+
         protected override void ProcessRecord()
         {
             if (Fma.IsSupported == false)
@@ -59,7 +64,7 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least two.");
             }
 
-            const string cmdletName = "Get-Dsm";
+            string cmdletName = this.GetName();
             bool dsmPathIsDirectory = Directory.Exists(this.Dsm);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Dsm), dsmPathIsDirectory);
 
@@ -83,7 +88,7 @@ namespace Mars.Clouds.Cmdlets
             // the point cloud density, greater initial list capacities. For larger sets of tiles, worker requirements set by tile read
             // speed.
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDsmBandwidth(dsmBands, this.Unbuffered);
-            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
+            int readThreads = this.GetPointCloudReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
 
             int preferredCompletionThreadsAsymptotic = Int32.Min(this.DataThreads - readThreads, Int32.Max(readThreads / 3, 2)); // provide at least two completion threads as it appears sometimes beneficial to have more than one
             // but with small numbers of tiles the preferred number of workers increases to reduce overall latency
@@ -107,7 +112,7 @@ namespace Mars.Clouds.Cmdlets
                     dsmReadCreateWrite.TryWriteCompletedTiles(this.CancellationTokenSource, bandStatisticsByTile: null);
 
                     // if all available tiles are completed and tiles remain to be read, read another tile and create its DSM
-                    if (dsmReadCreateWrite.TileReadIndex < dsmReadCreateWrite.MaxTileIndex)
+                    if (dsmReadCreateWrite.FileReadIndex < dsmReadCreateWrite.MaxTileIndex)
                     {
                         readSemaphore.Wait(this.CancellationTokenSource.Token);
                         if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
@@ -118,7 +123,7 @@ namespace Mars.Clouds.Cmdlets
                         }
 
                         LasTile? lasTile = null;
-                        for (int tileIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe(); tileIndex < dsmReadCreateWrite.MaxTileIndex; tileIndex = dsmReadCreateWrite.GetNextTileReadIndexThreadSafe())
+                        for (int tileIndex = dsmReadCreateWrite.GetNextFileReadIndexThreadSafe(); tileIndex < dsmReadCreateWrite.MaxTileIndex; tileIndex = dsmReadCreateWrite.GetNextFileReadIndexThreadSafe())
                         {
                             lasTile = lasGrid[tileIndex];
                             if (lasTile == null)
@@ -128,7 +133,7 @@ namespace Mars.Clouds.Cmdlets
 
                             // read DTM tile
                             string tileName = Tile.GetName(lasTile.FilePath);
-                            string dtmTilePath = dsmReadCreateWrite.DtmPathIsDirectory ? LasTilesCmdlet.GetRasterTilePath(this.Dtm, tileName) : this.Dtm;
+                            string dtmTilePath = dsmReadCreateWrite.DtmPathIsDirectory ? GdalCmdlet.GetRasterTilePath(this.Dtm, tileName) : this.Dtm;
                             dtmTile = RasterBand<float>.CreateOrLoad(dtmTilePath, this.DtmBand, dtmTile);
 
                             // tilePoints must be in the same CRS as the DTM but can have any extent equal to or smaller than the DSM and DTM tiles
@@ -191,13 +196,13 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, dsmReadCreateWrite.GetPointCloudReadFileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, dsmTasks.Count));
             this.WriteProgress(progress);
             while (dsmTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count);
-                progress.Update(dsmReadCreateWrite.TilesWritten, lasGrid.NonNullCells);
+                progress.StatusDescription = dsmReadCreateWrite.GetPointCloudReadFileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, dsmTasks.Count);
+                progress.Update(dsmReadCreateWrite.FilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
 
@@ -211,7 +216,7 @@ namespace Mars.Clouds.Cmdlets
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose($"{dsmReadCreateWrite.CellsWritten:n0} DSM cells from {lasGrid.NonNullCells} {(lasGrid.NonNullCells == 1 ? " tile" : " tiles")} ({dsmReadCreateWrite.TotalNumberOfPoints / 1E6:0.0} Mpoints) in {progress.Stopwatch.ToElapsedString()}: {dsmReadCreateWrite.TotalPointDataInGB:0.00} GB at {dsmReadCreateWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.00} tiles/s ({dsmReadCreateWrite.MeanPointsPerTile / 1E6:0.0} Mpoints/tile, {dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds:0.0} GB/s).");
+            this.WriteVerbose($"{dsmReadCreateWrite.CellsWritten:n0} DSM cells from {lasGrid.NonNullCells} {(lasGrid.NonNullCells == 1 ? " tile" : " tiles")} ({dsmReadCreateWrite.TotalNumberOfPoints / 1E6:0.0} Mpoints) in {progress.Stopwatch.ToElapsedString()}: {dsmReadCreateWrite.TotalPointDataInGB:0.00} GB at {dsmReadCreateWrite.FilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.00} tiles/s ({dsmReadCreateWrite.MeanPointsPerTile / 1E6:0.0} Mpoints/tile, {dsmReadCreateWrite.TotalPointDataInGB / progress.Stopwatch.Elapsed.TotalSeconds:0.0} GB/s).");
             base.ProcessRecord();
         }
 
@@ -276,11 +281,11 @@ namespace Mars.Clouds.Cmdlets
                 };
             }
 
-            public override string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
+            public override string GetPointCloudReadFileWriteStatusDescription(int lasFilesToRead, int activeReadThreads, int totalThreads)
             {
-                string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
+                string status = this.FilesRead + (this.FilesRead == 1 ? " cloud read, " : " clouds read, ") +
                                 this.Dsm.NonNullTileCount + (this.Dsm.NonNullTileCount == 1 ? " DSM created, " : " DSMs created, ") +
-                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (this.BypassOutputRasterWriteToDisk ? "completed (" : "written (") + totalThreads +
+                                this.FilesWritten + " of " + lasFilesToRead + " tiles " + (this.BypassOutputRasterWriteToDisk ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;
             }

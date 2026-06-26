@@ -39,9 +39,9 @@ namespace Mars.Clouds.Segmentation
             Debug.Assert(SpatialReferenceExtensions.IsSameCrs(raster.Crs, extent.Crs));
             raster.FilePath = filePath;
             raster.Transform.Copy(extent.Transform);
-            raster.DsmMaxima.FillNoData();
-            raster.CmmMaxima.FillNoData();
-            raster.ChmMaxima.FillNoData();
+            raster.DsmMaxima.FillWithNoData();
+            raster.CmmMaxima.FillWithNoData();
+            raster.ChmMaxima.FillWithNoData();
             return raster;
         }
 

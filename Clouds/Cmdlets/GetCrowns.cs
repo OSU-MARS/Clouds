@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
-using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -79,9 +78,14 @@ namespace Mars.Clouds.Cmdlets
             this.Vrt = false;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-Crowns";
+        }
+
         protected override void ProcessRecord()
         {
-            const string cmdletName = "Get-Crowns";
+            string cmdletName = this.GetName();
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, (string dsmPrimaryBandFilePath) =>
             {
                 return DigitalSurfaceModel.CreateFromPrimaryBandMetadata(dsmPrimaryBandFilePath, DigitalSurfaceModelBands.Primary | DigitalSurfaceModelBands.DsmSlope | DigitalSurfaceModelBands.DsmAspect);
@@ -182,9 +186,9 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (crownTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = crownReadWrite.TilesRead + (crownReadWrite.TilesRead == 1 ? " treetop tile read, " : " treetop tiles read, ") +
+                progress.StatusDescription = crownReadWrite.FilesRead + (crownReadWrite.FilesRead == 1 ? " treetop tile read, " : " treetop tiles read, ") +
                                              crowns.NonNullTileCount + (crowns.NonNullTileCount == 1 ? " crown tile created, " : " crown tiles created, ") +
-                                             crownReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles " + (this.NoWrite ? "completed (" : "written (") + 
+                                             crownReadWrite.FilesWritten + " of " + dsm.NonNullTileCount + " tiles " + (this.NoWrite ? "completed (" : "written (") + 
                                              crownTasks.Count + (crownTasks.Count == 1 ? " thread)..." : " threads)...");
                 progress.Update(crownReadWrite.TilesCreated, dsm.NonNullTileCount);
                 this.WriteProgress(progress);

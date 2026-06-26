@@ -11,7 +11,7 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "LayerCounts")]
     public class GetLayerCounts : FileCmdlet
     {
-        [Parameter(Mandatory = true, HelpMessage = "List of directories or wildcarded file paths to read files from.")]
+        [Parameter(Mandatory = true, HelpMessage = "List of directories or wildcarded GIS vector file paths to read layer counts from. Files can be of any vector format known to GDAL.")]
         [ValidateNotNullOrWhiteSpace]
         public List<string> Files { get; set; }
 
@@ -25,6 +25,11 @@ namespace Mars.Clouds.Cmdlets
         {
             this.Files = [];
             this.MetadataThreads = Environment.ProcessorCount;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-LayerCounts";
         }
 
         protected override void ProcessRecord()
@@ -46,6 +51,8 @@ namespace Mars.Clouds.Cmdlets
                     layer.GetFeatureCount(force: 0);
                 }
             }, this.CancellationTokenSource);
+
+            // TODO: show status
 
             base.ProcessRecord();
         }

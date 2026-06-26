@@ -2,6 +2,7 @@
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
 using OSGeo.OSR;
 using System;
@@ -15,12 +16,8 @@ namespace Mars.Clouds.Cmdlets
 {
     // TODO: point cloud trimming support? .vrt support?
     [Cmdlet(VerbsData.Export, "Slices")]
-    public class ExportSlices : GdalCmdlet
+    public class ExportSlices : LasFilesCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = ".las files to extract slices from. Can be a single file or a set of files if wildcards are used.")]
-        [ValidateNotNullOrWhiteSpace]
-        public List<string> Las { get; set; }
-
         [Parameter(Mandatory = true, HelpMessage = "Either a path to a single DTM underlying all of the point clouds specified by -Las or a path to a directory containing individual GeoTIFF DTMs whose file names match the point clouds. DTMs must be single precision floating point rasters with ground surface heights in the same CRS as its correspoinding point cloud tile. The read capability of the DTMs' storage is assumed to be the same as or greater than the DSM's storage.")]
         [ValidateNotNullOrWhiteSpace]
         public string Dtm { get; set; }
@@ -60,6 +57,11 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Whether or not to compress slice rasters. Default is false.")]
         public SwitchParameter CompressRasters { get; set; }
 
+        static ExportSlices()
+        {
+            GdalBase.ConfigureAll(); // see remarks in GdalCmdlet..ctor()
+        }
+
         public ExportSlices() 
         {
             this.CellSize = Double.NaN;
@@ -71,6 +73,11 @@ namespace Mars.Clouds.Cmdlets
             this.MinHeight = Double.NaN;
             this.Slice = String.Empty;
             this.Trim = 0.0;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsData.Export}-Slices";
         }
 
         protected override void ProcessRecord()
@@ -126,8 +133,8 @@ namespace Mars.Clouds.Cmdlets
                 {
                     // load cloud and its DTM
                     string cloudPath = cloudPaths[cloudIndex];
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs);
+                    LasFile cloud = new(cloudPath, reader, fallbackCreationDate: null);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
 
                     string cloudName = Tile.GetName(cloudPath);
@@ -202,7 +209,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Export-Slices", $"Sliced {slicesWritten} of {cloudPaths.Count} point clouds...");
+            TimedProgressRecord progress = new(this.GetName(), $"Sliced {slicesWritten} of {cloudPaths.Count} point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = $"Sliced {slicesWritten} of {cloudPaths.Count} point clouds...";

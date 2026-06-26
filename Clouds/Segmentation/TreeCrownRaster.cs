@@ -99,7 +99,7 @@ namespace Mars.Clouds.Segmentation
             }
 
             // clear any previous crown segmentation
-            this.TreeID.FillNoData();
+            this.TreeID.FillWithNoData();
 
             // find minimum cost path for each DSM cell and mark tree IDs into cells
             int cellDsmEndIndexY = 0; // exclusive

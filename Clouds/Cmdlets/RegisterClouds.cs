@@ -13,12 +13,8 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsLifecycle.Register, "Clouds")]
-    public class RegisterClouds : GdalCmdlet
+    public class RegisterClouds : LasFilesCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds to set origin and coordinate system of.")]
-        [ValidateNotNullOrEmpty]
-        public List<string> Las { get; set; }
-
         [Parameter(HelpMessage = "Latitude of point cloud's origin in WGS84 coordinates.")]
         [ValidateRange(-90.0, 90.0)]
         public double Lat { get; set; }
@@ -69,9 +65,6 @@ namespace Mars.Clouds.Cmdlets
         [ValidateRange(-100.0F, 100.0F)]
         public double[] NudgeY { get; set; }
 
-        [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
-        public DateOnly? FallbackDate { get; set; }
-
         [Parameter(HelpMessage = "Set x, y, and z ranges in header to actual point extents (Faro Connect oversizes x and y, possibly FJ Dynamics).")]
         public SwitchParameter RepairBounds { get; set; }
 
@@ -87,8 +80,7 @@ namespace Mars.Clouds.Cmdlets
 
         public RegisterClouds()
         {
-            this.Declination = []; // empty so RotationXY is used as by default
-            this.Las = [];
+            this.Declination = [];
             this.Lat = Double.NaN;
             this.Long = Double.NaN;
             this.X = Double.NaN;
@@ -97,13 +89,18 @@ namespace Mars.Clouds.Cmdlets
             this.HorizontalEpsg = Constant.Epsg.Utm10N;
             this.VerticalEpsg = Constant.Epsg.Navd88m;
             this.SourceID = 1;
-            this.RotationXY = [ 0.0 ];
+            this.RotationXY = [];
             this.NudgeX = [ 0.0 ];
             this.NudgeY = [ 0.0 ];
             this.FallbackDate = null;
             this.RepairClassification = false;
             this.RepairReturn = false;
             this.ScannerUnit = Constant.Crs.LinearUnitMeter;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsLifecycle.Register}-Clouds";
         }
 
         protected override void ProcessRecord()
@@ -121,11 +118,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.Las), $"-{nameof(this.Las)} = '{String.Join(", ", this.Las)}' does not match any existing point clouds.");
             }
-            if ((this.Declination.Length != 1) && (this.Declination.Length != cloudPaths.Count))
+            if ((this.Declination.Length != 1) && (this.Declination.Length != cloudPaths.Count) && (this.RotationXY.Length == 0))
             {
                 throw new ParameterOutOfRangeException(nameof(this.Declination), $"-{nameof(this.Declination)} must have either single value or as many values as there are clouds to register. There are {this.Declination.Length} values in -{nameof(this.Declination)} and {cloudPaths.Count} clouds.");
             }
-            if ((this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
+            if ((this.Declination.Length == 0) && (this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
             {
                 throw new ParameterOutOfRangeException(nameof(this.RotationXY), $"-{nameof(this.RotationXY)} must have either single value or as many values as there are clouds to register. There are {this.RotationXY.Length} values in -{nameof(this.RotationXY)} and {cloudPaths.Count} clouds.");
             }
@@ -133,35 +130,39 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException($"{nameof(this.Declination)} and {nameof(this.RotationXY)}", $"Specify one or the other of -{nameof(this.Declination)} and -{nameof(this.RotationXY)}, not both.");
             }
+            else if ((this.Declination.Length == 0) && (this.RotationXY.Length == 0))
+            {
+                this.RotationXY = [ 0.0 ]; // default to no rotation if neither of -Declination or -RotationXY is specified
+            }
             if ((this.NudgeX.Length != 1) && (this.NudgeX.Length != cloudPaths.Count))
             {
-                throw new ParameterOutOfRangeException(nameof(this.NudgeX), $"-{nameof(this.NudgeX)} must have either single value or as many values as there are clouds to register. There are {this.NudgeX.Length} values in -{nameof(this.NudgeX)} and {cloudPaths.Count} clouds.");
+                throw new ParameterOutOfRangeException(nameof(this.NudgeX), $"-{nameof(this.NudgeX)} must have either single value or as many values as there are clouds to register. There are {this.NudgeX.Length} values in -{nameof(this.NudgeX)} and {cloudPaths.Count} {(cloudPaths.Count > 1 ? "clouds" : "cloud")}.");
             }
             if ((this.NudgeY.Length != 1) && (this.NudgeY.Length != cloudPaths.Count))
             {
-                throw new ParameterOutOfRangeException(nameof(this.NudgeY), $"-{nameof(this.NudgeY)} must have either single value or as many values as there are clouds to register. There are {this.NudgeY.Length} values in -{nameof(this.NudgeY)} and {cloudPaths.Count} clouds.");
+                throw new ParameterOutOfRangeException(nameof(this.NudgeY), $"-{nameof(this.NudgeY)} must have either single value or as many values as there are clouds to register. There are {this.NudgeY.Length} values in -{nameof(this.NudgeY)} and {cloudPaths.Count} {(cloudPaths.Count > 1 ? "clouds" : "cloud")}.");
             }
 
             // reproject point cloud's horizontal origin from WGS84 to cloud's coordinate system
             // Vertical origin from -Z is passed through transformation since no vertical CRS is attached to the WGS84 CRS. This shouldn't be necessary but GDAL
             // lacks a Geometry.AddPoint(double x, double y) overload.
             SpatialReference cloudCrs = SpatialReferenceExtensions.CreateCompound(this.HorizontalEpsg, this.VerticalEpsg);
-            Geometry origin = new(wkbGeometryType.wkbPoint25D);
+            Geometry cloudOrigin = new(wkbGeometryType.wkbPoint25D);
             double scanAnchorX;
             double scanAnchorY;
             double scanAnchorZ;
             if (hasLatitudeAndLongitude)
             {
                 SpatialReference wgs84 = SpatialReferenceExtensions.Create(Constant.Epsg.Wgs84);
-                CoordinateTransformation transform = new(wgs84, cloudCrs, new());
-                origin.AddPoint(this.Lat, this.Long, this.Z); // GDAL reverses x and y for WGS84
-                if (origin.Transform(transform) != 0)
+                CoordinateTransformation wgs84toCloudCrs = new(wgs84, cloudCrs, new());
+                cloudOrigin.AddPoint(this.Lat, this.Long, this.Z); // GDAL reverses x and y for WGS84
+                if (cloudOrigin.Transform(wgs84toCloudCrs) != 0)
                 {
-                    throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), $"Could not transform point cloud origin {this.Lat}, {this.Long}, {this.Z} to EPSG:{this.HorizontalEpsg}.");
+                    throw new ParameterOutOfRangeException(nameof(this.HorizontalEpsg), $"Could not transform point cloud origin {this.Lat}°, {this.Long}°, {this.Z} to EPSG:{this.HorizontalEpsg}.");
                 }
 
                 double[] commonOriginXyz = new double[3]; // can't use stackalloc as GDAL 3.8.3 C# bindings don't support Span<T>
-                origin.GetPoint(0, commonOriginXyz);
+                cloudOrigin.GetPoint(0, commonOriginXyz);
 
                 scanAnchorX = commonOriginXyz[0];
                 scanAnchorY = commonOriginXyz[1];
@@ -192,8 +193,8 @@ namespace Mars.Clouds.Cmdlets
                 for (int cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated); cloudIndex < cloudPaths.Count; cloudIndex = Interlocked.Increment(ref cloudRegistrationsInitiated))
                 {
                     string cloudPath = cloudPaths[cloudIndex];
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs);
+                    LasFile cloud = new(cloudPath, reader, this.FallbackDate); // leaves reader positioned at start of points
 
                     // update cloud extents
                     double rotationXYinDegrees;
@@ -301,7 +302,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Register-Clouds", $"Registered {cloudRegistrationsCompleted} of {cloudPaths.Count} point clouds...");
+            TimedProgressRecord progress = new(this.GetName(), $"Registered {cloudRegistrationsCompleted} of {cloudPaths.Count} point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false) 
             {
                 progress.StatusDescription = $"Registered {cloudRegistrationsCompleted} of {cloudPaths.Count} point clouds...";
