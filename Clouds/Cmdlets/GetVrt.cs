@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
 using System.Runtime.Intrinsics.X86;
 using System.Threading;
@@ -40,7 +39,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "If set, a .xlsx is created alongside the .vrt with band statistics for each tile (overall statistics for each band are included in the .vrt).")]
         public SwitchParameter Stats { get; set; }
 
-        [Parameter(HelpMessage = "Number of threads, out of -ComputeThreads, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
+        [Parameter(HelpMessage = $"Number of threads, out of -{nameof(GdalCmdlet.DataThreads)}, to use for reading tiles. Default is automatic estimation, which will typically choose single read thread.")]
         [ValidateRange(1, 32)] // arbitrary upper bound
         public int ReadThreads { get; set; }
 
@@ -190,7 +189,7 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             VirtualRaster<Raster>[] vrts = vrtBandsAndStats.Vrts;
-            TimedProgressRecord progress = new("Get-Vrt", $"0 tiles read from {vrtsRead} of {vrts.Length} virtual {(vrts.Length == 1 ? "raster" : "rasters")} ({readVrts.Count} + {(readVrts.Count == 1 ? " thread" : " threads")}, {readVrts.Count} reading)...");
+            TimedProgressRecord progress = new(this.GetName(), $"0 tiles read from {vrtsRead} of {vrts.Length} virtual {(vrts.Length == 1 ? "raster" : "rasters")} ({readVrts.Count} + {(readVrts.Count == 1 ? " thread" : " threads")}, {readVrts.Count} reading)...");
             this.WriteProgress(progress);
             while (readVrts.WaitAll(this.ProgressInterval) == false)
             {
@@ -294,6 +293,11 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return statsTable;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-Vrt";
         }
 
         protected override void ProcessRecord()

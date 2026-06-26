@@ -1,4 +1,5 @@
-﻿using OSGeo.GDAL;
+﻿using Mars.Clouds.Las;
+using OSGeo.GDAL;
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -75,6 +76,11 @@ namespace Mars.Clouds.GdalExtensions
 
         public GridGeoTransform(Extent extent, double cellWidth, double cellHeight)
             : this(extent.XMin, extent.YMax, cellWidth, cellHeight > 0.0 ? -cellHeight : cellHeight) // since y max is origin cell height must be negative
+        {
+        }
+
+        public GridGeoTransform(LasFile lasFile, double cellWidth, double cellHeight)
+            : this(lasFile.Header.MinX, lasFile.Header.MaxY, cellWidth, cellHeight > 0.0 ? -cellHeight : cellHeight) // since y max is origin cell height must be negative
         {
         }
 

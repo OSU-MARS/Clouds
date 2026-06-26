@@ -46,6 +46,11 @@ namespace Mars.Clouds.Cmdlets
             this.Treetops = [];
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsData.Merge}-Treetops";
+        }
+
         protected override void ProcessRecord()
         {
             // parameter checking
@@ -97,7 +102,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             // grid crown and classification virtual rasters
-            const string cmdletName = "Merge-Treetops";
+            string cmdletName = this.GetName();
             VirtualRaster<TreeCrownRaster> crowns = this.ReadVirtualRasterMetadata(cmdletName, this.Crowns, TreeCrownRaster.CreateFromBandMetadata, this.CancellationTokenSource);
             VirtualRaster<LandCoverRaster> classification = this.ReadVirtualRasterMetadata(cmdletName, this.Classification, LandCoverRaster.CreateFromBandMetadata, this.CancellationTokenSource);
             if (SpatialReferenceExtensions.IsSameCrs(crowns.Crs, classification.Crs) == false)
@@ -121,7 +126,7 @@ namespace Mars.Clouds.Cmdlets
             ParallelTasks loadAndClassifyTreetops = new(Int32.Min(maxDataThreads, treetopTilePaths.Count), () =>
             {
                 TreetopsClassified? treetops = null;
-                for (int tileMergeIndex = treetopReadWrite.GetNextTileWriteIndexThreadSafe(); tileMergeIndex < treetopReadWrite.MaxTileIndex; tileMergeIndex = treetopReadWrite.GetNextTileWriteIndexThreadSafe())
+                for (int tileMergeIndex = treetopReadWrite.GetNextFileWriteIndexThreadSafe(); tileMergeIndex < treetopReadWrite.MaxTileIndex; tileMergeIndex = treetopReadWrite.GetNextFileWriteIndexThreadSafe())
                 {
                     if (treetopReadWrite.TryEnsureNeighborhoodRead(tileMergeIndex, crowns, this.CancellationTokenSource) == false)
                     {
@@ -194,10 +199,10 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (loadAndClassifyTreetops.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = treetopReadWrite.TilesRead + (treetopTilePaths.Count == 1 ? " tile read, " : " tiles read, ") +
-                                             treetopReadWrite.TilesWritten + (treetopReadWrite.TilesWritten == 1 ? "tile committed to merge " : " tiles committed to merge ") +
+                progress.StatusDescription = treetopReadWrite.FilesRead + (treetopTilePaths.Count == 1 ? " tile read, " : " tiles read, ") +
+                                             treetopReadWrite.FilesWritten + (treetopReadWrite.FilesWritten == 1 ? "tile committed to merge " : " tiles committed to merge ") +
                                              "(" + loadAndClassifyTreetops.Count + "[+" + geopackageSqlBackgroundThreads + (loadAndClassifyTreetops.Count == 1 && geopackageSqlBackgroundThreads == 1 ? "] thread)..." : "] threads)...");
-                progress.Update(treetopReadWrite.TilesWritten, treetopTilePaths.Count);
+                progress.Update(treetopReadWrite.FilesWritten, treetopTilePaths.Count);
                 this.WriteProgress(progress);
             }
 
@@ -225,7 +230,7 @@ namespace Mars.Clouds.Cmdlets
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose($"Merged {totalTreetops:#,#,0} treetops from {treetopReadWrite.TilesWritten + (treetopReadWrite.TilesWritten == 1 ? " tile " : " tiles ")}in {progress.Stopwatch.ToElapsedString()} with {unmergedTiles} unmerged {(unmergedTiles == 1 ? "tile" : "tiles")}.");
+            this.WriteVerbose($"Merged {totalTreetops:#,#,0} treetops from {treetopReadWrite.FilesWritten + (treetopReadWrite.FilesWritten == 1 ? " tile " : " tiles ")}in {progress.Stopwatch.ToElapsedString()} with {unmergedTiles} unmerged {(unmergedTiles == 1 ? "tile" : "tiles")}.");
         }
 
         private class TilePathAndIsMerged

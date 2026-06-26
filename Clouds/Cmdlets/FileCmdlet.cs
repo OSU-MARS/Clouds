@@ -6,16 +6,16 @@ using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
-    public class FileCmdlet : PSCmdlet
+    public abstract class FileCmdlet : PSCmdlet
     {
-        protected CancellationTokenSource CancellationTokenSource { get; private init; }
+        public CancellationTokenSource CancellationTokenSource { get; private init; }
 
         protected FileCmdlet()
         {
             this.CancellationTokenSource = new();
         }
 
-        protected List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
+        public List<string> GetExistingFilePaths(List<string>? fileSearchPaths, string defaultExtension, SearchOption searchDepth = SearchOption.TopDirectoryOnly)
         {
             ArgumentNullException.ThrowIfNull(fileSearchPaths, nameof(fileSearchPaths));
             if (fileSearchPaths.Count < 1)
@@ -88,6 +88,8 @@ namespace Mars.Clouds.Cmdlets
             }
             return filePaths;
         }
+
+        public abstract string GetName();
 
         protected string GetRootedPath(string candidatePath)
         {

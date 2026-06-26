@@ -6,7 +6,7 @@ using System.Management.Automation;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Set, "LasHeader")]
-    public class SetLasHeader : LasCmdlet
+    public class SetLasHeader : LasFilesCmdlet
     {
         [Parameter(HelpMessage = "Value to set x offset in point clouds' header to.")]
         public double XOffset { get; set; }
@@ -24,6 +24,11 @@ namespace Mars.Clouds.Cmdlets
             this.ZOffset = Double.NaN;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Set}-LasHeader";
+        }
+
         protected override void ProcessRecord()
         {
             bool hasChange = (Double.IsNaN(this.XOffset) == false) || (Double.IsNaN(this.YOffset) == false) || (Double.IsNaN(this.ZOffset) == false);
@@ -32,15 +37,21 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterBindingException($"At least one of -{nameof(this.XOffset)}, -{nameof(this.YOffset)}, or -{nameof(this.ZOffset)} must be specified to modify the point cloud(s) specified by -{nameof(this.Las)}.");
             }
 
-            List<string> lasFilePaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
-            for (int fileIndex = 0; fileIndex < lasFilePaths.Count; ++fileIndex)
+            List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
+            for (int pointCloudIndex = 0; pointCloudIndex < cloudPaths.Count; ++pointCloudIndex)
             {
                 // can multithread if needed but doesn't seem worth the overhead up to a few hundred .las files
-                string lasFilePath = lasFilePaths[fileIndex];
-                using LasReader lasReader = LasReader.CreateForHeaderAndVlrReadAndWrite(lasFilePath, this.DiscardOverrunningVlrs);
-                LasTile lasFile = new(lasFilePath, lasReader, fallbackCreationDate: null);
+                string cloudFilePath = cloudPaths[pointCloudIndex];
+                using LasReader lasReader = LasReader.CreateForHeaderAndVlrReadAndWrite(cloudFilePath, this.DiscardOverrunningVlrs);
+                LasFile lasFile = new(cloudFilePath, lasReader, this.FallbackDate);
 
                 bool lasModified = false;
+                if (this.FallbackDate != null)
+                {
+                    // for now, assume specification of -FallbackDate indicates need to set LAS header's FileCreationYear and DayOfYear
+                    // TODO; need a way to track if the header was actually modified
+                    lasModified = true;
+                }
                 if ((Double.IsNaN(this.XOffset) == false) && (lasFile.Header.XOffset != this.XOffset))
                 {
                     double xTranslation = this.XOffset - lasFile.Header.XOffset;

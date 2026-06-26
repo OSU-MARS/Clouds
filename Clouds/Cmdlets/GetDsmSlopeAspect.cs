@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Management.Automation;
-using System.Threading;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -41,9 +40,14 @@ namespace Mars.Clouds.Cmdlets
             this.Vrt = false;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-DsmSlopeAspect";
+        }
+
         protected override void ProcessRecord()
         {
-            const string cmdletName = "Get-DsmSlopeAspect";
+            string cmdletName = this.GetName();
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.CancellationTokenSource);
             Debug.Assert(dsm.TileGrid != null);
 
@@ -52,7 +56,7 @@ namespace Mars.Clouds.Cmdlets
             int maxDsmTileIndex = dsm.SizeInTilesX * dsm.SizeInTilesY;
             ParallelTasks slopeAspectTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
-                for (int tileWriteIndex = slopeAspectReadWrite.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < slopeAspectReadWrite.MaxTileIndex; tileWriteIndex = slopeAspectReadWrite.GetNextTileWriteIndexThreadSafe())
+                for (int tileWriteIndex = slopeAspectReadWrite.GetNextFileWriteIndexThreadSafe(); tileWriteIndex < slopeAspectReadWrite.MaxTileIndex; tileWriteIndex = slopeAspectReadWrite.GetNextFileWriteIndexThreadSafe())
                 {
                     DigitalSurfaceModel? dsmTile = dsm[tileWriteIndex];
                     if (dsmTile == null)
@@ -87,11 +91,10 @@ namespace Mars.Clouds.Cmdlets
                     {
                         dsmTile.Write(dsmTile.FilePath, DigitalSurfaceModelBands.SlopeAspect, this.CompressRasters);
                     }
-                    if (slopeAspectStatistics != null)
-                    {
-                        // virtual raster generation currently requires statistics be aligned by band number
-                        slopeAspectStatistics[tileIndexX, tileIndexY] = dsmTile.GetBandStatistics();
-                    }
+
+                    // virtual raster generation currently requires statistics be aligned by band number
+                    slopeAspectStatistics?[tileIndexX, tileIndexY] = dsmTile.GetBandStatistics();
+                    
                     lock (slopeAspectReadWrite)
                     {
                         // slope and aspect bands are no longer in use, so return to pool
@@ -111,10 +114,10 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (slopeAspectTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = slopeAspectReadWrite.TilesRead + (slopeAspectReadWrite.TilesRead == 1 ? " DSM read, " : " DSMs read, ") +
-                                             slopeAspectReadWrite.TilesWritten + " of " + dsm.NonNullTileCount + " tiles " + (this.NoWrite ? "completed (" : "written (") + 
+                progress.StatusDescription = slopeAspectReadWrite.FilesRead + (slopeAspectReadWrite.FilesRead == 1 ? " DSM read, " : " DSMs read, ") +
+                                             slopeAspectReadWrite.FilesWritten + " of " + dsm.NonNullTileCount + " tiles " + (this.NoWrite ? "completed (" : "written (") + 
                                              slopeAspectTasks.Count + (slopeAspectTasks.Count == 1 ? " thread)..." : " threads)...");
-                progress.Update(slopeAspectReadWrite.TilesWritten, dsm.NonNullTileCount);
+                progress.Update(slopeAspectReadWrite.FilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
 

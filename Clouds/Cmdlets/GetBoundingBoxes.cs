@@ -13,12 +13,8 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Get, "BoundingBoxes")]
-    public class GetBoundingBoxes : GdalCmdlet
+    public class GetBoundingBoxes : LasFilesCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds whose bounding boxes will be placed in the output bounding box layer.")]
-        [ValidateNotNullOrEmpty]
-        public List<string> Las { get; set; }
-
         [Parameter(Mandatory = true, HelpMessage = "Path to file containing the generated bounding box layer.")]
         [ValidateNotNullOrWhiteSpace]
         public string Bounds { get; set; }
@@ -38,6 +34,11 @@ namespace Mars.Clouds.Cmdlets
             this.NameLength = 16;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-BoundingBoxes";
+        }
+
         protected override void ProcessRecord()
         {
             List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
@@ -55,8 +56,8 @@ namespace Mars.Clouds.Cmdlets
                 {
                     // load cloud and get its current coordinate system
                     string cloudPath = cloudPaths[cloudIndex];
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs);
+                    LasFile cloud = new(cloudPath, reader, fallbackCreationDate: null);
 
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     if (boundingBoxLayer == null)
@@ -96,7 +97,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Get-BoundingBoxes", $"Read {boundingBoxReadsCompleted} of {cloudPaths.Count} bounding boxes...");
+            TimedProgressRecord progress = new(this.GetName(), $"Read {boundingBoxReadsCompleted} of {cloudPaths.Count} bounding boxes...");
             while (boundsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = $"Read {boundingBoxReadsCompleted} of {cloudPaths.Count} bounding boxes...";

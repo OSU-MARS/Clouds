@@ -10,19 +10,21 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsCommon.Remove, "Points")]
-    public class RemovePoints : LasCmdlet
+    public class RemovePoints : LasFilesCmdlet
     {
         [Parameter(Mandatory = true, Position = 1, HelpMessage = "Output locations of filtered point clouds.")]
         [ValidateNotNullOrEmpty]
         public string Filtered { get; set; }
 
-        [Parameter(HelpMessage = "Maximum number of threads to use for processing point clouds in parallel. Default is the procesor's thread count.")]
-        public int DataThreads { get; set; }
-
         public RemovePoints() 
         {
             this.DataThreads = Environment.ProcessorCount; // for now, assume IO thread limit is more likely binding
             this.Filtered = String.Empty;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Remove}-Points";
         }
 
         protected override void ProcessRecord()
@@ -61,7 +63,7 @@ namespace Mars.Clouds.Cmdlets
                     string destinationCloudPath = outputPathIsDirectory ? Path.Combine(this.Filtered, sourceCloudName) : this.Filtered;
 
                     using LasReader reader = LasReader.CreateForPointRead(sourceCloudPath, this.DiscardOverrunningVlrs);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(sourceCloudPath, reader, this.FallbackDate);
 
                     using LasWriter writer = LasWriter.CreateForPointWrite(destinationCloudPath);
                     writer.WriteHeader(cloud);
@@ -82,7 +84,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Remove-Points", $"Removed noise and withheld points from {cloudFiltrationsCompleted} of {sourceCloudPaths.Count} point {(sourceCloudPaths.Count == 1 ? "clouds" : "cloud")}...");
+            TimedProgressRecord progress = new(this.GetName(), $"Removed noise and withheld points from {cloudFiltrationsCompleted} of {sourceCloudPaths.Count} point {(sourceCloudPaths.Count == 1 ? "clouds" : "cloud")}...");
             while (pointFilterTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = $"Removed noise and withheld points from {cloudFiltrationsCompleted} of {sourceCloudPaths.Count} point {(sourceCloudPaths.Count == 1 ? "clouds" : "cloud")}...";

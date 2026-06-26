@@ -35,6 +35,11 @@ namespace Mars.Clouds.Cmdlets
             this.Search = SearchOption.TopDirectoryOnly;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommunications.Read}-Files";
+        }
+
         protected override void ProcessRecord()
         {
             // Can check drive capabilities and do automatic thread setting if needed.
@@ -85,7 +90,7 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             float gibibytesRead;
-            TimedProgressRecord progress = new("Read-Files", "placeholder");
+            TimedProgressRecord progress = new(this.GetName(), "placeholder");
             double totalSeconds = this.Duration.TotalSeconds;
             try
             {

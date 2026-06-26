@@ -12,12 +12,8 @@ using System.Threading;
 namespace Mars.Clouds.Cmdlets
 {
     [Cmdlet(VerbsData.Convert, "CloudCrs")]
-    public class ConvertCloudCrs : GdalCmdlet
+    public class ConvertCloudCrs : LasFilesCmdlet
     {
-        [Parameter(Mandatory = true, Position = 0, HelpMessage = "Point clouds to reproject to a new coordinate system.")]
-        [ValidateNotNullOrEmpty]
-        public List<string> Las { get; set; }
-
         [Parameter(HelpMessage = "EPSG of projected coordinate system to assign to the reprojected point cloud. Default is 32610 (WGS 84 / UTM zone 10N).")]
         [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
         public int HorizontalEpsg { get; set; }
@@ -46,9 +42,6 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "By default, each point cloud's origin is rebased to be at its center and then projected into the new coordinate system. This approach maximizes reprojection accuracy by minimizing coordinate system error across the distance between the point cloud's origin and the points' location. Setting this switch disables rebasing, which likely has negligible effects if the origin lies within the point cloud but may introduce several meters of error on fixed-wing point clouds whose origin is tens of kilometers away from a tile.")]
         public SwitchParameter MaintainOrigin { get; set; }
 
-        [Parameter(HelpMessage = "Fallback date to use if header is missing year or day of year information.")]
-        public DateOnly? FallbackDate { get; set; }
-
         public ConvertCloudCrs() 
         {
             this.FallbackDate = null;
@@ -60,6 +53,11 @@ namespace Mars.Clouds.Cmdlets
             this.NudgeY = 0.0;
             this.NudgeZ = 0.0;
             this.VerticalEpsg = Constant.Epsg.Navd88m;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsData.Convert}-CloudCrs";
         }
 
         protected override void ProcessRecord()
@@ -92,8 +90,8 @@ namespace Mars.Clouds.Cmdlets
                 {
                     // load cloud and get its current coordinate system
                     string cloudPath = cloudPaths[cloudIndex];
-                    using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, this.FallbackDate);
+                    using LasReader reader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs);
+                    LasFile cloud = new(cloudPath, reader, this.FallbackDate);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     int cloudHasVerticalCrs = cloudCrs.IsVertical();
                     if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs) && (cloudHasVerticalCrs == 1)) // IsSameCrs() allows missing vertical CRSes
@@ -236,7 +234,7 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord progress = new("Convert-CloudCrs", $"Reprojected {cloudReprojectionsCompleted} of {cloudPaths.Count} point clouds...");
+            TimedProgressRecord progress = new(this.GetName(), $"Reprojected {cloudReprojectionsCompleted} of {cloudPaths.Count} point clouds...");
             while (cloudRegistrationTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 progress.StatusDescription = $"Reprojected {cloudReprojectionsCompleted} of {cloudPaths.Count} point clouds...";

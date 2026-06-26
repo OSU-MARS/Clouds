@@ -1,4 +1,6 @@
-﻿using Mars.Clouds.Las;
+﻿using Mars.Clouds.Cmdlets;
+using Mars.Clouds.Extensions;
+using Mars.Clouds.Las;
 using Mars.Clouds.Vrt;
 using OSGeo.GDAL;
 using System;
@@ -239,6 +241,79 @@ namespace Mars.Clouds.GdalExtensions
             return emptyCopy;
         }
 
+        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
+        {
+            return this.CreateDataset(vrtDatasetDirectoryPath, this.BandNames, tileBandStatistics);
+        }
+
+        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
+        {
+            Debug.Assert(this.tileGrid != null);
+
+            VrtDataset vrtDataset = new()
+            {
+                RasterXSize = (UInt32)(this.SizeInTilesX * this.TileSizeInCellsX),
+                RasterYSize = (UInt32)(this.SizeInTilesY * this.TileSizeInCellsY)
+            };
+            vrtDataset.Srs.DataAxisToSrsAxisMapping = this.Crs.IsVertical() == 1 ? [ 1, 2, 3 ] : [ 1, 2 ];
+            vrtDataset.Srs.WktGeogcsOrProj = this.Crs.GetWkt();
+
+            vrtDataset.GeoTransform.Copy(this.tileGrid.Transform); // copies tile x and y size as cell size
+            vrtDataset.GeoTransform.SetCellSize(this.TileCellSizeX, this.TileCellSizeY);
+
+            vrtDataset.AppendBands(vrtDatasetDirectoryPath, this, vrtBandNames, tileBandStatistics);
+            return vrtDataset;
+        }
+
+        public static VirtualRaster<TTile> CreateFromTileMetadata(FileCmdlet cmdlet, string virtualRasterPath, Func<string, TTile> createTileFromMetadata, int maxMetadataThreads)
+        {
+            if (maxMetadataThreads < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxMetadataThreads), $"At least one thread must be allowed for virtual raster tile metadata loading. A limit of {maxMetadataThreads} was specified instead.");
+            }
+
+            VirtualRaster<TTile> vrt = new();
+
+            List<string> tilePaths = cmdlet.GetExistingFilePaths([virtualRasterPath], Constant.File.GeoTiffExtension);
+            if (tilePaths.Count == 1)
+            {
+                // synchronous read for single tile
+                TTile tile = createTileFromMetadata(tilePaths[0]);
+                vrt.Add(tile);
+            }
+            else
+            {
+                // multithreaded read for multiple tiles
+                // Assume read is from flash (NVMe, SSD) and there's no particular constraint on the number of read threads or a data
+                // locality advantage.
+                FileRead tileRead = new();
+                ParallelTasks tileReadTasks = new(Int32.Min(maxMetadataThreads, tilePaths.Count), () =>
+                {
+                    for (int tileIndex = tileRead.GetNextFileReadIndexThreadSafe(); tileIndex < tilePaths.Count; tileIndex = tileRead.GetNextFileReadIndexThreadSafe())
+                    {
+                        string tilePath = tilePaths[tileIndex];
+                        TTile tile = createTileFromMetadata(tilePath);
+                        lock (vrt)
+                        {
+                            vrt.Add(tile);
+                            ++tileRead.FilesRead;
+                        }
+                    }
+                }, cmdlet.CancellationTokenSource);
+
+                TimedProgressRecord progress = new(cmdlet.GetName(), "placeholder"); // can't pass null or empty statusDescription
+                while (tileReadTasks.WaitAll(Constant.DefaultProgressInterval) == false)
+                {
+                    progress.StatusDescription = $"Read metadata of {tileRead.FilesRead} of {tilePaths.Count} virtual raster {(tilePaths.Count == 1 ? "tile (" : "tiles (")}{tileReadTasks.Count}{(tileReadTasks.Count == 1 ? " thread)..." : " threads)...")}";
+                    progress.Update(tileRead.FilesRead, tilePaths.Count);
+                    cmdlet.WriteProgress(progress);
+                }
+            }
+
+            vrt.CreateTileGrid(); // unlike LasTileGrid, VirtualRaster<T> doesn't need snapping as it doesn't store tile sizes as doubles
+            return vrt;
+        }
+
         /// <summary>
         /// Infers virtual raster's grid from added tiles and places tiles into the grid.
         /// </summary>
@@ -291,7 +366,7 @@ namespace Mars.Clouds.GdalExtensions
             this.SizeInTilesX = (int)Double.Round((maximumOriginX - minimumOriginX) / tileSizeInTileUnitsX) + 1;
             this.SizeInTilesY = (int)Double.Round((minimumOriginY - maximumOriginY) / tileSizeInTileUnitsY) + 1;
 
-            GridGeoTransform tileTransform = new(minimumOriginX, maximumOriginY, tileSizeInTileUnitsX, tileSizeInTileUnitsY);            
+            GridGeoTransform tileTransform = new(minimumOriginX, maximumOriginY, tileSizeInTileUnitsX, tileSizeInTileUnitsY);
             this.tileGrid = new(this.Crs, tileTransform, this.SizeInTilesX, this.SizeInTilesY, cloneCrsAndTransform: false);
 
             int[] tileIndicesX = new int[this.ungriddedTiles.Count];
@@ -303,30 +378,6 @@ namespace Mars.Clouds.GdalExtensions
 
             this.ungriddedTiles.Clear();
             return (tileIndicesX, tileIndicesY);
-        }
-
-        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
-        {
-            return this.CreateDataset(vrtDatasetDirectoryPath, this.BandNames, tileBandStatistics);
-        }
-
-        public VrtDataset CreateDataset(string vrtDatasetDirectoryPath, List<string> vrtBandNames, GridNullable<List<RasterBandStatistics>>? tileBandStatistics)
-        {
-            Debug.Assert(this.tileGrid != null);
-
-            VrtDataset vrtDataset = new()
-            {
-                RasterXSize = (UInt32)(this.SizeInTilesX * this.TileSizeInCellsX),
-                RasterYSize = (UInt32)(this.SizeInTilesY * this.TileSizeInCellsY)
-            };
-            vrtDataset.Srs.DataAxisToSrsAxisMapping = this.Crs.IsVertical() == 1 ? [ 1, 2, 3 ] : [ 1, 2 ];
-            vrtDataset.Srs.WktGeogcsOrProj = this.Crs.GetWkt();
-
-            vrtDataset.GeoTransform.Copy(this.tileGrid.Transform); // copies tile x and y size as cell size
-            vrtDataset.GeoTransform.SetCellSize(this.TileCellSizeX, this.TileCellSizeY);
-
-            vrtDataset.AppendBands(vrtDatasetDirectoryPath, this, vrtBandNames, tileBandStatistics);
-            return vrtDataset;
         }
 
         public string GetExtentString()

@@ -5,7 +5,6 @@ using System.Management.Automation;
 using System.IO;
 using Mars.Clouds.Extensions;
 using System.Threading;
-using Mars.Clouds.GdalExtensions;
 
 namespace Mars.Clouds.Cmdlets
 {
@@ -26,10 +25,15 @@ namespace Mars.Clouds.Cmdlets
         public GetOrthoimages() 
         {
             this.BitDepth = 16;
-            this.CellSize = -1.0;
+            this.CellSize = Double.NaN;
             this.Image = String.Empty;
             this.Unbuffered = false;
             this.NoWrite = false;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-Orthoimages";
         }
 
         protected override void ProcessRecord() 
@@ -44,16 +48,16 @@ namespace Mars.Clouds.Cmdlets
                 throw new ParameterOutOfRangeException(nameof(this.DataThreads), $"-{nameof(this.DataThreads)} must be at least two.");
             }
 
-            const string cmdletName = "Get-Orthoimages";
+            string cmdletName = this.GetName();
             bool imagePathIsDirectory = Directory.Exists(this.Image);
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName, nameof(this.Image), imagePathIsDirectory);
 
-            (int imageTileSizeX, int imageTileSizeY) = this.SetCellSize(lasGrid);
-            TileReadWrite imageReadWrite = new(imagePathIsDirectory);
+            (this.CellSize, int imageTileSizeX, int imageTileSizeY) = LasTilesToTilesCmdlet.GetRasterSizing(lasGrid, this.CellSize);
+            FileReadWrite imageReadWrite = new(imagePathIsDirectory);
 
             // start single reader and multiple writers
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToImageBandwidth(this.Unbuffered);
-            int readThreads = this.GetLasTileReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs, minWorkerThreadsPerReadThread: 0);
+            int readThreads = this.GetPointCloudReadThreadCount(driveTransferRateSingleThreadInGBs, ddrBandwidthSingleThreadInGBs);
             int maxUsefulThreads = Int32.Min((int)Single.Ceiling(1.5F * readThreads), lasGrid.NonNullCells);
             Debug.Assert(maxUsefulThreads > 0);
 
@@ -71,7 +75,7 @@ namespace Mars.Clouds.Cmdlets
                     return;
                 }
 
-                for (int tileIndex = imageReadWrite.GetNextTileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = imageReadWrite.GetNextTileReadIndexThreadSafe())
+                for (int tileIndex = imageReadWrite.GetNextFileReadIndexThreadSafe(); tileIndex < lasGrid.Cells; tileIndex = imageReadWrite.GetNextFileReadIndexThreadSafe())
                 {
                     LasTile? lasTile = lasGrid[tileIndex];
                     if (lasTile == null)
@@ -83,10 +87,10 @@ namespace Mars.Clouds.Cmdlets
                     string tileName = Tile.GetName(lasTile.FilePath);
                     string imageTilePath = imageReadWrite.OutputPathIsDirectory ? Path.Combine(this.Image, tileName + Constant.File.GeoTiffExtension) : this.Image;
                     imageTile = ImageRaster<UInt64>.CreateRecreateOrReset(imageTile, lasGrid.Crs, lasTile, this.CellSize, imageTileSizeX, imageTileSizeY, imageTilePath);
-                    using LasReader reader = lasTile.CreatePointReader(unbuffered: this.Unbuffered, enableAsync: false);
+                    using LasReader reader = lasTile.CreatePointReader(this.Unbuffered, enableAsync: false);
                     reader.ReadPointsToImage(lasTile, imageTile, ref pointReadBuffer);
                     readSemaphore.Release();
-                    imageReadWrite.IncrementTilesReadThreadSafe();
+                    imageReadWrite.IncrementFilesReadThreadSafe();
 
                     if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
@@ -107,7 +111,7 @@ namespace Mars.Clouds.Cmdlets
                         lock (imageReadWrite)
                         {
                             cellsWritten += imageTile.Cells;
-                            ++imageReadWrite.TilesWritten;
+                            ++imageReadWrite.FilesWritten;
                         }
                     }
 
@@ -123,43 +127,19 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, imageReadWrite.GetPointCloudReadFileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, orthoimageTasks.Count));
             this.WriteProgress(progress);
             while (orthoimageTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = imageReadWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, orthoimageTasks.Count);
-                progress.Update(imageReadWrite.TilesWritten, lasGrid.NonNullCells);
+                progress.StatusDescription = imageReadWrite.GetPointCloudReadFileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, orthoimageTasks.Count);
+                progress.Update(imageReadWrite.FilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
 
             progress.Stopwatch.Stop();
-            this.WriteVerbose($"Found brightnesses of {cellsWritten:n0} pixels in {imageReadWrite.TilesRead} + point cloud {(imageReadWrite.TilesRead == 1 ? "tile" : "tiles")} in {progress.Stopwatch.ToElapsedString()}: {imageReadWrite.TilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.0} tiles/s.");
+            this.WriteVerbose($"Found brightnesses of {cellsWritten:n0} pixels in {imageReadWrite.FilesRead} point cloud {(imageReadWrite.FilesRead == 1 ? "tile" : "tiles")} in {progress.Stopwatch.ToElapsedString()}: {imageReadWrite.FilesWritten / progress.Stopwatch.Elapsed.TotalSeconds:0.0} tiles/s.");
             base.ProcessRecord();
-        }
-
-        private (int tileSizeX, int tileSizeY) SetCellSize(LasTileGrid lasGrid)
-        {
-            if (this.CellSize < 0.0)
-            {
-                double crsProjectedLinearUnitInM = lasGrid.Crs.GetProjectedLinearUnitInM();
-                this.CellSize = crsProjectedLinearUnitInM == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
-            }
-
-            int outputTileSizeX = (int)(lasGrid.Transform.CellWidth / this.CellSize);
-            if (lasGrid.Transform.CellWidth - outputTileSizeX * this.CellSize != 0.0)
-            {
-                string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), $"Point cloud tile grid pitch of {lasGrid.Transform.CellWidth} x {lasGrid.Transform.CellHeight} is not an integer multiple of the {this.CellSize} {units} output cell size.");
-            }
-            int outputTileSizeY = (int)(Double.Abs(lasGrid.Transform.CellHeight) / this.CellSize);
-            if (Double.Abs(lasGrid.Transform.CellHeight) - outputTileSizeY * this.CellSize != 0.0)
-            {
-                string units = lasGrid.Crs.GetLinearUnitsName();
-                throw new ParameterOutOfRangeException(nameof(this.CellSize), $"Point cloud tile grid pitch of {lasGrid.Transform.CellWidth} x {lasGrid.Transform.CellHeight} is not an integer multiple of the {this.CellSize} {units} output cell size.");
-            }
-
-            return (outputTileSizeX, outputTileSizeY);
         }
     }
 }

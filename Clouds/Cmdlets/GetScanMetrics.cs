@@ -10,11 +10,16 @@ namespace Mars.Clouds.Cmdlets
     [Cmdlet(VerbsCommon.Get, "ScanMetrics")]
     public class GetScanMetrics : LasTilesToRasterCmdlet
     {
-        private TileRead? tileRead;
+        private FileRead? tileRead;
 
         public GetScanMetrics()
         {
             this.tileRead = null;
+        }
+
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-ScanMetrics";
         }
 
         protected override void ProcessRecord()
@@ -28,7 +33,7 @@ namespace Mars.Clouds.Cmdlets
             Raster cellDefinitions = Raster.Create(this.Cells, gridCellDefinitionDataset, readData: false);
             gridCellDefinitionDataset.FlushCache();
 
-            const string cmdletName = "Get-ScanMetrics";
+            string cmdletName = this.GetName();
             LasTileGrid lasGrid = this.ReadLasHeadersAndFormGrid(cmdletName);
             if (SpatialReferenceExtensions.IsSameCrs(cellDefinitions.Crs, lasGrid.Crs) == false)
             {
@@ -55,7 +60,7 @@ namespace Mars.Clouds.Cmdlets
 
                         using LasReader pointReader = tile.CreatePointReader();
                         pointReader.ReadPointsToGrid(tile, scanMetrics, ref pointReadBuffer);
-                        this.tileRead.IncrementTilesReadThreadSafe();
+                        this.tileRead.IncrementFilesReadThreadSafe();
 
                         // check for cancellation before queing tile for metrics calculation
                         // Since tile loads are long, checking immediately before adding mitigates risk of queing blocking because
@@ -69,12 +74,12 @@ namespace Mars.Clouds.Cmdlets
                 }
             }, this.CancellationTokenSource);
 
-            TimedProgressRecord scanMetricsProgress = new(cmdletName, $"Loaded {tileRead.TilesRead} of {lasGrid.NonNullCells} point cloud tiles...");
+            TimedProgressRecord scanMetricsProgress = new(cmdletName, $"Loaded {tileRead.FilesRead} of {lasGrid.NonNullCells} point cloud tiles...");
             this.WriteProgress(scanMetricsProgress);
             while (readPoints.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                scanMetricsProgress.StatusDescription = $"Loaded {tileRead.TilesRead} of {lasGrid.NonNullCells} point cloud tiles...";
-                scanMetricsProgress.Update(tileRead.TilesRead, lasGrid.NonNullCells);
+                scanMetricsProgress.StatusDescription = $"Loaded {tileRead.FilesRead} of {lasGrid.NonNullCells} point cloud tiles...";
+                scanMetricsProgress.Update(tileRead.FilesRead, lasGrid.NonNullCells);
                 this.WriteProgress(scanMetricsProgress);
             }
 
@@ -82,7 +87,7 @@ namespace Mars.Clouds.Cmdlets
             this.WriteObject(scanMetrics);
             
             scanMetricsProgress.Stopwatch.Stop();
-            this.WriteVerbose($"Calculated metrics for {tileRead.TilesRead} tiles in {scanMetricsProgress.Stopwatch.ToElapsedString()}.");
+            this.WriteVerbose($"Calculated metrics for {tileRead.FilesRead} tiles in {scanMetricsProgress.Stopwatch.ToElapsedString()}.");
             base.ProcessRecord();
         }
     }

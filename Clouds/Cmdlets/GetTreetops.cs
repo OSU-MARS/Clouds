@@ -42,9 +42,14 @@ namespace Mars.Clouds.Cmdlets
             this.Treetops = String.Empty; // mandatory
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsCommon.Get}-Treetops";
+        }
+
         protected override void ProcessRecord()
         {
-            const string cmdletName = "Get-Treetops";
+            string cmdletName = this.GetName();
             VirtualRaster<DigitalSurfaceModel> dsm = this.ReadVirtualRasterMetadata<DigitalSurfaceModel>(cmdletName, this.Dsm, DigitalSurfaceModel.CreateFromPrimaryBandMetadata, this.CancellationTokenSource);
             Debug.Assert(dsm.TileGrid != null);
 
@@ -67,7 +72,7 @@ namespace Mars.Clouds.Cmdlets
             int treetopCandidates = 0;
             ParallelTasks findTreetopsTasks = new(Int32.Min(this.DataThreads, dsm.NonNullTileCount), () =>
             {
-                for (int tileWriteIndex = treetopSearch.GetNextTileWriteIndexThreadSafe(); tileWriteIndex < treetopSearch.MaxTileIndex; tileWriteIndex = treetopSearch.GetNextTileWriteIndexThreadSafe())
+                for (int tileWriteIndex = treetopSearch.GetNextFileWriteIndexThreadSafe(); tileWriteIndex < treetopSearch.MaxTileIndex; tileWriteIndex = treetopSearch.GetNextFileWriteIndexThreadSafe())
                 {
                     DigitalSurfaceModel? dsmTile = dsm[tileWriteIndex];
                     if (dsmTile == null)
@@ -99,10 +104,10 @@ namespace Mars.Clouds.Cmdlets
             TimedProgressRecord progress = new(cmdletName, "placeholder");
             while (findTreetopsTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
-                progress.StatusDescription = treetopSearch.TilesRead + (treetopSearch.TilesRead == 1 ? " DSM read, " : " DSMs read, ") +
-                                             treetopSearch.TilesWritten + " of " + dsm.NonNullTileCount + " treetop tiles written (" + 
+                progress.StatusDescription = treetopSearch.FilesRead + (treetopSearch.FilesRead == 1 ? " DSM read, " : " DSMs read, ") +
+                                             treetopSearch.FilesWritten + " of " + dsm.NonNullTileCount + " treetop tiles written (" + 
                                              findTreetopsTasks.Count + (findTreetopsTasks.Count == 1 ? " thread)..." : " threads)...");
-                progress.Update(treetopSearch.TilesWritten, dsm.NonNullTileCount);
+                progress.Update(treetopSearch.FilesWritten, dsm.NonNullTileCount);
                 this.WriteProgress(progress);
             }
 

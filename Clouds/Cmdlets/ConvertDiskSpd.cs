@@ -23,6 +23,11 @@ namespace Mars.Clouds.Cmdlets
             this.Longform = String.Empty;
         }
 
+        public override string GetName()
+        {
+            return $"{VerbsData.Convert}-DiskSpd";
+        }
+
         protected override void ProcessRecord()
         {
             List<string> logFiles = this.GetExistingFilePaths(this.Result, Constant.File.XmlExtension);
