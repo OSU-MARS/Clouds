@@ -93,7 +93,7 @@ namespace Mars.Clouds.Cmdlets
                     // load cloud and get its current coordinate system
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, this.FallbackDate);
+                    LasFile cloud = new(cloudPath, reader, this.FallbackDate);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     int cloudHasVerticalCrs = cloudCrs.IsVertical();
                     if (SpatialReferenceExtensions.IsSameCrs(cloudCrs, newCrs) && (cloudHasVerticalCrs == 1)) // IsSameCrs() allows missing vertical CRSes

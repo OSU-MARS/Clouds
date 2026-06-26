@@ -3,6 +3,7 @@ using Mars.Clouds.Laz;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Mars.Clouds.Las
 {
@@ -14,6 +15,9 @@ namespace Mars.Clouds.Las
         public const string Signature = "LASF";
 
         public byte[] BytesAfterVariableLengthRecords { get; set; } // unstandardized padding bytes that can end up being requried
+        public string FilePath { get; private init; }
+        public long FileSizeInBytes { get; private init; }
+
         public LasHeader10 Header { get; private init; }
         public List<VariableLengthRecord> VariableLengthRecords { get; private init; }
         public List<ExtendedVariableLengthRecord> ExtendedVariableLengthRecords { get; private init; }
@@ -21,9 +25,11 @@ namespace Mars.Clouds.Las
         /// <summary>
         /// Create a <see cref="LasFile"/> by reading the .las or .laz file's header and variable length records.
         /// </summary>
-        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
+        public LasFile(string lasFilePath, LasReader reader, DateOnly? fallbackCreationDate)
         {
             this.BytesAfterVariableLengthRecords = [];
+            this.FilePath = lasFilePath;
+            this.FileSizeInBytes = reader.BaseStream.Length;
             this.Header = reader.ReadHeader();
             this.VariableLengthRecords = [];
             this.ExtendedVariableLengthRecords = [];
@@ -39,6 +45,21 @@ namespace Mars.Clouds.Las
             {
                 this.Header.NumberOfVariableLengthRecords = (UInt32)this.VariableLengthRecords.Count;
             }
+        }
+
+        public LasReader CreatePointReader(bool unbuffered = false, bool enableAsync = false)
+        {
+            LasReader reader = LasReader.CreateForPointRead(this.FilePath, this.FileSizeInBytes, discardOverrunningVlrs: false, unbuffered, enableAsync);
+            reader.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return reader;
+        }
+
+        public LasWriter CreatePointReaderWriter()
+        {
+            LasReader readerWriter = LasReader.CreateForPointReadAndWrite(this.FilePath, this.FileSizeInBytes);
+            LasWriter writer = readerWriter.AsWriter();
+            writer.BaseStream.Seek(this.Header.OffsetToPointData, SeekOrigin.Begin);
+            return writer;
         }
 
         /// <summary>
@@ -341,8 +362,8 @@ namespace Mars.Clouds.Las
     {
         public new THeader Header { get; private init; }
 
-        public LasFile(LasReader reader, DateOnly? fallbackCreationDate)
-            : base(reader, fallbackCreationDate)
+        public LasFile(string lasFilePath, LasReader reader, DateOnly? fallbackCreationDate)
+            : base(lasFilePath, reader, fallbackCreationDate)
         {
             this.Header = (THeader)base.Header;
         }

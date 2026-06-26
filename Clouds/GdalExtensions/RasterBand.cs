@@ -695,7 +695,7 @@ namespace Mars.Clouds.GdalExtensions
             }
         }
 
-        [MemberNotNull(nameof(RasterBand<TBand>.NoDataValue))]
+        [MemberNotNull(nameof(RasterBand<>.NoDataValue))]
         private void SetNoDataValue(Band gdalBand)
         {
             gdalBand.GetNoDataValue(out double gdalNoDataValue, out int hasNoDataValue);
@@ -770,7 +770,7 @@ namespace Mars.Clouds.GdalExtensions
             return this.IsNoData(value) == false;
         }
 
-        [MemberNotNullWhen(true, nameof(RasterBand<TBand>.Data))] 
+        [MemberNotNullWhen(true, nameof(RasterBand<>.Data))] 
         public override bool TryTakeOwnershipOfDataBuffer(RasterBandPool pool)
         {
             if ((this.Data != null) && (this.Data.Length > 0)) // called from constructor so this.Data may be null

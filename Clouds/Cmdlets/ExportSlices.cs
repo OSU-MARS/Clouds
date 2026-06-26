@@ -127,7 +127,7 @@ namespace Mars.Clouds.Cmdlets
                     // load cloud and its DTM
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(cloudPath, reader, fallbackCreationDate: null);
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
 
                     string cloudName = Tile.GetName(cloudPath);

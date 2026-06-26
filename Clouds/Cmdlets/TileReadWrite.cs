@@ -32,10 +32,10 @@ namespace Mars.Clouds.Cmdlets
             return Interlocked.Increment(ref this.tileWriteIndex);
         }
 
-        public virtual string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
+        public virtual string GetLasReadTileWriteStatusDescription(int lasFilesToRead, int activeReadThreads, int totalThreads)
         {
             string status = this.TilesRead + (this.TilesRead == 1 ? " point cloud tile read, " : " point cloud tiles read, ") +
-                            this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles written (" + totalThreads + 
+                            this.TilesWritten + " of " + lasFilesToRead + " tiles written (" + totalThreads + 
                             (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
             return status;
         }

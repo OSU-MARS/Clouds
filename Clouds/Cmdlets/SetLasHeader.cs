@@ -38,7 +38,7 @@ namespace Mars.Clouds.Cmdlets
                 // can multithread if needed but doesn't seem worth the overhead up to a few hundred .las files
                 string lasFilePath = lasFilePaths[fileIndex];
                 using LasReader lasReader = LasReader.CreateForHeaderAndVlrReadAndWrite(lasFilePath, this.DiscardOverrunningVlrs);
-                LasTile lasFile = new(lasFilePath, lasReader, fallbackCreationDate: null);
+                LasFile lasFile = new(lasFilePath, lasReader, fallbackCreationDate: null);
 
                 bool lasModified = false;
                 if ((Double.IsNaN(this.XOffset) == false) && (lasFile.Header.XOffset != this.XOffset))

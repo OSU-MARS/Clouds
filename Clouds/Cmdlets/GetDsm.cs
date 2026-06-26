@@ -191,12 +191,12 @@ namespace Mars.Clouds.Cmdlets
             }, this.CancellationTokenSource);
 
             int activeReadThreads = readThreads - readSemaphore.CurrentCount;
-            TimedProgressRecord progress = new(cmdletName, dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count));
+            TimedProgressRecord progress = new(cmdletName, dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, dsmTasks.Count));
             this.WriteProgress(progress);
             while (dsmTasks.WaitAll(Constant.DefaultProgressInterval) == false)
             {
                 activeReadThreads = readThreads - readSemaphore.CurrentCount;
-                progress.StatusDescription = dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid, activeReadThreads, dsmTasks.Count);
+                progress.StatusDescription = dsmReadCreateWrite.GetLasReadTileWriteStatusDescription(lasGrid.NonNullCells, activeReadThreads, dsmTasks.Count);
                 progress.Update(dsmReadCreateWrite.TilesWritten, lasGrid.NonNullCells);
                 this.WriteProgress(progress);
             }
@@ -276,11 +276,11 @@ namespace Mars.Clouds.Cmdlets
                 };
             }
 
-            public override string GetLasReadTileWriteStatusDescription(LasTileGrid lasGrid, int activeReadThreads, int totalThreads)
+            public override string GetLasReadTileWriteStatusDescription(int lasFilesToRead, int activeReadThreads, int totalThreads)
             {
                 string status = this.TilesRead + (this.TilesRead == 1 ? " cloud read, " : " clouds read, ") +
                                 this.Dsm.NonNullTileCount + (this.Dsm.NonNullTileCount == 1 ? " DSM created, " : " DSMs created, ") +
-                                this.TilesWritten + " of " + lasGrid.NonNullCells + " tiles " + (this.BypassOutputRasterWriteToDisk ? "completed (" : "written (") + totalThreads +
+                                this.TilesWritten + " of " + lasFilesToRead + " tiles " + (this.BypassOutputRasterWriteToDisk ? "completed (" : "written (") + totalThreads +
                                 (totalThreads == 1 ? " thread, " : " threads, ") + activeReadThreads + " reading)...";
                 return status;
             }

@@ -121,11 +121,11 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.Las), $"-{nameof(this.Las)} = '{String.Join(", ", this.Las)}' does not match any existing point clouds.");
             }
-            if ((this.Declination.Length != 1) && (this.Declination.Length != cloudPaths.Count))
+            if ((this.Declination.Length != 1) && (this.Declination.Length != cloudPaths.Count) && (this.RotationXY.Length == 0))
             {
                 throw new ParameterOutOfRangeException(nameof(this.Declination), $"-{nameof(this.Declination)} must have either single value or as many values as there are clouds to register. There are {this.Declination.Length} values in -{nameof(this.Declination)} and {cloudPaths.Count} clouds.");
             }
-            if ((this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
+            if ((this.Declination.Length == 0) && (this.RotationXY.Length != 1) && (this.RotationXY.Length != cloudPaths.Count))
             {
                 throw new ParameterOutOfRangeException(nameof(this.RotationXY), $"-{nameof(this.RotationXY)} must have either single value or as many values as there are clouds to register. There are {this.RotationXY.Length} values in -{nameof(this.RotationXY)} and {cloudPaths.Count} clouds.");
             }
@@ -135,11 +135,11 @@ namespace Mars.Clouds.Cmdlets
             }
             if ((this.NudgeX.Length != 1) && (this.NudgeX.Length != cloudPaths.Count))
             {
-                throw new ParameterOutOfRangeException(nameof(this.NudgeX), $"-{nameof(this.NudgeX)} must have either single value or as many values as there are clouds to register. There are {this.NudgeX.Length} values in -{nameof(this.NudgeX)} and {cloudPaths.Count} clouds.");
+                throw new ParameterOutOfRangeException(nameof(this.NudgeX), $"-{nameof(this.NudgeX)} must have either single value or as many values as there are clouds to register. There are {this.NudgeX.Length} values in -{nameof(this.NudgeX)} and {cloudPaths.Count} {(cloudPaths.Count > 1 ? "clouds" : "cloud")}.");
             }
             if ((this.NudgeY.Length != 1) && (this.NudgeY.Length != cloudPaths.Count))
             {
-                throw new ParameterOutOfRangeException(nameof(this.NudgeY), $"-{nameof(this.NudgeY)} must have either single value or as many values as there are clouds to register. There are {this.NudgeY.Length} values in -{nameof(this.NudgeY)} and {cloudPaths.Count} clouds.");
+                throw new ParameterOutOfRangeException(nameof(this.NudgeY), $"-{nameof(this.NudgeY)} must have either single value or as many values as there are clouds to register. There are {this.NudgeY.Length} values in -{nameof(this.NudgeY)} and {cloudPaths.Count} {(cloudPaths.Count > 1 ? "clouds" : "cloud")}.");
             }
 
             // reproject point cloud's horizontal origin from WGS84 to cloud's coordinate system
@@ -193,7 +193,7 @@ namespace Mars.Clouds.Cmdlets
                 {
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, this.FallbackDate); // leaves reader positioned at start of points
+                    LasFile cloud = new(cloudPath, reader, this.FallbackDate); // leaves reader positioned at start of points
 
                     // update cloud extents
                     double rotationXYinDegrees;

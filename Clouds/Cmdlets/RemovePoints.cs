@@ -61,7 +61,7 @@ namespace Mars.Clouds.Cmdlets
                     string destinationCloudPath = outputPathIsDirectory ? Path.Combine(this.Filtered, sourceCloudName) : this.Filtered;
 
                     using LasReader reader = LasReader.CreateForPointRead(sourceCloudPath, this.DiscardOverrunningVlrs);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(sourceCloudPath, reader, fallbackCreationDate: null);
 
                     using LasWriter writer = LasWriter.CreateForPointWrite(destinationCloudPath);
                     writer.WriteHeader(cloud);

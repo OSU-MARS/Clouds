@@ -56,7 +56,7 @@ namespace Mars.Clouds.Cmdlets
                     // load cloud and get its current coordinate system
                     string cloudPath = cloudPaths[cloudIndex];
                     using LasReader reader = LasReader.CreateForPointRead(cloudPath);
-                    LasFile cloud = new(reader, fallbackCreationDate: null);
+                    LasFile cloud = new(cloudPath, reader, fallbackCreationDate: null);
 
                     SpatialReference cloudCrs = cloud.GetSpatialReference();
                     if (boundingBoxLayer == null)

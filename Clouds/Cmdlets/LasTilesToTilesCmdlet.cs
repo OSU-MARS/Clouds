@@ -1,4 +1,7 @@
-﻿using Mars.Clouds.Las;
+﻿using Mars.Clouds.GdalExtensions;
+using Mars.Clouds.Las;
+using OSGeo.OSR;
+using System;
 using System.Management.Automation;
 
 namespace Mars.Clouds.Cmdlets
@@ -28,6 +31,37 @@ namespace Mars.Clouds.Cmdlets
             }
 
             return lasGrid;
+        }
+
+        protected static (double cellSize, int xSizeInCells, int ySizeInCells) GetRasterSizing(LasTileGrid lasGrid, double specifiedCellSize)
+        {
+            return LasTilesToTilesCmdlet.GetRasterSizing(lasGrid.Crs, specifiedCellSize, lasGrid.Transform.CellWidth, lasGrid.Transform.CellHeight);
+        }
+
+        // for now, a raster aligned to the CRS axes is assumed
+        protected static (double cellSize, int xSizeInCells, int ySizeInCells) GetRasterSizing(SpatialReference crs, double specifiedCellSize, double rasterWidthInCrsUnits, double rasterHeightInCrsUnits)
+        {
+            double cellSize = specifiedCellSize;
+            if (Double.IsNaN(specifiedCellSize))
+            {
+                double crsProjectedLinearUnitInM = crs.GetProjectedLinearUnitInM();
+                cellSize = crsProjectedLinearUnitInM == 1.0 ? 0.5 : 1.5; // 0.5 m or 1.5 feet
+            }
+
+            int outputTileSizeX = (int)(rasterWidthInCrsUnits / cellSize);
+            if (rasterWidthInCrsUnits - outputTileSizeX * cellSize != 0.0)
+            {
+                string units = crs.GetLinearUnitsName();
+                throw new InvalidOperationException($"Point cloud derived raster size of {rasterWidthInCrsUnits} x {rasterHeightInCrsUnits} is not an integer multiple of the {cellSize} {units} output cell size.");
+            }
+            int outputTileSizeY = (int)(Double.Abs(rasterHeightInCrsUnits) / cellSize);
+            if (Double.Abs(rasterHeightInCrsUnits) - outputTileSizeY * cellSize != 0.0)
+            {
+                string units = crs.GetLinearUnitsName();
+                throw new InvalidOperationException($"Point cloud tile grid pitch of {rasterWidthInCrsUnits} x {rasterHeightInCrsUnits} is not an integer multiple of the {cellSize} {units} output cell size.");
+            }
+
+            return (cellSize, outputTileSizeX, outputTileSizeY);
         }
     }
 }
