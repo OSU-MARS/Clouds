@@ -69,8 +69,13 @@ namespace Mars.Clouds.Las
 
         public static LasReader CreateForPointRead(string lasPath, bool discardOverrunningVlrs)
         {
+            return LasReader.CreateForPointRead(lasPath, discardOverrunningVlrs, unbuffered: false);
+        }
+
+        public static LasReader CreateForPointRead(string lasPath, bool discardOverrunningVlrs, bool unbuffered)
+        {
             FileInfo cloudFileInfo = new(lasPath);
-            LasReader reader = LasReader.CreateForPointRead(lasPath, cloudFileInfo.Length, discardOverrunningVlrs, unbuffered: false, enableAsync: false);
+            LasReader reader = LasReader.CreateForPointRead(lasPath, cloudFileInfo.Length, discardOverrunningVlrs, unbuffered, enableAsync: false);
             return reader;
         }
 
@@ -579,7 +584,7 @@ namespace Mars.Clouds.Las
             return lasHeader;
         }
 
-        public void ReadIntensitySlice(LasFile lasFile, IntensitySlice intensitySlice, RasterBand<float> dtmBand, double minHeightInCrsUnits, double maxHeightInCrsUnits, double trim, ref byte[]? pointReadBuffer)
+        public void ReadIntensitySlice(LasFile lasFile, IntensitySlice intensitySlice, RasterBand<float> dtmBand, double minHeightInCrsUnits, double maxHeightInCrsUnits, bool ignoreOffSlicePoints, ref byte[]? pointReadBuffer)
         {
             LasHeader10 lasHeader = lasFile.Header;
             this.MoveToPoints(lasFile);
@@ -624,7 +629,7 @@ namespace Mars.Clouds.Las
                         // for now, if the slice's extents are trimmed from the point cloud's extends assume any off slice points are due to the trimming
                         // Check for trimming is done before check for DTM indices since 1) there's no point doing a DSM lookup on a point which won't be used
                         // and 2) scans near the edge of a drone or closely clipped fixed-wing DTM may contain points past the DTM's edge.
-                        if (trim <= 0.0)
+                        if (ignoreOffSlicePoints == false)
                         {
                             throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside intensity slice extents ({intensitySlice.GetExtentString()}) and thus has off slice indices {sliceIndexX}, {sliceIndexY}.");
                         }
@@ -700,16 +705,16 @@ namespace Mars.Clouds.Las
             }
         }
 
-        public void ReadPointsToDsm(LasFile lasFile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, ref float[]? subsurfaceBuffer)
+        public void ReadPointsToDsm(LasFile lasFile, DigitalSurfaceModel dsmFile, ref byte[]? pointReadBuffer, ref float[]? subsurfaceBuffer)
         {
             LasReader.ThrowOnUnsupportedPointFormat(lasFile.Header);
-            if (dsmTile.AerialPoints == null)
+            if (dsmFile.AerialPoints == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(dsmTile), "One or both of DSM's aerial point count band has not been created.");
+                throw new ArgumentOutOfRangeException(nameof(dsmFile), "One or both of DSM's aerial point count band has not been created.");
             }
 
-            bool dsmHasSubsurface = dsmTile.Subsurface != null;
-            int subsurfaceBufferLength = DigitalSurfaceModel.SubsurfaceBufferDepth * dsmTile.Cells;
+            bool dsmHasSubsurface = dsmFile.Subsurface != null;
+            int subsurfaceBufferLength = DigitalSurfaceModel.SubsurfaceBufferDepth * dsmFile.Cells;
             if (dsmHasSubsurface && ((subsurfaceBuffer == null) || (subsurfaceBuffer.Length != subsurfaceBufferLength)))
             {
                 subsurfaceBuffer = GC.AllocateUninitializedArray<float>(subsurfaceBufferLength);
@@ -718,17 +723,17 @@ namespace Mars.Clouds.Las
             this.MoveToPoints(lasFile);
             if (this.Unbuffered)
             {
-                this.ReadPointsToDsmUnbuffered(lasFile, dsmTile, ref pointReadBuffer, subsurfaceBuffer);
+                this.ReadPointsToDsmUnbuffered(lasFile, dsmFile, ref pointReadBuffer, subsurfaceBuffer);
             }
             else
             {
-                this.ReadPointsToDsmBuffered(lasFile, dsmTile, ref pointReadBuffer, subsurfaceBuffer);
+                this.ReadPointsToDsmBuffered(lasFile, dsmFile, ref pointReadBuffer, subsurfaceBuffer);
             }
         }
 
-        private void ReadPointsToDsmBuffered(LasFile lasFile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
+        private void ReadPointsToDsmBuffered(LasFile lasFile, DigitalSurfaceModel dsmFile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
         {
-            Debug.Assert((dsmTile.AerialPoints != null) && (dsmTile.SourceIDSurface != null));
+            Debug.Assert((dsmFile.AerialPoints != null) && (dsmFile.SourceIDSurface != null));
 
             LasHeader10 lasHeader = lasFile.Header;
 
@@ -738,7 +743,7 @@ namespace Mars.Clouds.Las
             int pointRecordLength = lasHeader.PointDataRecordLength;
             int returnNumberMask = lasHeader.GetReturnNumberMask(); // not necessarily used
 
-            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmTile);
+            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmFile);
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
@@ -748,11 +753,11 @@ namespace Mars.Clouds.Las
                 pointReadBuffer = GC.AllocateUninitializedArray<byte>(pointBufferLength);
             }
 
-            bool dsmHasAerialMean = dsmTile.AerialMean != null;
-            bool dsmHasGroundMean = dsmTile.GroundMean != null;
-            bool dsmHasReturnNumber = dsmTile.ReturnNumberSurface != null;
-            bool dsmHasSubsurface = dsmTile.Subsurface != null;
-            Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
+            bool dsmHasAerialMean = dsmFile.AerialMean != null;
+            bool dsmHasGroundMean = dsmFile.GroundMean != null;
+            bool dsmHasReturnNumber = dsmFile.ReturnNumberSurface != null;
+            bool dsmHasSubsurface = dsmFile.Subsurface != null;
+            Debug.Assert((dsmHasGroundMean == false) || (dsmFile.GroundPoints != null));
 
             for (UInt64 lasPointIndex = 0; lasPointIndex < numberOfPoints; lasPointIndex += LasReader.ReadBufferSizeInPoints)
             {
@@ -777,25 +782,25 @@ namespace Mars.Clouds.Las
                         // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
                         double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                         double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                        throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
+                        throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmFile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                     }
 
-                    Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                    Int64 cellIndex = dsmFile.ToCellIndex(xIndex, yIndex);
                     float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
                     if ((classification == PointClassification.Ground) && dsmHasGroundMean)
                     {
                         // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
-                        UInt32 groundPoints = dsmTile.GroundPoints![cellIndex];
+                        UInt32 groundPoints = dsmFile.GroundPoints![cellIndex];
                         if (groundPoints == 0)
                         {
-                            dsmTile.GroundMean![cellIndex] = z;
+                            dsmFile.GroundMean![cellIndex] = z;
                         }
                         else
                         {
-                            dsmTile.GroundMean![cellIndex] += z;
+                            dsmFile.GroundMean![cellIndex] += z;
                         }
 
-                        dsmTile.GroundPoints[cellIndex] = groundPoints + 1;
+                        dsmFile.GroundPoints[cellIndex] = groundPoints + 1;
                     }
                     else
                     {
@@ -804,33 +809,33 @@ namespace Mars.Clouds.Las
                         //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
                         //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
                         // PointClassification.Water is currently also treated as non-ground, which is debatable.
-                        float dsmZ = dsmTile.Surface[cellIndex];
-                        UInt32 aerialPoints = dsmTile.AerialPoints[cellIndex];
+                        float dsmZ = dsmFile.Surface[cellIndex];
+                        UInt32 aerialPoints = dsmFile.AerialPoints[cellIndex];
                         if ((aerialPoints == 0) || (dsmZ < z))
                         {
                             // current point is either 1) the first aerial point read for this cell or 2) higher than the existing DSM
-                            dsmTile.Surface[cellIndex] = z;
-                            dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
+                            dsmFile.Surface[cellIndex] = z;
+                            dsmFile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
                             if (dsmHasReturnNumber)
                             {
-                                dsmTile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
+                                dsmFile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
                             }
                         }
 
-                        dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                        dsmFile.AerialPoints[cellIndex] = aerialPoints + 1;
                         if (dsmHasSubsurface && (aerialPoints > 0)) // first aerial point always goes to DSM
                         {
-                            dsmTile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
+                            dsmFile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
                         }
                         if (dsmHasAerialMean)
                         {
                             if (aerialPoints == 0)
                             {
-                                dsmTile.AerialMean![cellIndex] = z;
+                                dsmFile.AerialMean![cellIndex] = z;
                             }
                             else
                             {
-                                dsmTile.AerialMean![cellIndex] += z;
+                                dsmFile.AerialMean![cellIndex] += z;
                             }
                         }
                     }
@@ -838,9 +843,9 @@ namespace Mars.Clouds.Las
             }
         }
 
-        private unsafe void ReadPointsToDsmUnbuffered(LasFile lasFile, DigitalSurfaceModel dsmTile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
+        private unsafe void ReadPointsToDsmUnbuffered(LasFile lasFile, DigitalSurfaceModel dsmFile, ref byte[]? pointReadBuffer, float[]? subsurfaceBuffer)
         {
-            Debug.Assert((dsmTile.AerialPoints != null) && (dsmTile.SourceIDSurface != null));
+            Debug.Assert((dsmFile.AerialPoints != null) && (dsmFile.SourceIDSurface != null));
 
             LasHeader10 lasHeader = lasFile.Header;
             UInt64 numberOfPoints = lasHeader.GetNumberOfPoints();
@@ -851,15 +856,15 @@ namespace Mars.Clouds.Las
             bool hasRgb = lasHeader.PointsHaveRgb;
             bool hasNearInfrared = lasHeader.PointsHaveNearInfrared;
 
-            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmTile);
+            LasToGridTransform lasToDsmTransformXY = new(lasHeader, dsmFile);
             float zOffset = (float)lasHeader.ZOffset;
             float zScale = (float)lasHeader.ZScaleFactor;
 
-            bool dsmHasAerialMean = dsmTile.AerialMean != null;
-            bool dsmHasGroundMean = dsmTile.GroundMean != null;
-            bool dsmHasReturnNumber = dsmTile.ReturnNumberSurface != null;
-            bool dsmHasSubsurface = dsmTile.Subsurface != null;
-            Debug.Assert((dsmHasGroundMean == false) || (dsmTile.GroundPoints != null));
+            bool dsmHasAerialMean = dsmFile.AerialMean != null;
+            bool dsmHasGroundMean = dsmFile.GroundMean != null;
+            bool dsmHasReturnNumber = dsmFile.ReturnNumberSurface != null;
+            bool dsmHasSubsurface = dsmFile.Subsurface != null;
+            Debug.Assert((dsmHasGroundMean == false) || (dsmFile.GroundPoints != null));
 
             if ((pointReadBuffer == null) || (pointReadBuffer.Length != LasReader.FloatingPointReadBufferSizeInBytes))
             {
@@ -949,25 +954,25 @@ namespace Mars.Clouds.Las
                             // For now DSM tiles with smaller extents than the point cloud tile aren't supported.
                             double x = lasHeader.XOffset + lasHeader.XScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[0..4]);
                             double y = lasHeader.YOffset + lasHeader.YScaleFactor * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[4..8]);
-                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmTile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
+                            throw new NotSupportedException($"Point at x = {x}, y = {y} lies outside DSM tile extents ({dsmFile.GetExtentString()}) and thus has off tile indices {xIndex}, {yIndex}.");
                         }
 
-                        Int64 cellIndex = dsmTile.ToCellIndex(xIndex, yIndex);
+                        Int64 cellIndex = dsmFile.ToCellIndex(xIndex, yIndex);
                         float z = zOffset + zScale * BinaryPrimitives.ReadInt32LittleEndian(pointBytes[8..12]);
                         if ((classification == PointClassification.Ground) && dsmHasGroundMean)
                         {
                             // TODO: support PointClassification.{ Rail, RoadSurface, IgnoredGround }
-                            UInt32 groundPoints = dsmTile.GroundPoints![cellIndex];
+                            UInt32 groundPoints = dsmFile.GroundPoints![cellIndex];
                             if (groundPoints == 0)
                             {
-                                dsmTile.GroundMean![cellIndex] = z;
+                                dsmFile.GroundMean![cellIndex] = z;
                             }
                             else
                             {
-                                dsmTile.GroundMean![cellIndex] += z;
+                                dsmFile.GroundMean![cellIndex] += z;
                             }
 
-                            dsmTile.GroundPoints[cellIndex] = groundPoints + 1;
+                            dsmFile.GroundPoints[cellIndex] = groundPoints + 1;
                         }
                         else
                         {
@@ -976,32 +981,32 @@ namespace Mars.Clouds.Las
                             //                       ModelKeyPoint, OverlapPoint, WireGuard, WireConductor, TransmissionTower, WireStructureConnector,
                             //                       BridgeDeck, OverheadStructure, Snow, TemporalExclusion }
                             // PointClassification.Water is currently also treated as non-ground, which is debatable
-                            float dsmZ = dsmTile.Surface[cellIndex];
-                            UInt32 aerialPoints = dsmTile.AerialPoints[cellIndex];
+                            float dsmZ = dsmFile.Surface[cellIndex];
+                            UInt32 aerialPoints = dsmFile.AerialPoints[cellIndex];
                             if ((dsmZ < z) || (aerialPoints == 0))
                             {
-                                dsmTile.Surface[cellIndex] = z;
-                                dsmTile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
+                                dsmFile.Surface[cellIndex] = z;
+                                dsmFile.SourceIDSurface[cellIndex] = BinaryPrimitives.ReadUInt16LittleEndian(pointFormat < 6 ? pointBytes[18..20] : pointBytes[20..22]);
                                 if (dsmHasReturnNumber)
                                 {
-                                    dsmTile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
+                                    dsmFile.ReturnNumberSurface![cellIndex] = (byte)(pointBytes[14] & returnNumberMask);
                                 }
                             }
 
-                            dsmTile.AerialPoints[cellIndex] = aerialPoints + 1;
+                            dsmFile.AerialPoints[cellIndex] = aerialPoints + 1;
                             if (dsmHasSubsurface && (aerialPoints > 0)) // first aerial point always goes to DSM
                             {
-                                dsmTile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
+                                dsmFile.MaybeInsertSubsurfacePoint((int)cellIndex, dsmZ, (int)aerialPoints, z, subsurfaceBuffer!);
                             }
                             if (dsmHasAerialMean)
                             {
                                 if (aerialPoints == 0)
                                 {
-                                    dsmTile.AerialMean![cellIndex] = z;
+                                    dsmFile.AerialMean![cellIndex] = z;
                                 }
                                 else
                                 {
-                                    dsmTile.AerialMean![cellIndex] += z;
+                                    dsmFile.AerialMean![cellIndex] += z;
                                 }
                             }
                         }

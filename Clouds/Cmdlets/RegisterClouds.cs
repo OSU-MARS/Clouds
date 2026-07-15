@@ -2,6 +2,7 @@
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using MaxRev.Gdal.Core;
 using OSGeo.OGR;
 using OSGeo.OSR;
 using System;
@@ -77,6 +78,13 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Units of the input point cloud. Meters ('m') or feet ('ft'). Default is meters.")]
         [ValidateSet(Constant.Crs.LinearUnitMeter, Constant.Crs.LinearUnitFoot)]
         public string ScannerUnit { get; set; }
+
+        static RegisterClouds()
+        {
+            // Register-Clouds fails with PROJ: proj_create_from_database: Cannot find proj.db if GdalBase.ConfigureAll() isn't called
+            // See also remarks in GdalCmdlet..ctor().
+            GdalBase.ConfigureAll();
+        }
 
         public RegisterClouds()
         {

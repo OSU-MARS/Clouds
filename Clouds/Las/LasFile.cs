@@ -96,7 +96,7 @@ namespace Mars.Clouds.Las
         /// frame) then different point clouds' grids will end up aligned. If the frame is not a multiple (e.g. 30 cm cells in a 1 m frame) then 
         /// different clouds' grids are likely to often be offset from each other.
         /// </remarks>
-        public (GridGeoTransform Transform, int XSize, int YSize) GetSizeSnappedGrid(double cellSizeInCrsUnits, double trimInCrsUnits)
+        public (GridGeoTransform Transform, int XSize, int YSize) GetSizeSnappedGrid(double cellSizeInCrsUnits, double trimXinCrsUnits, double trimYinCrsUnits)
         {
             if (cellSizeInCrsUnits <= 0.0F)
             {
@@ -109,21 +109,21 @@ namespace Mars.Clouds.Las
                 alignmentScale *= 10.0;
             }
 
-            double cloudMinX = this.Header.MinX + trimInCrsUnits;
+            double cloudMinX = this.Header.MinX + trimXinCrsUnits;
             double floorX = alignmentScale * Double.Floor(cloudMinX / alignmentScale);
             double gridMinX = floorX + cellSizeInCrsUnits * Double.Floor((cloudMinX - floorX) / cellSizeInCrsUnits);
 
-            double cloudMaxX = this.Header.MaxX - trimInCrsUnits;
+            double cloudMaxX = this.Header.MaxX - trimXinCrsUnits;
             double ceilingX = alignmentScale * Double.Ceiling(cloudMaxX / alignmentScale);
             double gridMaxX = ceilingX - cellSizeInCrsUnits * Double.Floor((ceilingX - cloudMaxX) / cellSizeInCrsUnits);
 
             int xSize = (int)Math.Ceiling((gridMaxX - gridMinX) / cellSizeInCrsUnits);
 
-            double cloudMaxY = this.Header.MaxY - trimInCrsUnits;
+            double cloudMaxY = this.Header.MaxY - trimYinCrsUnits;
             double ceilingY = alignmentScale * Double.Ceiling(cloudMaxY / alignmentScale);
             double gridMaxY = ceilingY - cellSizeInCrsUnits * Double.Floor((ceilingY - cloudMaxY) / cellSizeInCrsUnits);
 
-            double cloudMinY = this.Header.MinY + trimInCrsUnits;
+            double cloudMinY = this.Header.MinY + trimYinCrsUnits;
             double floorY = alignmentScale * Double.Floor(cloudMinY / alignmentScale);
             double gridMinY = floorY + cellSizeInCrsUnits * Double.Floor((cloudMinY - floorY) / cellSizeInCrsUnits);
 

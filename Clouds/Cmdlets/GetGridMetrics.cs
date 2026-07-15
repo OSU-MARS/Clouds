@@ -196,7 +196,7 @@ namespace Mars.Clouds.Cmdlets
                         RasterBand<float> dtmTileBand = dtmTile.GetBand(this.DtmBand);
                         lock (metricsReadCreateWrite)
                         {
-                            dtmTileBand.TryTakeOwnershipOfDataBuffer(metricsReadCreateWrite.DtmBandPool);
+                            dtmTileBand.TryTakeOwnershipOfDataBuffer(metricsReadCreateWrite.DtmBandPool); // pool doesn't need separate lock as lock on metricsReadCreateWrite is coordinating
                         }
                         dtmTileBand.Read(dtmTile.FilePath);
 

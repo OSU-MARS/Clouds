@@ -37,7 +37,7 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Include point cloud band when writing DTM tiles to disk.")]
         public SwitchParameter PointCounts { get; set; }
 
-        [Parameter(HelpMessage = $"Number of stenciling iterations to apply to the DTM (after interpolation if -{nameof(GetDtm.FillPower)} is specified, default is zero iterations). Each iteration applies a 3x3 lowpass filter (simple moving average) to smooth interpolated data values and then reapplies the ground values obtained from the input point cloud to snap those locations back to measured heights. The useful number of iterations decreases as the consistency of ground resolution increases, with success in filling data voids with interpolation, and with rugosity in the true ground surface. Some starting points are 5 stencil and 1 smoothing iteration, 10 and 2, 25 and 5, and 50 and 5 iterations depending on the amount of smoothing needed.")]
+        [Parameter(HelpMessage = $"Number of stenciling iterations to apply to the DTM (after interpolation if -{nameof(GetDtm.FillPower)} is specified, default is zero iterations). Each iteration applies a 3x3 lowpass filter (simple moving average) to smooth interpolated data values and then reapplies the ground values obtained from the input point cloud to snap those locations back to measured heights. The useful number of iterations decreases as the consistency of ground resolution increases, with success in filling data voids with interpolation, and with rugosity in the true ground surface. Some starting points are 1 stencil with no smoothing iteration, 5 or 10 stencil and 1-2 smoothing iterations, 25 and 3-5, and 50-100 and 5-10 iterations depending on the amount of smoothing needed and width of the ground data gaps to bridge with interpolation.")]
         [ValidateRange(0, 100000)] // sanity upper bound
         public int StencilIterations { get; set; }
 
@@ -48,6 +48,10 @@ namespace Mars.Clouds.Cmdlets
         [Parameter(HelpMessage = "Indicates the input point clouds are a tiled dataset and thus that the DTM should be generated as a virtual raster (.vrt).")]
         public SwitchParameter Vrt { get; set; }
 
+        [Parameter(HelpMessage = "EPSG of input point clouds' vertical coordinate system if not specified in the data files. Default is unset, in which case DTMs will not have a vertical CRS if their source point cloud lacks a vertical CRS. Such use is, however, discouraged as DTMs without a vertical CRS are ambiguous. Common vertical CRSes in the United States are 5703 (NAVD88 meters), 6360 (NAVD88 feet), and 8228 (NAVD88 feet for certain state planes).")]
+        [ValidateRange(Constant.Epsg.Min, Constant.Epsg.Max)]
+        public int InputVerticalEpsg { get; set; }
+
         public GetDtm()
         {
             this.CellSize = Double.NaN;
@@ -55,6 +59,7 @@ namespace Mars.Clouds.Cmdlets
             this.Dtm = String.Empty;
             this.FillDistance = Double.NaN;
             this.FillPower = 1;
+            this.InputVerticalEpsg = -1;
             // leave this.MetadataThreads at default
             this.PointCounts = false;
             this.StencilIterations = 0;
@@ -97,7 +102,11 @@ namespace Mars.Clouds.Cmdlets
                 pointCloudsOrGridPositionsToRead = cloudPaths.Count;
             }
 
-            FileReadWrite dtmReadWrite = new(dtmPathIsDirectory);
+            SpatialReference? inputVerticalCrs = null;
+            if (this.InputVerticalEpsg >= Constant.Epsg.Min)
+            {
+                inputVerticalCrs = SpatialReferenceExtensions.Create(this.InputVerticalEpsg);
+            }
 
             // estimate read thread count and number of useful threads for DTM interpolation
             (float driveTransferRateSingleThreadInGBs, float ddrBandwidthSingleThreadInGBs) = LasReader.GetPointsToDtmBandwidth(this.Unbuffered);
@@ -112,6 +121,7 @@ namespace Mars.Clouds.Cmdlets
             int totalThreads = Int32.Min(readThreads + tileCompletionThreads, pointCloudsOrGridPositionsToRead);
 
             long cellsWritten = 0;
+            FileReadWrite dtmReadWrite = new(dtmPathIsDirectory);
             using SemaphoreSlim readSemaphore = new(initialCount: readThreads, maxCount: readThreads);
             ParallelTasks dtmTasks = new(totalThreads, () =>
             {
@@ -168,7 +178,7 @@ namespace Mars.Clouds.Cmdlets
                         {
                             Debug.Assert(cloudPaths != null);
                             string cloudPath = cloudPaths[lasFileIndex];
-                            lasReader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs);
+                            lasReader = LasReader.CreateForPointRead(cloudPath, this.DiscardOverrunningVlrs, this.Unbuffered);
                             lasFile = new(cloudPath, lasReader, this.FallbackDate);
                             dtmCrs = lasFile.GetSpatialReference();
                             dtmOriginX = lasFile.Header.MinX;
@@ -188,6 +198,12 @@ namespace Mars.Clouds.Cmdlets
                             double dtmExtentY = dtmOriginY - dtmMinY;
 
                             (dtmCellSizeInCrsUnits, dtmSizeInCellsX, dtmSizeInCellsY) = LasTilesToTilesCmdlet.GetRasterSizing(dtmCrs, this.CellSize, dtmExtentX, dtmExtentY);
+                        }
+
+                        if ((dtmCrs.IsVertical() == 0) && (inputVerticalCrs != null))
+                        {
+                            // if point cloud is missing a vertical CRS, annotate the DTM's CRS with -InputVerticalEpsg if it's available
+                            dtmCrs = SpatialReferenceExtensions.CreateCompound(dtmCrs, inputVerticalCrs);
                         }
 
                         string tileName = Tile.GetName(lasFile.FilePath);

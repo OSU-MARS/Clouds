@@ -253,6 +253,8 @@ namespace Mars.Clouds.Cmdlets
                 base.OnCreatedTileUnreferenced(unreferencedTileIndexX, unreferencedTileIndexY, tile);
 
                 // also return gridded vector lists of treetops
+                // Treetop pool does not need to be locked within the scope of tile release as the OnTileWritten() -> OnTileCompleted() -> OnCreatedTileUnreferenced() call
+                // stack resides within a lock on the TreeCrownReadCreateWriteStreaming instance coordinating the cmdlet threads.
                 if (this.Treetops.TryRemoveAt(unreferencedTileIndexX, unreferencedTileIndexY, out TreetopsGrid? treetopsTile))
                 {
                     this.TreetopPool.Return(treetopsTile);
@@ -276,7 +278,12 @@ namespace Mars.Clouds.Cmdlets
                     throw new NotSupportedException($"Tile '{treetopTilePath}' does not have the same coordinate system ('{treetopCrs.GetName()}') as the digital surface model ('{dsmTile.Crs.GetName()}').");
                 }
 
-                if (this.TreetopPool.TryGet(out TreetopsGrid? treetopTile))
+                TreetopsGrid? treetopTile;
+                lock (this) // OnSourceTileRead() is not called from within a lock, see remarks in OnCreatedTileUnreferenced()
+                {
+                    this.TreetopPool.TryGet(out treetopTile);
+                }
+                if (treetopTile != null)
                 {
                     treetopTile.Reset(dsmTile);
                 }

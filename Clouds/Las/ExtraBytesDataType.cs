@@ -3,8 +3,8 @@
     public enum ExtraBytesDataType : byte
     {
         Undocumented = 0,
-        Byte = 1,
-        Character = 2,
+        UInt8 = 1,
+        Int8 = 2,
         UInt16 = 3,
         Int16 = 4,
         UInt32 = 5,

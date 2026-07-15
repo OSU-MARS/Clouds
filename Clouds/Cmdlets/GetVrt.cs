@@ -171,13 +171,19 @@ namespace Mars.Clouds.Cmdlets
                             bool bandDataPreviouslyRead = band.HasData;
                             if (bandDataPreviouslyRead == false)
                             {
-                                bool didOwn = band.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+                                lock (dataBufferPool)
+                                {
+                                    band.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+                                }
                                 band.ReadDataInSameCrsAndTransform(tileDataset); // band is reading its own data so CRS and transform are guaranteed
                             }
                             tileStatistics.Add(band.GetStatistics());
                             if (bandDataPreviouslyRead == false)
                             {
-                                band.ReturnData(dataBufferPool);
+                                lock (dataBufferPool)
+                                {
+                                    band.ReturnData(dataBufferPool);
+                                }
                             }
                         }
 

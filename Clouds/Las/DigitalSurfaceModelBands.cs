@@ -32,11 +32,11 @@ namespace Mars.Clouds.Las
         SourceIDSurface = 0x2000,
 
         // band groups
-        Primary = Surface | CanopyMaxima3 | CanopyHeight,
+        Primary = Surface | CanopyHeight,
         SlopeAspect = DsmSlope | DsmAspect | CmmSlope3 | CmmAspect3,
         DiagnosticZ = Subsurface | AerialMean | GroundMean,
         PointCounts = AerialPoints | GroundPoints,
 
-        Default = Surface | CanopyMaxima3 | CanopyHeight | AerialMean | GroundMean | PointCounts | SourceIDSurface
+        Default = Surface | CanopyHeight | AerialPoints | AerialMean | GroundPoints | GroundMean | SourceIDSurface
     }
 }

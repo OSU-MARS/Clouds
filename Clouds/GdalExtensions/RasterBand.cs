@@ -103,6 +103,7 @@ namespace Mars.Clouds.GdalExtensions
             // update CRS and transform
             this.Crs = crs;
             this.Transform.CopyFrom(rasterDataset);
+
             // update data and no data
             this.ReadDataInSameCrsAndTransform(rasterDataset);
         }
@@ -621,11 +622,6 @@ namespace Mars.Clouds.GdalExtensions
 
         public override void ReadDataInSameCrsAndTransform(Dataset rasterDataset)
         {
-            if ((this.SizeX != rasterDataset.RasterXSize) || (this.SizeY != rasterDataset.RasterYSize))
-            {
-                throw new ArgumentOutOfRangeException(nameof(rasterDataset), $"Raster is {rasterDataset.RasterXSize} by {rasterDataset.RasterYSize} cells but band is {this.SizeX} by {this.SizeY} cells.");
-            }
-
             for (int bandIndex = 0; bandIndex < rasterDataset.RasterCount; ++bandIndex)
             {
                 int gdalBandIndex = bandIndex + 1;
@@ -633,9 +629,19 @@ namespace Mars.Clouds.GdalExtensions
                 string bandName = gdalBand.GetDescription();
                 if (String.Equals(bandName, this.Name, StringComparison.Ordinal))
                 {
+                    // update size
+                    if (this.SizeX != rasterDataset.RasterXSize)
+                    {
+                        this.SizeX = rasterDataset.RasterXSize;
+                    }
+                    if (this.SizeY != rasterDataset.RasterYSize)
+                    {
+                        this.SizeY = rasterDataset.RasterYSize;
+                    }
+
+                    this.SetNoDataValue(gdalBand); // update no data
                     DataType thisDataType = RasterBand.GetGdalDataType<TBand>();
-                    this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, thisDataType); // update data
-                    this.SetNoDataValue(gdalBand); // also update no data
+                    this.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand, thisDataType); // read band data (reallocates data array if neeed to match new size)
                     return;
                 }
             }
@@ -650,11 +656,13 @@ namespace Mars.Clouds.GdalExtensions
 
         private void ReadDataAssumingSameCrsTransformSizeAndNoData(Band gdalBand, DataType thisDataType)
         {
-            // callers check (or ensure) x and y sizes match
+            // resize data to match current size
+            // This occurs when a band reads data for the first time (this.Data is initially an empty array) or when a cached band
+            // reads from a raster dataset with different dimensions than the band was initially setup with.
             if (this.Data.Length != this.Cells)
             {
                 // no need to zero data as it's filled by the following ReadData() or Convert() call
-                // (Assume raster is large enough allocate uninitialized outperforms new.)
+                // For now, assume raster is large enough allocate uninitialized outperforms new.
                 this.Data = GC.AllocateUninitializedArray<TBand>(this.Cells);
             }
 
@@ -841,7 +849,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.BytePool.TryGet(out byte[]? byteBuffer))
                     {
                         TBand[]? retypedBuffer = byteBuffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -850,7 +858,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.FloatPool.TryGet(out float[]? floatBuffer))
                     {
                         TBand[]? retypedBuffer = floatBuffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -859,7 +867,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.DoublePool.TryGet(out double[]? doubleBuffer))
                     {
                         TBand[]? retypedBuffer = doubleBuffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -868,7 +876,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.Int8Pool.TryGet(out sbyte[]? int8buffer))
                     {
                         TBand[]? retypedBuffer = int8buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -877,7 +885,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.Int16Pool.TryGet(out Int16[]? int16buffer))
                     {
                         TBand[]? retypedBuffer = int16buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -886,7 +894,7 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.Int32Pool.TryGet(out Int32[]? int32buffer))
                     {
                         TBand[]? retypedBuffer = int32buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
@@ -895,34 +903,34 @@ namespace Mars.Clouds.GdalExtensions
                     if (pool.Int64Pool.TryGet(out Int64[]? int64buffer))
                     {
                         TBand[]? retypedBuffer = int64buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
                     break;
                 case DataType.GDT_UInt16:
-                    if (pool.UInt16Pool.TryGet(out UInt16[]? UInt16buffer))
+                    if (pool.UInt16Pool.TryGet(out UInt16[]? uint16buffer))
                     {
-                        TBand[]? retypedBuffer = UInt16buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        TBand[]? retypedBuffer = uint16buffer as TBand[];
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
                     break;
                 case DataType.GDT_UInt32:
-                    if (pool.UInt32Pool.TryGet(out UInt32[]? UInt32buffer))
+                    if (pool.UInt32Pool.TryGet(out UInt32[]? uint32buffer))
                     {
-                        TBand[]? retypedBuffer = UInt32buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        TBand[]? retypedBuffer = uint32buffer as TBand[];
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }
                     break;
                 case DataType.GDT_UInt64:
-                    if (pool.UInt64Pool.TryGet(out UInt64[]? UInt64buffer))
+                    if (pool.UInt64Pool.TryGet(out UInt64[]? uint64buffer))
                     {
-                        TBand[]? retypedBuffer = UInt64buffer as TBand[];
-                        Debug.Assert(retypedBuffer != null);
+                        TBand[]? retypedBuffer = uint64buffer as TBand[];
+                        Debug.Assert((retypedBuffer != null) && (retypedBuffer.Length == this.Cells));
                         this.Data = retypedBuffer;
                         return true;
                     }

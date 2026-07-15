@@ -1,4 +1,5 @@
-﻿using Mars.Clouds.GdalExtensions;
+﻿using Mars.Clouds.Extensions;
+using Mars.Clouds.GdalExtensions;
 using OSGeo.GDAL;
 using System;
 using System.Collections.Generic;
@@ -103,6 +104,7 @@ namespace Mars.Clouds.Segmentation
 
             // find minimum cost path for each DSM cell and mark tree IDs into cells
             int cellDsmEndIndexY = 0; // exclusive
+            ObjectPool<TreeCrownCostField> costFieldPool = segmentationState.FieldPool;
             TreeCrownCostGrid crownCosts = segmentationState.TreetopCostTile;
             for (int treetopCellIndexY = 0; treetopCellIndexY < treetopsTile.SizeY; ++treetopCellIndexY)
             {
@@ -155,16 +157,22 @@ namespace Mars.Clouds.Segmentation
                     }
 
                     // cost fields in northwest corner are no longer needed
-                    crownCosts.Return(treetopCellIndexX - 1, treetopCellIndexY - 1, segmentationState);
+                    lock (costFieldPool)
+                    {
+                        crownCosts.Return(treetopCellIndexX - 1, treetopCellIndexY - 1, costFieldPool);
+                    }
                 }
             }
 
             // return last two rows of cost fields to pool
-            for (int treetopCellIndexY = treetopsTile.SizeY - 2; treetopCellIndexY < treetopsTile.SizeY; ++treetopCellIndexY)
+            lock (costFieldPool)
             {
-                for (int treetopCellIndexX = 0; treetopCellIndexX < treetopsTile.SizeX; ++treetopCellIndexX)
+                for (int treetopCellIndexY = treetopsTile.SizeY - 2; treetopCellIndexY < treetopsTile.SizeY; ++treetopCellIndexY)
                 {
-                    crownCosts.Return(treetopCellIndexX, treetopCellIndexY, segmentationState);
+                    for (int treetopCellIndexX = 0; treetopCellIndexX < treetopsTile.SizeX; ++treetopCellIndexX)
+                    {
+                        crownCosts.Return(treetopCellIndexX, treetopCellIndexY, costFieldPool);
+                    }
                 }
             }
         }

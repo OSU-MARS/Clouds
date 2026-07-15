@@ -14,8 +14,8 @@ namespace Mars.Clouds.Las
         public RasterBand<UInt64> Intensity { get; private init; }
         public RasterBand<UInt32> PointCount { get; private init; }
 
-        public IntensitySlice(LasFile cloud, double cellSizeInCrsUnits, double trim)
-            : base(cloud.GetSpatialReference().Clone(), cloud.GetSizeSnappedGrid(cellSizeInCrsUnits, trim), cloneCrsAndTransform: false)
+        public IntensitySlice(LasFile cloud, double cellSizeInCrsUnits, double trimX, double trimY)
+            : base(cloud.GetSpatialReference().Clone(), cloud.GetSizeSnappedGrid(cellSizeInCrsUnits, trimX, trimY), cloneCrsAndTransform: false)
         {
             this.Intensity = new(this, IntensitySlice.IntensityBandName, RasterBand.NoDataDefaultUInt64, (UInt64)0);
             this.PointCount = new(this, IntensitySlice.PointCountBandName, RasterBand.NoDataDefaultUInt32, (UInt32)0);

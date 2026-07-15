@@ -1429,119 +1429,59 @@ namespace Mars.Clouds.Las
             {
                 // if cell has less than 20 points then n * pointCount / 20 will be zero at least some of the time
                 // Negative indices result in this case due to the subtraction of 1.
-                if (this.ZQuantile05 != null)
-                {
-                    this.ZQuantile05[cellIndex] = sortedZ[Int32.Max((int)(pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile05?[cellIndex] = sortedZ[Int32.Max((int)(pointCount / 20.0F + 0.5F) - 1, 0)];
                 zQuantile10 = sortedZ[Int32.Max((int)(2.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile10[cellIndex] = zQuantile10;
-                if (this.ZQuantile15 != null)
-                {
-                    this.ZQuantile15[cellIndex] = sortedZ[Int32.Max((int)(3.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile15?[cellIndex] = sortedZ[Int32.Max((int)(3.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile20[cellIndex] = sortedZ[Int32.Max((int)(4.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                if (this.ZQuantile25 != null)
-                {
-                    this.ZQuantile25[cellIndex] = sortedZ[Int32.Max((int)(5.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile25?[cellIndex] = sortedZ[Int32.Max((int)(5.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 zQuantile30 = sortedZ[Int32.Max((int)(6.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile30[cellIndex] = zQuantile30;
-                if (this.ZQuantile35 != null)
-                {
-                    this.ZQuantile35[cellIndex] = sortedZ[Int32.Max((int)(7.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile35?[cellIndex] = sortedZ[Int32.Max((int)(7.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile40[cellIndex] = sortedZ[Int32.Max((int)(8.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                if (this.ZQuantile45 != null)
-                {
-                    this.ZQuantile45[cellIndex] = sortedZ[Int32.Max((int)(9.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile45?[cellIndex] = sortedZ[Int32.Max((int)(9.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 zQuantile50index = Int32.Max((int)(10.0F * pointCount / 20.0F + 0.5F) - 1, 0);
                 zQuantile50 = sortedZ[zQuantile50index];
                 this.ZQuantile50[cellIndex] = zQuantile50;
-                if (this.ZQuantile55 != null)
-                {
-                    this.ZQuantile55[cellIndex] = sortedZ[Int32.Max((int)(11.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile55?[cellIndex] = sortedZ[Int32.Max((int)(11.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile60[cellIndex] = sortedZ[Int32.Max((int)(12.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                if (this.ZQuantile65 != null)
-                {
-                    this.ZQuantile65[cellIndex] = sortedZ[Int32.Max((int)(13.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile65?[cellIndex] = sortedZ[Int32.Max((int)(13.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 zQuantile70 = sortedZ[Int32.Max((int)(14.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile70[cellIndex] = zQuantile70;
-                if (this.ZQuantile75 != null)
-                {
-                    this.ZQuantile75[cellIndex] = sortedZ[Int32.Max((int)(15.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile75?[cellIndex] = sortedZ[Int32.Max((int)(15.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile80[cellIndex] = sortedZ[Int32.Max((int)(16.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                if (this.ZQuantile85 != null)
-                {
-                    this.ZQuantile85[cellIndex] = sortedZ[Int32.Max((int)(17.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile85?[cellIndex] = sortedZ[Int32.Max((int)(17.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 zQuantile90 = sortedZ[Int32.Max((int)(18.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
                 this.ZQuantile90[cellIndex] = zQuantile90;
-                if (this.ZQuantile95 != null)
-                {
-                    this.ZQuantile95[cellIndex] = sortedZ[Int32.Max((int)(19.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
-                }
+                this.ZQuantile95?[cellIndex] = sortedZ[Int32.Max((int)(19.0F * pointCount / 20.0F + 0.5F) - 1, 0)];
             }
             else
             {
-                if (this.ZQuantile05 != null)
-                {
-                    this.ZQuantile05[cellIndex] = sortedZ[pointCount / 20 - 1];
-                }
+                this.ZQuantile05?[cellIndex] = sortedZ[pointCount / 20 - 1];
                 zQuantile10 = sortedZ[2 * pointCount / 20 - 1];
                 this.ZQuantile10[cellIndex] = zQuantile10;
-                if (this.ZQuantile15 != null)
-                {
-                    this.ZQuantile15[cellIndex] = sortedZ[3 * pointCount / 20 - 1];
-                }
+                this.ZQuantile15?[cellIndex] = sortedZ[3 * pointCount / 20 - 1];
                 this.ZQuantile20[cellIndex] = sortedZ[4 * pointCount / 20 - 1];
-                if (this.ZQuantile25 != null)
-                {
-                    this.ZQuantile25[cellIndex] = sortedZ[5 * pointCount / 20 - 1];
-                }
+                this.ZQuantile25?[cellIndex] = sortedZ[5 * pointCount / 20 - 1];
                 zQuantile30 = sortedZ[6 * pointCount / 20 - 1];
                 this.ZQuantile30[cellIndex] = zQuantile30;
-                if (this.ZQuantile35 != null)
-                {
-                    this.ZQuantile35[cellIndex] = sortedZ[7 * pointCount / 20 - 1];
-                }
+                this.ZQuantile35?[cellIndex] = sortedZ[7 * pointCount / 20 - 1];
                 this.ZQuantile40[cellIndex] = sortedZ[8 * pointCount / 20 - 1];
-                if (this.ZQuantile45 != null)
-                {
-                    this.ZQuantile45[cellIndex] = sortedZ[9 * pointCount / 20 - 1];
-                }
+                this.ZQuantile45?[cellIndex] = sortedZ[9 * pointCount / 20 - 1];
                 zQuantile50index = 10 * pointCount / 20 - 1;
                 zQuantile50 = sortedZ[zQuantile50index];
                 this.ZQuantile50[cellIndex] = zQuantile50;
-                if (this.ZQuantile55 != null)
-                {
-                    this.ZQuantile55[cellIndex] = sortedZ[11 * pointCount / 20 - 1];
-                }
+                this.ZQuantile55?[cellIndex] = sortedZ[11 * pointCount / 20 - 1];
                 this.ZQuantile60[cellIndex] = sortedZ[12 * pointCount / 20 - 1];
-                if (this.ZQuantile65 != null)
-                {
-                    this.ZQuantile65[cellIndex] = sortedZ[13 * pointCount / 20 - 1];
-                }
+                this.ZQuantile65?[cellIndex] = sortedZ[13 * pointCount / 20 - 1];
                 zQuantile70 = sortedZ[14 * pointCount / 20 - 1];
                 this.ZQuantile70[cellIndex] = zQuantile70;
-                if (this.ZQuantile75 != null)
-                {
-                    this.ZQuantile75[cellIndex] = sortedZ[15 * pointCount / 20 - 1];
-                }
+                this.ZQuantile75?[cellIndex] = sortedZ[15 * pointCount / 20 - 1];
                 this.ZQuantile80[cellIndex] = sortedZ[16 * pointCount / 20 - 1];
-                if (this.ZQuantile85 != null)
-                {
-                    this.ZQuantile85[cellIndex] = sortedZ[17 * pointCount / 20 - 1];
-                }
+                this.ZQuantile85?[cellIndex] = sortedZ[17 * pointCount / 20 - 1];
                 zQuantile90 = sortedZ[18 * pointCount / 20 - 1];
                 this.ZQuantile90[cellIndex] = zQuantile90;
-                if (this.ZQuantile95 != null)
-                {
-                    this.ZQuantile95[cellIndex] = sortedZ[19 * pointCount / 20 - 1];
-                }
+                this.ZQuantile95?[cellIndex] = sortedZ[19 * pointCount / 20 - 1];
             }
             float zMax = sortedZ[pointCount - 1];
             this.ZMax[cellIndex] = zMax;
@@ -1787,10 +1727,7 @@ namespace Mars.Clouds.Las
                 this.IntensityKurtosis[cellIndex] = (float)intensityKurtosis;
             }
 
-            if (this.IntensityTotal != null)
-            {
-                this.IntensityTotal[cellIndex] = (float)intensitySum;
-            }
+            this.IntensityTotal?[cellIndex] = (float)intensitySum;
 
             int pointsBelowMedian = zQuantile50index;
             int pointsAboveMedian = pointCount - pointsBelowMedian;
@@ -1813,10 +1750,7 @@ namespace Mars.Clouds.Las
                 cumulativeIntensityFractionFromZ0 += intensitySumZ70to90;
                 this.IntensityPCumulativeZQ90[cellIndex] = (float)(cumulativeIntensityFractionFromZ0 / intensitySumAsDouble);
             }
-            if (this.IntensityPGround != null)
-            {
-                this.IntensityPGround[cellIndex] = (float)(intensityGroundSum / intensitySumAsDouble);
-            }
+            this.IntensityPGround?[cellIndex] = (float)(intensityGroundSum / intensitySumAsDouble);
 
             // second z statistics pass now that z means are known
             int pointsAboveZMean = 0;

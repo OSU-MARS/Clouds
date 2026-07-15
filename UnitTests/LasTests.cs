@@ -37,14 +37,20 @@ namespace Mars.Clouds.UnitTests
         public void ReadLasToDsm()
         {
             LasTile lasTile = this.ReadLasTile();
+            SpatialReference lasTileCrs = lasTile.GetSpatialReference();
             (double lasTileCentroidX, double lasTileCentroidY) = lasTile.GridExtent.GetCentroid();
             VirtualRaster<Raster<float>> dtm = this.ReadDtm();
             Assert.IsTrue((dtm.NonNullTileCount == 1) && (dtm.Crs.IsVertical() == 0));
-            Assert.IsTrue((dtm.Crs.IsSameGeogCS(lasTile.GetSpatialReference()) == 1) && SpatialReferenceExtensions.IsSameCrs(dtm.Crs, lasTile.GetSpatialReference()));
+            Assert.IsTrue((dtm.Crs.IsSameGeogCS(lasTile.GetSpatialReference()) == 1) && SpatialReferenceExtensions.IsSameCrs(dtm.Crs, lasTileCrs));
             Assert.IsTrue(dtm.TryGetTileBand(lasTileCentroidX, lasTileCentroidY, bandName: null, out RasterBand<float>? dtmTile)); // no band name set in DTM
 
             RasterBandPool dataBufferPool = new();
-            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, DigitalSurfaceModelBands.Default | DigitalSurfaceModelBands.Subsurface | DigitalSurfaceModelBands.ReturnNumberSurface, dtmTile, dataBufferPool);
+            DigitalSurfaceModel dsmTile = new("dsmRaster ReadLasToDsm.tif", lasTile, lasTileCrs, DigitalSurfaceModelBands.Default | DigitalSurfaceModelBands.CanopyMaxima3 | DigitalSurfaceModelBands.Subsurface | DigitalSurfaceModelBands.ReturnNumberSurface, dtmTile, dataBufferPool);
+            Assert.IsTrue((dsmTile.Bands == (DigitalSurfaceModelBands.Surface | DigitalSurfaceModelBands.CanopyHeight | DigitalSurfaceModelBands.SourceIDSurface | DigitalSurfaceModelBands.CanopyMaxima3 | DigitalSurfaceModelBands.AerialPoints | DigitalSurfaceModelBands.AerialMean | DigitalSurfaceModelBands.GroundPoints | DigitalSurfaceModelBands.GroundMean | DigitalSurfaceModelBands.Subsurface | DigitalSurfaceModelBands.ReturnNumberSurface)) && 
+                          (dsmTile.DsmSlope == null) && (dsmTile.DsmAspect == null) && 
+                          (dsmTile.CanopyMaxima3 != null) && (dsmTile.CmmSlope3 == null) && (dsmTile.CmmAspect3 == null) &&
+                          (dsmTile.AerialPoints != null) && (dsmTile.AerialMean != null) && (dsmTile.GroundPoints != null) && (dsmTile.GroundMean != null) &&
+                          (dsmTile.SourceIDSurface != null) && (dsmTile.ReturnNumberSurface != null));
 
             using LasReader pointReader = lasTile.CreatePointReader(unbuffered: false, enableAsync: false);
             byte[]? pointReadBuffer = null;
@@ -736,21 +742,21 @@ namespace Mars.Clouds.UnitTests
                 }
             }
 
-            (GridGeoTransform gridTransform5cm, int xSize5cm, int ySize5cm) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 0.05, trimInCrsUnits: 0.0);
-            (GridGeoTransform gridTransform30cm, int xSize30cm, int ySize30cm) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 0.30, trimInCrsUnits: 0.0);
-            (GridGeoTransform gridTransform1m, int xSize1m, int ySize1m) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 1.0, trimInCrsUnits: 0.0);
-            (GridGeoTransform gridTransform2m, int xSize2m, int ySize2m) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 2.0, trimInCrsUnits: 0.0);
+            (GridGeoTransform gridTransform5cm, int xSize5cm, int ySize5cm) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 0.05, trimXinCrsUnits: 0.0, trimYinCrsUnits: 0.0);
+            (GridGeoTransform gridTransform30cm, int xSize30cm, int ySize30cm) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 0.30, trimXinCrsUnits: 0.0, trimYinCrsUnits: 0.0);
+            (GridGeoTransform gridTransform1m, int xSize1m, int ySize1m) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 1.0, trimXinCrsUnits: 0.0, trimYinCrsUnits: 0.0);
+            (GridGeoTransform gridTransform2m, int xSize2m, int ySize2m) = lasTile.GetSizeSnappedGrid(cellSizeInCrsUnits: 2.0, trimXinCrsUnits: 0.0, trimYinCrsUnits: 0.0);
 
             Assert.IsTrue((gridTransform5cm.OriginX == 608757.25) && (gridTransform5cm.OriginY == 4927011.25) && (xSize5cm == 74) && (ySize5cm == 85) && (gridTransform5cm.CellHeight == -0.05) && (gridTransform5cm.CellWidth == 0.05) && (gridTransform5cm.RowRotation == 0.0) && (gridTransform5cm.ColumnRotation == 0.0), "5 cm aligned grid generation.");
             Assert.IsTrue((gridTransform30cm.OriginX == 608757.0) && (gridTransform30cm.OriginY == 4927011.40) && (xSize30cm == 14) && (ySize30cm == 15) && (gridTransform30cm.CellHeight == -0.30) && (gridTransform30cm.CellWidth == 0.30) && (gridTransform30cm.RowRotation == 0.0) && (gridTransform30cm.ColumnRotation == 0.0), "30 cm aligned grid generation.");
             Assert.IsTrue((gridTransform1m.OriginX == 608757.0) && (gridTransform1m.OriginY == 4927012.0) && (xSize1m == 4) && (ySize1m == 5) && (gridTransform1m.CellHeight == -1.0) && (gridTransform1m.CellWidth == 1.0) && (gridTransform1m.RowRotation == 0.0) && (gridTransform1m.ColumnRotation == 0.0), "1 m aligned grid generation.");
             Assert.IsTrue((gridTransform2m.OriginX == 608756.0) && (gridTransform2m.OriginY == 4927012.0) && (xSize2m == 3) && (ySize2m == 3) && (gridTransform2m.CellHeight == -2.0) && (gridTransform2m.CellWidth == 2.0) && (gridTransform2m.RowRotation == 0.0) && (gridTransform2m.ColumnRotation == 0.0), "2 m aligned grid generation.");
 
-            IntensitySlice intensitySlice = new(lasTile, cellSizeInCrsUnits: 0.10, trim: 0.0);
+            IntensitySlice intensitySlice = new(lasTile, cellSizeInCrsUnits: 0.10, trimX: 0.0, trimY: 0.0);
             Assert.IsTrue((intensitySlice.Transform.OriginX == 608757.2) && (intensitySlice.Transform.OriginY == 4927011.3) && (intensitySlice.SizeX == 38) && (intensitySlice.SizeY == 43) && (intensitySlice.Transform.CellHeight == -0.10) && (intensitySlice.Transform.CellWidth == 0.10) && (gridTransform5cm.RowRotation == 0.0) && (gridTransform5cm.ColumnRotation == 0.0), "Intensity slice generation.");
 
             RasterBand<float> dtmBand = this.ReadDtm().TileGrid![0, 0]!.GetBand(name: null);
-            pointReader.ReadIntensitySlice(lasTile, intensitySlice, dtmBand, minHeightInCrsUnits: 1.37, maxHeightInCrsUnits: 2.0, trim: 0.0, ref pointReadBuffer);
+            pointReader.ReadIntensitySlice(lasTile, intensitySlice, dtmBand, minHeightInCrsUnits: 1.37, maxHeightInCrsUnits: 2.0, ignoreOffSlicePoints: false, ref pointReadBuffer);
             UInt32 pointsInSlice = 0;
             UInt32 sliceCellsWithPoints = 0;
             UInt64 sliceIntensityTotal = 0;

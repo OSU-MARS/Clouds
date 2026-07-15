@@ -114,10 +114,8 @@ namespace Mars.Clouds.Cmdlets
                     {
                         tileToWrite.Write(tileToWrite.FilePath, this.CompressRasters);
                     }
-                    if (bandStatisticsByTile != null)
-                    {
-                        bandStatisticsByTile[tileWriteIndexX, tileWriteIndexY] = tileToWrite.GetBandStatistics();
-                    }
+
+                    bandStatisticsByTile?[tileWriteIndexX, tileWriteIndexY] = tileToWrite.GetBandStatistics();
                     lock (this)
                     {
                         // mark tile as written even when NoWrite is set so that virtual raster completion's updated and the tile's returned to the object pool

@@ -35,8 +35,8 @@ namespace Mars.Clouds.Segmentation
                          (this.Definition.GetFieldIndex("sourceID") == 2) &&
                          (this.Definition.GetFieldIndex(LocalMaximaVector.RadiusFieldName) == 3) &&
                          (this.Definition.GetFieldIndex(LocalMaximaVector.DsmZFieldName) == 4) &&
-                         (this.Definition.GetFieldIndex("cmmZ") == 5) &&
-                         (this.Definition.GetFieldIndex(LocalMaximaVector.HeightFieldName) == 6) &&
+                         (this.Definition.GetFieldIndex(LocalMaximaVector.HeightFieldName) == 5) &&
+                         (this.Definition.GetFieldIndex("cmmZ") == 6) &&
                          (this.Definition.GetFieldIndex("ring1max") == 7) &&
                          (this.Definition.GetFieldIndex("ring1mean") == 8) &&
                          (this.Definition.GetFieldIndex("ring1min") == 9) &&
@@ -68,7 +68,7 @@ namespace Mars.Clouds.Segmentation
         /// <param name="maxRingIndexEvaluated">maximum index to which ring elevations are populated</param>
         /// <param name="maxRingZ">minimum DSM elevation by ring in CRS units</param>
         /// <param name="minRingZ">minimum DSM elevation by ring in CRS units</param>
-        public void Add(int sourceID, double x, double y, double dsmZ, double cmmZ, double chmHeight, byte localMaximaRadius, ReadOnlySpan<float> maxRingZ, ReadOnlySpan<float> meanRingZ, ReadOnlySpan<float> minRingZ, ReadOnlySpan<float> varianceRingZ)
+        public void Add(int sourceID, double x, double y, double dsmZ, double chmHeight, double cmmZ, byte localMaximaRadius, ReadOnlySpan<float> maxRingZ, ReadOnlySpan<float> meanRingZ, ReadOnlySpan<float> minRingZ, ReadOnlySpan<float> varianceRingZ)
         {
             Debug.Assert(this.IsInEditMode && (Double.IsNaN(chmHeight) || ((chmHeight >= -5.0F) && (chmHeight <= 400.0F)))); // provide some allowance for below DTM noise and errors
 
@@ -82,8 +82,8 @@ namespace Mars.Clouds.Segmentation
             treetopCandidate.SetField(2, sourceID);
             treetopCandidate.SetField(3, this.cellSize * localMaximaRadius);
             treetopCandidate.SetField(4, dsmZ);
-            treetopCandidate.SetField(5, cmmZ);
-            treetopCandidate.SetField(6, chmHeight);
+            treetopCandidate.SetField(5, chmHeight);
+            treetopCandidate.SetField(6, cmmZ);
 
             for (int ringIndex = 0; ringIndex < LocalMaximaVector.RingsWithStatistics; ++ringIndex)
             {
@@ -122,8 +122,8 @@ namespace Mars.Clouds.Segmentation
             gdalLayer.CreateField("sourceID", FieldType.OFTInteger);
             gdalLayer.CreateField(LocalMaximaVector.RadiusFieldName, FieldType.OFTReal);
             gdalLayer.CreateField(LocalMaximaVector.DsmZFieldName, FieldType.OFTReal);
-            gdalLayer.CreateField("cmmZ", FieldType.OFTReal);
             gdalLayer.CreateField(LocalMaximaVector.HeightFieldName, FieldType.OFTReal);
+            gdalLayer.CreateField("cmmZ", FieldType.OFTReal);
             gdalLayer.CreateField("ring1max", FieldType.OFTReal);
             gdalLayer.CreateField("ring1mean", FieldType.OFTReal);
             gdalLayer.CreateField("ring1min", FieldType.OFTReal);

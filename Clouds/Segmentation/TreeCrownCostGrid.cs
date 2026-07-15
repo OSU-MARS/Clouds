@@ -237,12 +237,11 @@ namespace Mars.Clouds.Segmentation
             }
         }
 
-        public void Return(int treetopCellIndexX, int treetopCellIndexY, TreeCrownSegmentationState segmentationState)
+        public void Return(int treetopCellIndexX, int treetopCellIndexY, ObjectPool<TreeCrownCostField> costFieldPool)
         {
             int cellIndexX = treetopCellIndexX + 1;
             int cellIndexY = treetopCellIndexY + 1;
             List<TreeCrownCostField> costFields = this[cellIndexX, cellIndexY];
-            ObjectPool<TreeCrownCostField> costFieldPool = segmentationState.FieldPool;
             for (int fieldIndex = 0; fieldIndex < costFields.Count; ++fieldIndex)
             {
                 TreeCrownCostField costField = costFields[fieldIndex];

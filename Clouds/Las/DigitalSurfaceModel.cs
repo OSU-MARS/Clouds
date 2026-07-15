@@ -36,8 +36,8 @@ namespace Mars.Clouds.Las
         // primary data bands
         // Digital terrain model can be calculated as DTM = DSM - CHM = Surface - CanopyHeight or stored separately.
         public RasterBand<float> Surface { get; private set; } // digital surface model
-        public RasterBand<float> CanopyMaxima3 { get; private set; } // canopy maxima model obtained from the digital surface model using a 3x3 kernel
         public RasterBand<float> CanopyHeight { get; private set; } // canopy height model obtained from DSM - DTM
+        public RasterBand<float>? CanopyMaxima3 { get; private set; } // canopy maxima model obtained from the digital surface model using a 3x3 kernel
 
         public DigitalSurfaceModelBands Bands { get; private set; }
 
@@ -62,12 +62,12 @@ namespace Mars.Clouds.Las
         // diagnostic bands: source IDs
         public RasterBand<UInt16>? SourceIDSurface { get; private set; }
 
-        public DigitalSurfaceModel(string dsmPrimaryFilePath, LasFile lasFile, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
-            : base(lasFile.GetSpatialReference(), dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY, cloneCrsAndTransform: true)
+        public DigitalSurfaceModel(string dsmPrimaryFilePath, LasFile lasFile, SpatialReference crs, DigitalSurfaceModelBands bands, RasterBand<float> dtmTile, RasterBandPool? dataBufferPool)
+            : base(crs, dtmTile.Transform, dtmTile.SizeX, dtmTile.SizeY, cloneCrsAndTransform: true)
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {
-                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}.");
+                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include the flags for {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}, {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.CanopyMaxima3)}, {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Surface)}, and {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.CanopyHeight)}.");
             }
             if (this.Crs.IsCompound() == 0)
             {
@@ -80,11 +80,12 @@ namespace Mars.Clouds.Las
                 throw new ArgumentOutOfRangeException(nameof(dtmTile), $"{dsmPrimaryFilePath}: point clouds and DTMs are currently required to be in the same CRS. The point cloud CRS is '{lasTileCrs.GetName()}' while the DTM CRS is {dtmTile.Crs.GetName()}.");
             }
 
-            this.Bands = DigitalSurfaceModelBands.Primary;
+            this.Bands = bands;
             this.FilePath = dsmPrimaryFilePath;
             this.Surface = new(this, DigitalSurfaceModel.SurfaceBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
-            this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             this.CanopyHeight = new(this, DigitalSurfaceModel.CanopyHeightBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+
+            this.CanopyMaxima3 = null;
 
             this.DsmSlope = null;
             this.DsmAspect = null;
@@ -107,7 +108,7 @@ namespace Mars.Clouds.Las
         {
             if ((bands & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.Primary)
             {
-                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}.");
+                throw new ArgumentOutOfRangeException(nameof(bands), $"{nameof(bands)} must include the flags for {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Primary)}, {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.CanopyMaxima3)}, {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.Surface)}, and {nameof(DigitalSurfaceModelBands)}.{nameof(DigitalSurfaceModelBands.CanopyHeight)}.");
             }
 
             for (int gdalBandIndex = 1; gdalBandIndex <= dsmDataset.RasterCount; ++gdalBandIndex)
@@ -182,10 +183,6 @@ namespace Mars.Clouds.Las
             if (this.Surface == null)
             {
                 throw new ArgumentOutOfRangeException(nameof(dsmDataset), $"DSM raster does not contain a band named '{DigitalSurfaceModel.SurfaceBandName}'.");
-            }
-            if (this.CanopyMaxima3 == null)
-            {
-                throw new ArgumentOutOfRangeException(nameof(dsmDataset), $"DSM raster does not contain a band named '{DigitalSurfaceModel.CanopyMaximaBandName}'.");
             }
             if (this.CanopyHeight == null)
             {
@@ -401,21 +398,33 @@ namespace Mars.Clouds.Las
 
         public void EnsureSupportingBandsCreated(DigitalSurfaceModelBands bands, RasterBandPool? dataBufferPool)
         {
-            this.Bands |= bands;
+            bool cmm3 = (bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3;
+            bool cmm3slope = (bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3;
+            bool cmm3aspect = (bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3;
+            if ((cmm3 == false) && (cmm3slope || cmm3aspect))
+            {
+                throw new ArgumentOutOfRangeException(nameof(bands), $"The canopy maxima model's slope and aspect cannot be created unless the canopy maxima model is created. The {nameof(DigitalSurfaceModelBands.CanopyMaxima3)} flag needs to be included in the requested set of bands {bands} .");
+            }
+
+            if (cmm3)
+            {
+                this.CanopyMaxima3 = new(this, DigitalSurfaceModel.CanopyMaximaBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
+            }
+
             if ((bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope)
             {
                 this.DsmSlope ??= new(this, DigitalSurfaceModel.DsmSlopeBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
-
             if ((bands & DigitalSurfaceModelBands.DsmAspect) == DigitalSurfaceModelBands.DsmAspect)
             {
                 this.DsmAspect ??= new(this, DigitalSurfaceModel.DsmAspectBandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
-            if ((bands & DigitalSurfaceModelBands.CmmSlope3) == DigitalSurfaceModelBands.CmmSlope3)
+
+            if (cmm3slope)
             {
                 this.CmmSlope3 ??= new(this, DigitalSurfaceModel.CmmSlope3BandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
-            if ((bands & DigitalSurfaceModelBands.CmmAspect3) == DigitalSurfaceModelBands.CmmAspect3)
+            if (cmm3aspect)
             {
                 this.CmmAspect3 ??= new(this, DigitalSurfaceModel.CmmAspect3BandName, RasterBand.NoDataDefaultFloat, RasterBandInitialValue.NoData, dataBufferPool);
             }
@@ -448,13 +457,19 @@ namespace Mars.Clouds.Las
             {
                 this.SourceIDSurface ??= new(this, DigitalSurfaceModel.SourceIDSurfaceBandName, 0, RasterBandInitialValue.NoData, dataBufferPool); // set no data to zero and leave at default of zero as LAS spec defines source IDs 1-65535 as valid
             }
+
+            this.Bands |= bands;
         }
 
         public override IEnumerable<RasterBand> GetBands()
         {
             yield return this.Surface;
-            yield return this.CanopyMaxima3;
             yield return this.CanopyHeight;
+
+            if (((this.Bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3) && (this.CanopyMaxima3 != null))
+            {
+                yield return this.CanopyMaxima3;
+            }
 
             if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
             {
@@ -507,8 +522,12 @@ namespace Mars.Clouds.Las
 
         public override List<RasterBandStatistics> GetBandStatistics()
         {
-            List<RasterBandStatistics> bandStatistics = [ this.Surface.GetStatistics(), this.CanopyMaxima3.GetStatistics(), this.CanopyHeight.GetStatistics() ];
+            List<RasterBandStatistics> bandStatistics = [ this.Surface.GetStatistics(), this.CanopyHeight.GetStatistics() ];
 
+            if (((this.Bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3) && (this.CanopyMaxima3 != null))
+            {
+                bandStatistics.Add(this.CanopyMaxima3.GetStatistics());
+            }
             if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
             {
                 bandStatistics.Add(this.DsmSlope.GetStatistics());
@@ -785,18 +804,25 @@ namespace Mars.Clouds.Las
                                 this.Surface.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
                             }
                             break;
-                        case DigitalSurfaceModel.CanopyMaximaBandName:
-                            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
-                            {
-                                Debug.Assert(this.CanopyMaxima3.IsNoData(gdalBand));
-                                this.CanopyMaxima3.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
-                            }
-                            break;
                         case DigitalSurfaceModel.CanopyHeightBandName:
                             if ((bands & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
                             {
                                 Debug.Assert(this.CanopyHeight.IsNoData(gdalBand));
                                 this.CanopyHeight.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                            }
+                            break;
+                        case DigitalSurfaceModel.CanopyMaximaBandName:
+                            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
+                            {
+                                if (this.CanopyMaxima3 == null)
+                                {
+                                    this.CanopyMaxima3 = new(dsmDataset, gdalBand, readData: true);
+                                }
+                                else
+                                {
+                                    Debug.Assert(this.CanopyMaxima3.IsNoData(gdalBand));
+                                    this.CanopyMaxima3.ReadDataAssumingSameCrsTransformSizeAndNoData(gdalBand);
+                                }
                             }
                             break;
                         default:
@@ -1065,11 +1091,12 @@ namespace Mars.Clouds.Las
                 this.SetCrs(lasFileCrs);
             }
 
-            Debug.Assert(Object.ReferenceEquals(this.Transform, this.Surface.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyMaxima3.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyHeight.Transform) &&
-                         ((this.DsmSlope == null) || Object.ReferenceEquals(this.Transform, this.DsmSlope!.Transform)) && ((this.DsmAspect == null) || Object.ReferenceEquals(this.Transform, this.DsmAspect!.Transform)) && ((this.CmmSlope3 == null) || Object.ReferenceEquals(this.Transform, this.CmmSlope3!.Transform)) && ((this.CmmAspect3 == null) || Object.ReferenceEquals(this.Transform, this.CmmAspect3!.Transform)) &&
-                         ((this.Subsurface == null) || Object.ReferenceEquals(this.Transform, this.Subsurface!.Transform)) && ((this.AerialMean == null) || Object.ReferenceEquals(this.Transform, this.AerialMean!.Transform)) && ((this.GroundMean == null) || Object.ReferenceEquals(this.Transform, this.GroundMean!.Transform)) &&
-                         ((this.AerialPoints == null) || Object.ReferenceEquals(this.Transform, this.AerialPoints!.Transform)) && ((this.GroundPoints == null) || Object.ReferenceEquals(this.Transform, this!.GroundPoints.Transform)) && 
-                         ((this.ReturnNumberSurface == null) || Object.ReferenceEquals(this.Transform, this.ReturnNumberSurface!.Transform)) && ((this.SourceIDSurface == null) || Object.ReferenceEquals(this.Transform, this.SourceIDSurface!.Transform)));
+            Debug.Assert(Object.ReferenceEquals(this.Transform, this.Surface.Transform) && Object.ReferenceEquals(this.Transform, this.CanopyHeight.Transform) &&
+                         ((this.CanopyMaxima3 == null) || Object.ReferenceEquals(this.Transform, this.CanopyMaxima3.Transform)) &&
+                         ((this.DsmSlope == null) || Object.ReferenceEquals(this.Transform, this.DsmSlope.Transform)) && ((this.DsmAspect == null) || Object.ReferenceEquals(this.Transform, this.DsmAspect.Transform)) && ((this.CmmSlope3 == null) || Object.ReferenceEquals(this.Transform, this.CmmSlope3.Transform)) && ((this.CmmAspect3 == null) || Object.ReferenceEquals(this.Transform, this.CmmAspect3.Transform)) &&
+                         ((this.Subsurface == null) || Object.ReferenceEquals(this.Transform, this.Subsurface.Transform)) && ((this.AerialMean == null) || Object.ReferenceEquals(this.Transform, this.AerialMean.Transform)) && ((this.GroundMean == null) || Object.ReferenceEquals(this.Transform, this.GroundMean.Transform)) &&
+                         ((this.AerialPoints == null) || Object.ReferenceEquals(this.Transform, this.AerialPoints.Transform)) && ((this.GroundPoints == null) || Object.ReferenceEquals(this.Transform, this.GroundPoints.Transform)) && 
+                         ((this.ReturnNumberSurface == null) || Object.ReferenceEquals(this.Transform, this.ReturnNumberSurface.Transform)) && ((this.SourceIDSurface == null) || Object.ReferenceEquals(this.Transform, this.SourceIDSurface.Transform)));
             this.Transform.Copy(newExtents.Transform);
 
             // this.Bands remains unchanged as Reset() does not add or remove bands
@@ -1080,11 +1107,11 @@ namespace Mars.Clouds.Las
             // Contents of secondary bands which are instantiated but not flagged in this.Bands are reset in case the band later
             // becomes flagged.
             // Fills are no ops if the band's data hasn't been loaded or if the data buffers have been returned to pool.
-            Debug.Assert(this.Surface.HasNoDataValue && this.CanopyMaxima3.HasNoDataValue && this.CanopyHeight.HasNoDataValue);
+            Debug.Assert(this.Surface.HasNoDataValue && this.CanopyHeight.HasNoDataValue);
 
             this.Surface.FillWithNoData();
-            this.CanopyMaxima3.FillWithNoData();
             this.CanopyHeight.FillWithNoData();
+            this.CanopyMaxima3?.FillWithNoData();
 
             this.DsmSlope?.FillWithNoData();
             this.DsmAspect?.FillWithNoData();
@@ -1119,13 +1146,14 @@ namespace Mars.Clouds.Las
             {
                 this.Surface.ReturnData(dataBufferPool);
             }
-            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
-            {
-                this.CanopyMaxima3.ReturnData(dataBufferPool);
-            }
             if ((bands & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
             {
                 this.CanopyHeight.ReturnData(dataBufferPool);
+            }
+
+            if ((bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
+            {
+                this.CanopyMaxima3?.ReturnData(dataBufferPool);
             }
 
             if ((bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope)
@@ -1181,11 +1209,11 @@ namespace Mars.Clouds.Las
         {
             this.Crs = crs;
             this.Surface.Crs = crs;
-            this.CanopyMaxima3.Crs = crs;
             this.CanopyHeight.Crs = crs;
 
             // update secondary bands' CRS regardless of whether the band is flagged in this.Band
             // Bands should default to a consistent CRS if later flagged.
+            this.CanopyMaxima3?.Crs = crs;
             this.DsmSlope?.Crs = crs;
             this.DsmAspect?.Crs = crs;
             this.CmmSlope3?.Crs = crs;
@@ -1283,13 +1311,13 @@ namespace Mars.Clouds.Las
             {
                 band = this.Surface;
             }
-            else if (String.Equals(this.CanopyMaxima3.Name, name, StringComparison.Ordinal))
-            {
-                band = this.CanopyMaxima3;
-            }
             else if (String.Equals(this.CanopyHeight.Name, name, StringComparison.Ordinal))
             {
                 band = this.CanopyHeight;
+            }
+            else if (((this.Bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3) && (this.CanopyMaxima3 != null) && String.Equals(this.CanopyMaxima3.Name, name, StringComparison.Ordinal))
+            {
+                band = this.CanopyMaxima3;
             }
             else if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null) && String.Equals(this.DsmSlope.Name, name, StringComparison.Ordinal))
             {
@@ -1352,17 +1380,21 @@ namespace Mars.Clouds.Las
                 bandIndexInFile = 0;
                 return true;
             }
-            if (String.Equals(name, this.CanopyMaxima3.Name, StringComparison.Ordinal))
+            if (String.Equals(name, this.CanopyHeight.Name, StringComparison.Ordinal))
             {
                 bandFilePath = this.FilePath;
                 bandIndexInFile = 1;
                 return true;
             }
-            if (String.Equals(name, this.CanopyHeight.Name, StringComparison.Ordinal))
+
+            if (this.CanopyMaxima3 != null)
             {
-                bandFilePath = this.FilePath;
-                bandIndexInFile = 2;
-                return true;
+                if (String.Equals(name, this.CanopyMaxima3.Name, StringComparison.Ordinal))
+                {
+                    bandFilePath = this.FilePath;
+                    bandIndexInFile = 2;
+                    return true;
+                }
             }
 
             if (this.DsmSlope != null)
@@ -1478,8 +1510,12 @@ namespace Mars.Clouds.Las
             // alleviate memory pressure by offloading GC in streaming virtual raster reads
             // Not useful if tile sizes depart from the virtual raster convention of all being identical size.
             this.Surface.TryTakeOwnershipOfDataBuffer(dataBufferPool);
-            this.CanopyMaxima3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
             this.CanopyHeight.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+
+            if (((this.Bands & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3) && (this.CanopyMaxima3 != null))
+            {
+                this.CanopyMaxima3.TryTakeOwnershipOfDataBuffer(dataBufferPool);
+            }
 
             if (((this.Bands & DigitalSurfaceModelBands.DsmSlope) == DigitalSurfaceModelBands.DsmSlope) && (this.DsmSlope != null))
             {
@@ -1542,19 +1578,22 @@ namespace Mars.Clouds.Las
             // GDAL+GeoTIFF single type constraint: convert all bands to double and write with default no data value
             if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Primary) != DigitalSurfaceModelBands.None)
             {
-                Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
-                using Dataset dsmDataset = this.CreateGdalRaster(dsmPrimaryPath, 3, DataType.GDT_Float32, compress);
+                bool writeCmm3 = ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3) && (this.CanopyMaxima3 != null);
+                Debug.Assert(this.Surface.IsNoData(RasterBand.NoDataDefaultFloat) && this.CanopyHeight.IsNoData(RasterBand.NoDataDefaultFloat));
+
+                using Dataset dsmDataset = this.CreateGdalRaster(dsmPrimaryPath, bands: writeCmm3 ? 3 : 2, DataType.GDT_Float32, compress);
                 if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.Surface) == DigitalSurfaceModelBands.Surface)
                 {
                     this.Surface.Write(dsmDataset, 1);
                 }
-                if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CanopyMaxima3) == DigitalSurfaceModelBands.CanopyMaxima3)
-                {
-                    this.CanopyMaxima3.Write(dsmDataset, 2);
-                }
                 if ((bandsToWriteIfPresent & DigitalSurfaceModelBands.CanopyHeight) == DigitalSurfaceModelBands.CanopyHeight)
                 {
-                    this.CanopyHeight.Write(dsmDataset, 3);
+                    this.CanopyHeight.Write(dsmDataset, 2);
+                }
+                if (writeCmm3)
+                {
+                    Debug.Assert((this.CanopyMaxima3 != null) && this.CanopyMaxima3.IsNoData(RasterBand.NoDataDefaultFloat));
+                    this.CanopyMaxima3.Write(dsmDataset, 3);
                 }
 
                 this.FilePath = dsmPrimaryPath;

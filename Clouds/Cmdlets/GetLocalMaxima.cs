@@ -167,7 +167,8 @@ namespace Mars.Clouds.Cmdlets
                     string rasterTilePath = maximaReadWrite.OutputPathIsDirectory ? Path.Combine(this.LocalMaxima, tileName + Constant.File.GeoTiffExtension) : this.LocalMaxima;
                     string vectorTilePath = PathExtensions.ReplaceExtension(rasterTilePath, Constant.File.GeoPackageExtension);
 
-                    localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile, rasterTilePath);
+                    bool dsmTileHasCmm = dsmTile.CanopyMaxima3 != null;
+                    localMaximaRaster = LocalMaximaRaster.CreateRecreateOrReset(localMaximaRaster, dsmTile, rasterTilePath, dsmTileHasCmm);
                     using DataSource localMaximaVector = OgrExtensions.CreateOrOpenForWrite(vectorTilePath);
                     LocalMaximaState tileState = new(tileName, dsm, tileWriteIndex, localMaximaRaster);
 
@@ -189,20 +190,6 @@ namespace Mars.Clouds.Cmdlets
                         return;
                     }
 
-                    // find CMM maxima radii
-                    int cmmMaximaFound;
-                    using (LocalMaximaVector cmmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaCmm", dsmTile, tileName))
-                    {
-                        tileState.CurrentMaximaRaster = localMaximaRaster.CmmMaxima;
-                        tileState.CurrentMaximaVector = cmmMaximaPoints;
-                        tileState.CurrentNeighborhood = tileState.CmmNeighborhood;
-                        cmmMaximaFound = this.FindLocalMaxima(tileState);
-                    }
-                    if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
                     // find CHM maxima radii
                     int chmMaximaFound;
                     using (LocalMaximaVector chmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaChm", dsmTile, tileName))
@@ -215,6 +202,24 @@ namespace Mars.Clouds.Cmdlets
                     if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
                     {
                         return;
+                    }
+
+                    // find CMM maxima radii
+                    int cmmMaximaFound = 0;
+                    if (dsmTileHasCmm)
+                    {
+                        Debug.Assert((localMaximaRaster.CmmMaxima != null) && (tileState.CmmNeighborhood != null));
+                        using (LocalMaximaVector cmmMaximaPoints = LocalMaximaVector.CreateOrOverwrite(localMaximaVector, "localMaximaCmm", dsmTile, tileName))
+                        {
+                            tileState.CurrentMaximaRaster = localMaximaRaster.CmmMaxima;
+                            tileState.CurrentMaximaVector = cmmMaximaPoints;
+                            tileState.CurrentNeighborhood = tileState.CmmNeighborhood;
+                            cmmMaximaFound = this.FindLocalMaxima(tileState);
+                        }
+                        if (this.Stopping || this.CancellationTokenSource.IsCancellationRequested)
+                        {
+                            return;
+                        }
                     }
 
                     Debug.Assert(localMaximaRaster != null);
@@ -247,7 +252,7 @@ namespace Mars.Clouds.Cmdlets
 
             long meanMaximaPerTile = dsmMaximaTotal / dsm.NonNullTileCount;
             progress.Stopwatch.Stop();
-            this.WriteVerbose($"Found {dsmMaximaTotal:n0} DSM, {cmmMaximaTotal:n0} CMM, and {chmMaximaTotal:n0} CHM maxima within {dsm.NonNullTileCount} {(dsm.NonNullTileCount > 1 ? "tiles" : "tile")} in {progress.Stopwatch.ToElapsedString()} ({meanMaximaPerTile:n0} DSM maxima/tile).");
+            this.WriteVerbose($"Found {dsmMaximaTotal:n0} DSM {(cmmMaximaTotal > 0 ? $", {cmmMaximaTotal:n0} CMM," : "")} and {chmMaximaTotal:n0} CHM maxima within {dsm.NonNullTileCount} {(dsm.NonNullTileCount > 1 ? "tiles" : "tile")} in {progress.Stopwatch.ToElapsedString()} ({meanMaximaPerTile:n0} DSM maxima/tile).");
             base.ProcessRecord();
         }
 
@@ -451,16 +456,17 @@ namespace Mars.Clouds.Cmdlets
 
             if (hasStatistics)
             {
-                Debug.Assert((tileState.CurrentMaximaVector != null) && (tileState.DsmTile.SourceIDSurface != null)); // VS 17.8.7 nullability can't figure out hasStatistics == true means state.CurrentStatistics != null
+                DigitalSurfaceModel dsmTile = tileState.DsmTile;
+                Debug.Assert((tileState.CurrentMaximaVector != null) && (dsmTile.SourceIDSurface != null)); // VS 17.8.7 nullability can't figure out hasStatistics == true means state.CurrentStatistics != null
 
                 // surfaceZ is dsmZ, cmmZ, or chmHeight depending on current surface
                 // Could therefore save one load by testing Object.ReferenceEquals(tileState.CurrentNeighborhood, tileState.DsmNeighborhood).
                 (double x, double y) = tileState.DsmTile.Transform.GetCellCenter(tileXindex, tileYindex);
-                UInt16 sourceID = tileState.DsmTile.SourceIDSurface[tileXindex, tileYindex];
-                float dsmZ = tileState.DsmTile.Surface[tileXindex, tileYindex];
-                float cmmZ = tileState.DsmTile.CanopyMaxima3[tileXindex, tileYindex];
-                float chmHeight = tileState.DsmTile.CanopyHeight[tileXindex, tileYindex];
-                tileState.CurrentMaximaVector.Add(sourceID, x, y, dsmZ, cmmZ, chmHeight, ringRadiusInCells, maxRingZ, meanRingZ, minRingZ, varianceRingZ);
+                UInt16 sourceID = dsmTile.SourceIDSurface[tileXindex, tileYindex];
+                float dsmZ = dsmTile.Surface[tileXindex, tileYindex];
+                float cmmZ = dsmTile.CanopyMaxima3 != null ? dsmTile.CanopyMaxima3[tileXindex, tileYindex] : Single.NaN;
+                float chmHeight = dsmTile.CanopyHeight[tileXindex, tileYindex];
+                tileState.CurrentMaximaVector.Add(sourceID, x, y, dsmZ, chmHeight, cmmZ, ringRadiusInCells, maxRingZ, meanRingZ, minRingZ, varianceRingZ);
             }
 
             return true;
@@ -472,7 +478,7 @@ namespace Mars.Clouds.Cmdlets
             public RasterNeighborhood8<float> CurrentNeighborhood { get; set; }
             public LocalMaximaVector? CurrentMaximaVector { get; set; }
             public RasterNeighborhood8<float> ChmNeighborhood { get; private init; }
-            public RasterNeighborhood8<float> CmmNeighborhood { get; private init; }
+            public RasterNeighborhood8<float>? CmmNeighborhood { get; private init; }
             public RasterNeighborhood8<float> DsmNeighborhood { get; private init; }
             public DigitalSurfaceModel DsmTile { get; private init; }
             public LocalMaximaRaster MaximaRaster { get; private init; }
@@ -481,9 +487,15 @@ namespace Mars.Clouds.Cmdlets
             public LocalMaximaState(string tileName, VirtualRaster<DigitalSurfaceModel> dsm, int tileIndex, LocalMaximaRaster maximaRaster)
             {
                 DigitalSurfaceModel? dsmTile = dsm[tileIndex];
-                if ((dsmTile == null) || (dsmTile.Surface.Data.Length != dsmTile.Cells) || (dsmTile.CanopyMaxima3.Data.Length != dsmTile.Cells) || (dsmTile.CanopyHeight.Data.Length != dsmTile.Cells) || (dsmTile.SourceIDSurface == null) || (dsmTile.SourceIDSurface.Data.Length != dsmTile.Cells))
+                if (dsmTile == null)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(dsm), $"DSM tile at index {tileIndex} is missing or not fully loaded.");
+                    throw new ArgumentOutOfRangeException(nameof(dsm), $"DSM tile at virtual raster index {tileIndex} is null.");
+                }
+
+                bool hasCmm3 = dsmTile.CanopyMaxima3 != null;
+                if ((dsmTile.Surface.Data.Length != dsmTile.Cells) || (dsmTile.CanopyHeight.Data.Length != dsmTile.Cells) || (hasCmm3 && (dsmTile.CanopyMaxima3!.Data.Length != dsmTile.Cells)) || (dsmTile.SourceIDSurface == null) || (dsmTile.SourceIDSurface.Data.Length != dsmTile.Cells))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(dsm), $"DSM tile at virtual raster index {tileIndex} has inconsistent band data or is not fully loaded.");
                 }
 
                 (int tileIndexX, int tileIndexY) = dsm.ToGridIndices(tileIndex);
@@ -491,7 +503,7 @@ namespace Mars.Clouds.Cmdlets
                 this.CurrentMaximaVector = null;
                 this.CurrentNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.SurfaceBandName);
                 this.ChmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyHeightBandName);
-                this.CmmNeighborhood = dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyMaximaBandName);
+                this.CmmNeighborhood = hasCmm3 ? dsm.GetNeighborhood8<float>(tileIndexX, tileIndexY, DigitalSurfaceModel.CanopyMaximaBandName) : null;
                 this.DsmNeighborhood = this.CurrentNeighborhood;
                 this.DsmTile = dsmTile;
                 this.MaximaRaster = maximaRaster;

@@ -44,9 +44,17 @@ namespace Mars.Clouds.Cmdlets
 
         // ability to trim at rotations to the coordinate system or follow point shape and density would likely be very helpful in some
         // cases but for now this is just a simple and quick implementation
-        [Parameter(HelpMessage = "Distance to shrink point clouds' bounding boxes by when generating slices. Default is zero, meaning every point in the cloud is a candidate for slice inclusion. Values in the vicinity of 20-80 m are often useful for excluding outer hits in handheld LiDAR scans, depending on scanner range, scan pattern, area of interest, coordinate system alignment, and extent to which the point cloud's bounding box is padded.")]
+        [Parameter(HelpMessage = $"X and y distance to shrink point clouds' bounding boxes by when generating slices. Default is zero, meaning every point in the cloud is a candidate for slice inclusion. This is a shorthand for setting -{nameof(ExportSlices.TrimX)} and -{nameof(ExportSlices.TrimY)} to the same value. Trim values in the vicinity of 20-90 m are often useful for excluding outer hits in handheld LiDAR scans, depending on scanner range, scan pattern, area of interest, coordinate system alignment, and extent to which the point cloud's bounding box is padded.")]
         [ValidateRange(0.0, 500.0)] // sanity upper bound
         public double Trim { get; set; }
+
+        [Parameter(HelpMessage = "X distance to shrink point clouds' bounding boxes by when generating slices.")]
+        [ValidateRange(0.0, 500.0)] // sanity upper bound
+        public double TrimX { get; set; }
+
+        [Parameter(HelpMessage = "Y distance to shrink point clouds' bounding boxes by when generating slices.")]
+        [ValidateRange(0.0, 500.0)] // sanity upper bound
+        public double TrimY { get; set; }
 
         [Parameter(HelpMessage = "Turn off writing of output rasters. This is useful in certain benchmarking and development situations.")]
         public SwitchParameter NoWrite { get; set; }
@@ -73,6 +81,8 @@ namespace Mars.Clouds.Cmdlets
             this.MinHeight = Double.NaN;
             this.Slice = String.Empty;
             this.Trim = 0.0;
+            this.TrimX = 0.0;
+            this.TrimY = 0.0;
         }
 
         public override string GetName()
@@ -86,6 +96,27 @@ namespace Mars.Clouds.Cmdlets
             {
                 throw new ParameterOutOfRangeException(nameof(this.MaxHeight), $"Maximum slice height {this.MaxHeight} is less than or equal to the minimum height {this.MinHeight}, indicating a slice whose thickness is negative or zero. -{nameof(this.MaxHeight)} must be greater than -{nameof(this.MinHeight)} so the slice has a positive thickness and thus can contain points.");
             }
+            if (this.Trim > 0.0)
+            {
+                if ((this.TrimX > 0.0) && (this.TrimX != this.Trim))
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.Trim), $"-{nameof(this.Trim)} is {this.Trim} while -{nameof(this.TrimX)} has the conflicting value {this.TrimX}. Use -{nameof(this.Trim)} to set both x and y trim values to the same value or use -{nameof(this.TrimX)} and -{nameof(this.TrimY)} to set different x and y trims.");
+                }
+                else
+                {
+                    this.TrimX = this.Trim;
+                }
+                if ((this.TrimY > 0.0) && (this.TrimY != this.Trim))
+                {
+                    throw new ParameterOutOfRangeException(nameof(this.Trim), $"-{nameof(this.Trim)} is {this.Trim} while -{nameof(this.TrimY)} has the conflicting value {this.TrimY}. Use -{nameof(this.Trim)} to set both x and y trim values to the same value or use -{nameof(this.TrimX)} and -{nameof(this.TrimY)} to set different x and y trims.");
+                }
+                else
+                {
+                    this.TrimY = this.Trim;
+                }
+            }
+
+            bool ignoreOffSlicePoints = (this.TrimX > 0.0) || (this.TrimY > 0.0);
 
             List<string> cloudPaths = this.GetExistingFilePaths(this.Las, Constant.File.LasExtension);
             bool dtmPathIsDirectory = Directory.Exists(this.Dtm);
@@ -175,12 +206,12 @@ namespace Mars.Clouds.Cmdlets
                     }
 
                     // extract slice
-                    IntensitySlice intensitySlice = new(cloud, cellSizeInCrsUnits, this.Trim);
-                    reader.ReadIntensitySlice(cloud, intensitySlice, dtmBand, minHeightInCrsUnits, maxHeightInCrsUnits, this.Trim, ref pointReadBuffer);
+                    IntensitySlice intensitySlice = new(cloud, cellSizeInCrsUnits, this.TrimX, this.TrimY);
+                    reader.ReadIntensitySlice(cloud, intensitySlice, dtmBand, minHeightInCrsUnits, maxHeightInCrsUnits, ignoreOffSlicePoints, ref pointReadBuffer);
 
                     if (this.NoWrite == false)
                     {
-                        string cloudSliceName = $"{cloudName} slice {minHeightInCrsUnits:0.0##}-{maxHeightInCrsUnits:0.0##} {cloudCrs.GetVerticalLinearUnitName()} {(this.Trim > 0 ? $"trim {this.Trim:0}" : String.Empty)}{Constant.File.GeoTiffExtension}";
+                        string cloudSliceName = $"{cloudName} slice {minHeightInCrsUnits:0.0##}-{maxHeightInCrsUnits:0.0##} {cloudCrs.GetVerticalLinearUnitName()} {((this.TrimX > 0) || (this.TrimY > 0) ? "trimXY" : String.Empty)}{(this.TrimX > 0 ? $" {this.TrimX:0}" : String.Empty)}{(this.TrimY > 0 ? $" {this.TrimY:0}" : String.Empty)}{Constant.File.GeoTiffExtension}";
                         string cloudSlicePath;
                         if (slicePathSet)
                         {

@@ -2,6 +2,7 @@
 using Mars.Clouds.Extensions;
 using Mars.Clouds.GdalExtensions;
 using Mars.Clouds.Las;
+using MaxRev.Gdal.Core;
 using OSGeo.OSR;
 using System;
 using System.Collections.Generic;
@@ -41,6 +42,13 @@ namespace Mars.Clouds.Cmdlets
 
         [Parameter(HelpMessage = "By default, each point cloud's origin is rebased to be at its center and then projected into the new coordinate system. This approach maximizes reprojection accuracy by minimizing coordinate system error across the distance between the point cloud's origin and the points' location. Setting this switch disables rebasing, which likely has negligible effects if the origin lies within the point cloud but may introduce several meters of error on fixed-wing point clouds whose origin is tens of kilometers away from a tile.")]
         public SwitchParameter MaintainOrigin { get; set; }
+
+        static ConvertCloudCrs()
+        {
+            // Conver-CloudCrs fails with PROJ: proj_create_from_database: Cannot find proj.db if GdalBase.ConfigureAll() isn't called
+            // See also remarks in GdalCmdlet..ctor().
+            GdalBase.ConfigureAll();
+        }
 
         public ConvertCloudCrs() 
         {
@@ -103,7 +111,7 @@ namespace Mars.Clouds.Cmdlets
                     {
                         if (inputVerticalCrs == null)
                         {
-                            throw new ParameterOutOfRangeException(nameof(this.InputVerticalEpsg), $"Input file '{cloudPath}' lacks a vertical coordinate system so the transformantion to -{nameof(this.VerticalEpsg)} {this.VerticalEpsg} is not well defined. Specify -{nameof(this.InputVerticalEpsg)} to indicate the vertical coordinate system of input files which do not define one. Common choices in the United States are EPSG {Constant.Epsg.Navd88m} (NAVD88 meters) and {Constant.Epsg.Navd88ft} (NAVD88 feet).");
+                            throw new ParameterOutOfRangeException(nameof(this.InputVerticalEpsg), $"Input file '{cloudPath}' lacks a vertical coordinate system so the transformation to -{nameof(this.VerticalEpsg)} {this.VerticalEpsg} is not well defined. Specify -{nameof(this.InputVerticalEpsg)} to indicate the vertical coordinate system of input files which do not define one. Common choices in the United States are EPSG {Constant.Epsg.Navd88m} (NAVD88 meters) and {Constant.Epsg.Navd88ft} (NAVD88 feet).");
                         }
                         else
                         {
