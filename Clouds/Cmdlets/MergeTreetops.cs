@@ -149,8 +149,8 @@ namespace Mars.Clouds.Cmdlets
                     // read treetop tile matching this classification tile
                     TilePathAndIsMerged treetopTilePathAndIsMerged = treetopTilePathsByName[tileName];
 
-                    using DataSource? treetopTile = OgrExtensions.OpenForRead(treetopTilePathAndIsMerged.Path);
-                    using TreetopVector treetopLayer = TreetopVector.Open(treetopTile);
+                    using DataSource? treetopDataSource = OgrExtensions.OpenForRead(treetopTilePathAndIsMerged.Path);
+                    using TreetopVector treetopLayer = new(treetopDataSource);
                     SpatialReference treetopTileCrs = treetopLayer.GetSpatialReference();
                     if (SpatialReferenceExtensions.IsSameCrs(treetopTileCrs, classification.Crs) == false)
                     {

@@ -16,17 +16,22 @@ namespace Mars.Clouds.Segmentation
 
         private int pendingTreetopCommits;
 
-        private readonly int tileFieldIndex;
+        private readonly int tileFieldIndex; // required to disambiguate treetops when merging tiles as treetop ID numbers are tile specific
         private readonly int idFieldIndex;
         private readonly int radiusFieldIndex;
         private readonly int heightFieldIndex;
+
+        public TreetopVector(DataSource treetopFile)
+            : this(TreetopVector.GetDefaultTreetopLayer(treetopFile))
+        {
+        }
 
         protected TreetopVector(Layer gdalLayer)
             : base(gdalLayer)
         {
             this.pendingTreetopCommits = 0;
 
-            this.tileFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.TileFieldName); // -1 if tile field wasn't created
+            this.tileFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.TileFieldName); // -1 if tile field wasn't created, optional unless Add() is called
             this.idFieldIndex = this.Definition.GetFieldIndex(TreetopVector.TreeIDFieldName);
             if (this.idFieldIndex < 0)
             {
@@ -35,10 +40,6 @@ namespace Mars.Clouds.Segmentation
             this.heightFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.HeightFieldName);
             this.radiusFieldIndex = this.Definition.GetFieldIndex(LocalMaximaVector.RadiusFieldName);
 
-            if (this.tileFieldIndex < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"{LocalMaximaVector.TileFieldName} field is missing from treetop layer.");
-            }
             if (this.idFieldIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(gdalLayer), $"Treetop layer does not have an {LocalMaximaVector.IDFieldName} or treeID field.");
@@ -76,7 +77,7 @@ namespace Mars.Clouds.Segmentation
 
         public void Add(string tileName, TreetopsClassified treetops, IList<string> classNames)
         {
-            Debug.Assert(this.IsInEditMode && (this.tileFieldIndex >= 0));
+            Debug.Assert(this.IsInEditMode && (this.tileFieldIndex >= 0), $"Treetops have {nameof(this.IsInEditMode)} = {this.IsInEditMode} and {nameof(this.tileFieldIndex)} = {this.tileFieldIndex}. Adding a treetop with a tile name requires the tile field be present and that the treetop layer be editable.");
             if (classNames.Count < treetops.ClassCounts.GetLength(1))
             {
                 throw new ArgumentOutOfRangeException(nameof(classNames), $"Names for some class fields are missing. Treetrops have counts for {treetops.ClassCounts.GetLength(1)} classes but only {classNames.Count} class names were provided.");
@@ -145,6 +146,22 @@ namespace Mars.Clouds.Segmentation
                 IsInEditMode = true
             };
             return treetopLayer;
+        }
+
+        private static Layer GetDefaultTreetopLayer(DataSource treetopFile)
+        {
+            Layer? gdalLayer = treetopFile.GetLayerByName(TreetopVector.DefaultLayerName);
+            if (gdalLayer == null)
+            {
+                if (treetopFile.GetLayerCount() != 1)
+                {
+                    throw new NotSupportedException($"Treetop file '{treetopFile.GetName()}' contains no layers or contains multiple layers, none of which are named {TreetopVector.DefaultLayerName}.");
+                }
+
+                gdalLayer = treetopFile.GetLayerByIndex(0);
+            }
+
+            return gdalLayer;
         }
 
         public Extent GetExtent()
@@ -221,22 +238,6 @@ namespace Mars.Clouds.Segmentation
             }
 
             treetopsGrid.Treetops = (int)this.GetFeatureCount();
-        }
-
-        public static TreetopVector Open(DataSource treetopFile)
-        {
-            Layer? gdalLayer = treetopFile.GetLayerByName(TreetopVector.DefaultLayerName);
-            if (gdalLayer == null)
-            {
-                if (treetopFile.GetLayerCount() != 1)
-                {
-                    throw new NotSupportedException($"Treetop file contains no layers or contains multiple layers, none of which are named {TreetopVector.DefaultLayerName}.");
-                }
-
-                gdalLayer = treetopFile.GetLayerByIndex(0);
-            }
-
-            return new TreetopVector(gdalLayer);
         }
     }
 }

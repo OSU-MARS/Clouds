@@ -20,7 +20,7 @@ namespace Mars.Clouds.UnitTests
         [TestInitialize]
         public void TestInitialize()
         {
-            this.UnitTestPath = Path.Combine(this.TestContext!.TestRunDirectory!, "..\\..\\UnitTests");
+            this.UnitTestPath = Path.Combine(this.TestContext!.TestRunDirectory!, "..\\..\\..");
         }
     }
 }

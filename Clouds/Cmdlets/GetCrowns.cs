@@ -271,7 +271,7 @@ namespace Mars.Clouds.Cmdlets
                 string tileName = Tile.GetName(dsmTile.FilePath);
                 string treetopTilePath = this.OutputPathIsDirectory ? Path.Combine(this.treetopsPath, tileName + Constant.File.GeoPackageExtension) : this.treetopsPath;
                 using DataSource treetopDataSource = OgrExtensions.OpenForRead(treetopTilePath);
-                using TreetopVector treetopLayer = TreetopVector.Open(treetopDataSource);
+                using TreetopVector treetopLayer = new(treetopDataSource);
                 SpatialReference treetopCrs = treetopLayer.GetSpatialReference();
                 if (SpatialReferenceExtensions.IsSameCrs(treetopCrs, dsmTile.Crs) == false)
                 {

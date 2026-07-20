@@ -20,7 +20,7 @@ namespace Mars.Clouds.GdalExtensions
             DataSource? dataSource = Ogr.Open(filePath, update: 0);
             if (dataSource == null)
             {
-                throw new FileLoadException("GDAL returned a null DataSource. Does the file exist and is it well formed in a format supported by GDAL?", filePath);
+                throw new FileLoadException("GDAL returned a null DataSource. Does the file exist and is it well formed in a format supported by GDAL? If this failure occurred within a tiled dataset, is it due to a mismatch with tiles present in another tiled dataset?", filePath);
             }
 
             return dataSource;
